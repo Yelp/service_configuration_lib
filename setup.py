@@ -11,7 +11,6 @@ setup(
     author='Yelp Operations Team',
     author_email='operations@yelp.com',
     packages=find_packages(exclude=['tests']),
-    setup_requires=['setuptools'],
     install_requires=['PyYAML >= 3.0'],
     license='Copyright Yelp 2013, All Rights Reserved'
 )
