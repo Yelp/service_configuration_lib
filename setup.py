@@ -3,8 +3,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='service_configuration_lib',
-    version='0.1.1',
+    name='service-configuration-lib',
+    version='0.1.2',
     provides=['service_configuration_lib'],
     description='Start, stop, and inspect Yelp SOA services',
     url='https://gitweb.yelpcorp.com/?p=service_configuration_lib.git',
