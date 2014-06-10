@@ -1,0 +1,11 @@
+Source: service-configuration-lib
+Section: python
+Priority: optional
+Maintainer: James McGuinness <jrm@yelp.com>
+Build-Depends: python-yaml (>= 3), python (>= 2.6)
+Standards-Version: 3.8.3
+
+Package: service-configuration-lib
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Service configuration library for yelp services

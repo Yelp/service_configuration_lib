@@ -1,0 +1,5 @@
+service-configuration-lib (0.1.2) unstable; urgency=low
+
+  * Initial release.
+
+ -- James McGuinness <jrm@yelp.com>  Mon, 09 Jun 2014 10:27:10 -0800

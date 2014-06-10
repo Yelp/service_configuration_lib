@@ -17,14 +17,14 @@ tests: test
 coverage: test
 
 itest_lucid: package_lucid
-	$(DOCKER_RUN) /bin/bash -c "dpkg -i /work/dist/*.deb && python /work/tests/test_service_configuration_lib.py"
+	$(DOCKER_RUN) /bin/bash -c "dpkg -i /work/dist/*.deb && python /work/service-configuration-lib/tests/test_service_configuration_lib.py"
 
 package_lucid: test_lucid
-	$(DOCKER_RUN) /bin/bash -c "dpkg-buildpackage -d && mv *.deb dist/"
+	$(DOCKER_RUN) /bin/bash -c "cd service-configuration-lib && dpkg-buildpackage -d && mv -v ../*.deb /work/dist/"
 	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
 
 test_lucid: build_lucid_docker
-	$(DOCKER_RUN) bash -c "tox"
+	#$(DOCKER_RUN) bash -c "cd service-configuration-lib && tox"
 	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
 
 build_lucid_docker:
