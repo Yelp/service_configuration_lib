@@ -1,0 +1,65 @@
+#!/bin/bash
+
+## Frontend for building Python .deb's with FPM.
+## @author kmosher
+
+## Examples:
+## Simplest. Packages the src in the directory "python-gearman" or downloads "python-gearman" from pypi if said directory doesn't exist
+## ./package-python yelp1 python-gearman
+## Package a specific version from pypi
+## ./package-python yelp1 python-gearman==1.2.3
+## Package a twisted and add some extra fpm options
+## ./package-python yelp1 --replace python-twisted-core python-twisted
+
+# The shebangs inside the source python scripts should contain '/usr/bin/env python' which will then
+# get resolved by setup.py. We want those to resolve to /usr/bin/python and not /usr/local/bin/python or
+# any other python we might have kicking around in our path
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+# By default the files will be owned by you. This fixes that
+USER=root
+GROUP=root
+
+# puts things in /usr/lib/python2.6/dist-packages. Although this might change if we go to 2.7. Unfortunately
+# fpm doesn't know to put them in /usr/share/pyshared and then symlink it into each dist-package site
+# (as is done in various ways by pycentral/python-support/dh_python)
+DISTPACKAGES=$(python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib()')
+
+# Puts things in /usr/bin instead of the default of /local/bin
+BINDIR=/usr/bin
+
+# Puts data files in /usr instead of /usr/local
+DATADIR=/usr
+
+# Get our name from /etc/passwd
+FULL_NAME=$(getent passwd $LOGNAME | cut -d: -f5)
+MAINTAINER="$FULL_NAME <$EMAIL>"
+
+PYPI_SERVER=http://pypi.yelpcorp.com/simple
+
+FPM_ARGS=(
+ -s python -t deb -m "${MAINTAINER}"
+ --deb-user "${USER}" --deb-group "${GROUP}"
+ --python-pypi "${PYPI_SERVER}"
+ --python-install-lib "${DISTPACKAGES}" --python-install-bin "${BINDIR}"
+ --python-install-data "${DATADIR}"
+)
+
+# Specify the packaging revision. Default should be "yelp1", but increment this if you
+# need to redo the packaging for something
+REVISION=$1
+shift;
+
+# --force overwrites the target destination if it exists
+fpm --force "${FPM_ARGS[@]}" --iteration=${REVISION} "$@"
+
+
+## OPTIONS WE EXPLICITLY AREN'T SPECIFYING
+# This is currently broken with fpm if the package has any dependencies. The default of using easy_install seems to work fine
+# --python-pip /usr/bin/pip
+
+# fpm will correctly set this based on whether or not the setup.py lists C extensions
+# --architecture all|native
+
+# These should all come from setup.py
+# --description --dependency(s) --version --url
