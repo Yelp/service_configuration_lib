@@ -1,7 +1,6 @@
 FROM docker-dev.yelpcorp.com/lucid_yelp
 MAINTAINER Kyle Anderson <kwa@yelp.com>
 
-RUN apt-get clean all
 RUN apt-get update
 
 RUN apt-get -y install dpkg-dev python-tox python-setuptools python-yaml
