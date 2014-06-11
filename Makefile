@@ -1,6 +1,6 @@
 UID:=`id -u`
 GID:=`id -g`
-DOCKER_RUN:=docker run -h -t -v  fake.docker.hostname $(CURDIR):/work:rw lucid_container
+DOCKER_RUN:=docker run -h fake.docker.hostname -v $(CURDIR):/work:rw lucid_container
 
 .PHONY: all production test tests coverage clean
 
