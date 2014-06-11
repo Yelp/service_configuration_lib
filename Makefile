@@ -1,7 +1,6 @@
-PYTHON_PKGNAME = service_configuration_lib
 UID:=`id -u`
 GID:=`id -g`
-DOCKER_RUN:=docker run -t -v  $(CURDIR):/work:rw lucid_container
+DOCKER_RUN:=docker run -h -t -v  fake.docker.hostname $(CURDIR):/work:rw lucid_container
 
 .PHONY: all production test tests coverage clean
 
@@ -18,6 +17,7 @@ coverage: test
 
 itest_lucid: package_lucid
 	$(DOCKER_RUN) /bin/bash -c "/work/tests/ubuntu.sh"
+	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
 
 package_lucid: test_lucid
 	$(DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
@@ -32,7 +32,8 @@ build_lucid_docker:
 	cd dockerfiles/lucid/ && docker build -t "lucid_container" .
 
 clean:
+	rm -rf dist/
+	rm -rf build/
+	rm -rf .tox
 	find . -name '*.pyc' -delete
 	find . -name '__pycache__' -delete
-	rm -rf dist/
-	rm -rf .tox
