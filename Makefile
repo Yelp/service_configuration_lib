@@ -17,7 +17,7 @@ tests: test
 coverage: test
 
 itest_lucid: package_lucid
-	$(DOCKER_RUN) /bin/bash -c "dpkg -i /work/dist/*.deb && python /work/tests/*.py"
+	$(DOCKER_RUN) /bin/bash -c "/work/tests/ubuntu.sh"
 
 package_lucid: test_lucid
 	$(DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"

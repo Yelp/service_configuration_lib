@@ -32,7 +32,8 @@ BINDIR=/usr/bin
 DATADIR=/usr
 
 # Get our name from /etc/passwd
-FULL_NAME=$(getent passwd $LOGNAME | cut -d: -f5)
+FULL_NAME="James McGuinness"
+EMAIL="jrm@yelp.com"
 MAINTAINER="$FULL_NAME <$EMAIL>"
 
 PYPI_SERVER=http://pypi.yelpcorp.com/simple
@@ -43,6 +44,7 @@ FPM_ARGS=(
  --python-pypi "${PYPI_SERVER}"
  --python-install-lib "${DISTPACKAGES}" --python-install-bin "${BINDIR}"
  --python-install-data "${DATADIR}"
+ --no-python-dependencies --depends "python-yaml > 3.0"
 )
 
 # Specify the packaging revision. Default should be "yelp1", but increment this if you
