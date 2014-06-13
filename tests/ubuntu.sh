@@ -24,7 +24,7 @@ SERVICES_NOTHING="fake_total_bunk"
 # We need to get the fake services folder to look
 # like it's the real services config folder
 mkdir -p /nail/etc
-[ -L /nail/etc/services ] || ln -s /work/tests/fake_services /nail/etc/services
+[ -L /nail/etc/services ] || ln -s /work/fake_services /nail/etc/services
 
 if dpkg -i /work/dist/*.deb; then
   echo "Package installed correctly..."
