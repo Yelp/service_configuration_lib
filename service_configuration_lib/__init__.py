@@ -63,6 +63,28 @@ def generate_service_info(port, vip, lb_extras, service_information):
     service_info.update( service_information )
     return service_info
 
+def read_service_config_folder(rootdir, service_dirname):
+    port_file = os.path.join(rootdir, service_dirname, "port")
+    vip_file = os.path.join(rootdir, service_dirname, "vip")
+    lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
+    service_file = os.path.join(rootdir, service_dirname, "service.yaml")
+
+    port = read_port(port_file)
+    vip = read_vip(vip_file)
+    lb_extras = read_lb_extras(lb_extras_file)
+    service_information = read_service_information(service_file)
+
+    service_info = generate_service_info(port, vip, lb_extras, service_information)
+    return service_info
+
+def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
+    for rootdir, dirs, _ in os.walk(soa_dir):
+        for service_dirname in dirs:
+            if service_name == service_dirname:
+                return read_service_config_folder(rootdir, service_dirname)
+    print >>sys.stderr, "Could not find service configuration for %s" % service_name
+    raise
+
 def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     # Returns a dict of service information, keys are the service name
     # Not all services have all fields. Who knows what might be in there
@@ -71,18 +93,7 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     for rootdir, dirs, _ in os.walk(soa_dir):
         for service_dirname in dirs:
             service_name = service_dirname
-
-            port_file = os.path.join(rootdir, service_dirname, "port")
-            vip_file = os.path.join(rootdir, service_dirname, "vip")
-            lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
-            service_file = os.path.join(rootdir, service_dirname, "service.yaml")
-
-            port = read_port(port_file)
-            vip = read_vip(vip_file)
-            lb_extras = read_lb_extras(lb_extras_file)
-            service_information = read_service_information(service_file)
-
-            service_info = generate_service_info(port, vip, lb_extras, service_information) 
+            service_info = read_service_config_folder(rootdir, service_dirname)
             all_services.update( { service_name: service_info } )
     return all_services
 
