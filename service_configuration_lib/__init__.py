@@ -78,12 +78,13 @@ def read_service_config_folder(rootdir, service_dirname):
     return service_info
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
-    for rootdir, dirs, _ in os.walk(soa_dir):
-        for service_dirname in dirs:
-            if service_name == service_dirname:
-                return read_service_config_folder(rootdir, service_dirname)
-    print >>sys.stderr, "Could not find service configuration for %s" % service_name
-    raise
+    rootdir = os.path.abspath(soa_dir)
+    if os.path.exists(os.path.join(rootdir, service_name)):
+        return read_service_config_folder(rootdir, service_name)
+    else:
+        print >>sys.stderr, "Service configuration directory not found: %s" \
+            % os.path.join(rootdir, service_name)
+        raise
 
 def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     # Returns a dict of service information, keys are the service name
