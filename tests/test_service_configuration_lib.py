@@ -143,6 +143,18 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         gen_patch.assert_called_once_with('1111', 'ULTRA_VIP', 'no_extras', 'no_info')
         T.assert_equal(expected, actual)
 
+    @mock.patch('os.path.join', return_value='together_forever')
+    @mock.patch('os.path.abspath', return_value='real_soa_dir')
+    @mock.patch('service_configuration_lib.read_service_information', return_value={'what': 'info'})
+    def test_read_extra_service_information(self, info_patch, abs_patch, join_patch):
+        expected = {'what': 'info'}
+        actual = service_configuration_lib.read_extra_service_information('noname',
+                'noinfo', soa_dir='whatsadir')
+        abs_patch.assert_called_once_with('whatsadir')
+        join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo', '.yaml')
+        info_patch.assert_called_once_with('together_forever')
+        T.assert_equal(expected, actual)
+
 if __name__ == '__main__':
     T.run()
 
