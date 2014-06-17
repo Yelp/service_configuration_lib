@@ -9,12 +9,13 @@ class ServiceConfigurationLibTestCase(T.TestCase):
          'fake_service1': {'deployed_to': None,
                            'lb_extras': {},
                            'port': 11111,
-                           'runs_on': ['fake_hostname1',
+                           'runs_on': ['fake_hostname3',
                                        'fake_hostname2',
-                                       'fake_hostname3'],
+                                       'fake_hostname1'],
                            'vip': 'fakevip1'},
          'fake_service2': {'deployed_to': [ 'fake_deployed_hostname1',
-                                            'fake_deployed_hostname2'],
+                                            'fake_deployed_hostname2',
+                                            'fake_hostname4'],
                      'lb_extras': {'exclude_forwardfor': True},
                      'port': 22222,
                      'runs_on': ['fake_hostname2',
@@ -102,6 +103,28 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_using_ssl_on(fake_hostname, fake_service_configuration)
         T.assert_equal(expected, actual)
+
+    def test_all_nodes_that_receive_removes_duplicates(self):
+        expected = [ 'fake_deployed_hostname1', 'fake_deployed_hostname2', 'fake_hostname2', 'fake_hostname3', 'fake_hostname4']
+        fake_service = 'fake_service2'
+        fake_service_configuration = self.fake_service_configuration
+        actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
+        T.assert_equal(expected, actual)
+
+    def test_all_nodes_that_receive_with_no_deploys_to(self):
+        expected = [ 'fake_hostname3', 'fake_hostname4', 'fake_hostname5']
+        fake_service = 'fake_service3'
+        fake_service_configuration = self.fake_service_configuration
+        actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
+        T.assert_equal(expected, actual)
+
+    def test_all_nodes_that_receive_is_sorted(self):
+        expected = [ 'fake_hostname1', 'fake_hostname2', 'fake_hostname3']
+        fake_service = 'fake_service1'
+        fake_service_configuration = self.fake_service_configuration
+        actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
+        T.assert_equal(expected, actual)
+
 
 if __name__ == '__main__':
     T.run()
