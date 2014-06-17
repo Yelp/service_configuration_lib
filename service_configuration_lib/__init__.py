@@ -63,7 +63,7 @@ def generate_service_info(port, vip, lb_extras, service_information):
     service_info.update( service_information )
     return service_info
 
-def read_service_config_folder(rootdir, service_dirname):
+def read_service_configuration_from_dir(rootdir, service_dirname):
     port_file = os.path.join(rootdir, service_dirname, "port")
     vip_file = os.path.join(rootdir, service_dirname, "vip")
     lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
@@ -74,17 +74,10 @@ def read_service_config_folder(rootdir, service_dirname):
     lb_extras = read_lb_extras(lb_extras_file)
     service_information = read_service_information(service_file)
 
-    service_info = generate_service_info(port, vip, lb_extras, service_information)
-    return service_info
+    return generate_service_info(port, vip, lb_extras, service_information)
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
-    rootdir = os.path.abspath(soa_dir)
-    if os.path.exists(os.path.join(rootdir, service_name)):
-        return read_service_config_folder(rootdir, service_name)
-    else:
-        print >>sys.stderr, "Service configuration directory not found: %s" \
-            % os.path.join(rootdir, service_name)
-        raise
+    return read_service_configuration_from_dir(os.path.abspath(soa_dir), service_name)
 
 def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     # Returns a dict of service information, keys are the service name
@@ -94,7 +87,7 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     for rootdir, dirs, _ in os.walk(soa_dir):
         for service_dirname in dirs:
             service_name = service_dirname
-            service_info = read_service_config_folder(rootdir, service_dirname)
+            service_info = read_service_configuration_from_dir(rootdir, service_dirname)
             all_services.update( { service_name: service_info } )
     return all_services
 
