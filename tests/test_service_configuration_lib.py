@@ -46,7 +46,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         expected = {
             'lb_extras': fake_lb_extras,
             'vip': fake_vip,
-            # Can't use the fake_service_information because it's an 
+            # Can't use the fake_service_information because it's an
             # un-nested hash at this point
             'fakekey2': 'fakevalue2',
             'port': fake_port
@@ -101,6 +101,46 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_using_ssl_on(fake_hostname, fake_service_configuration)
+        T.assert_equal(expected, actual)
+
+    @mock.patch('os.path.abspath', return_value='nodir')
+    @mock.patch('os.listdir', return_value=["1","2","3"])
+    @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='hello')
+    def test_read_services_configuration(self, read_patch, listdir_patch, abs_patch):
+        expected = {'1': 'hello', '2': 'hello', '3': 'hello'}
+        actual = service_configuration_lib.read_services_configuration(soa_dir='testdir')
+        abs_patch.assert_called_once_with('testdir')
+        listdir_patch.assert_called_once_with('nodir')
+        read_patch.assert_has_calls(
+            [mock.call('nodir', '1'), mock.call('nodir', '2'), mock.call('nodir', '3')])
+        T.assert_equal(expected, actual)
+
+    @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='bye')
+    @mock.patch('os.path.abspath', return_value='cafe')
+    def test_read_service_configuration(self, abs_patch, read_patch):
+        expected = 'bye'
+        actual = service_configuration_lib.read_service_configuration('boba', soa_dir='tea')
+        abs_patch.assert_called_once_with('tea')
+        read_patch.assert_called_once_with('cafe', 'boba')
+        T.assert_equal(expected, actual)
+
+    @mock.patch('os.path.join', return_value='forever_joined')
+    @mock.patch('service_configuration_lib.read_port', return_value='1111')
+    @mock.patch('service_configuration_lib.read_vip', return_value='ULTRA_VIP')
+    @mock.patch('service_configuration_lib.read_lb_extras', return_value='no_extras')
+    @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
+    @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
+    def test_read_service_configuration_from_dir(self, gen_patch, info_patch, lb_patch, vip_patch,
+                                                 port_patch, join_patch):
+        expected = {'oof' : 'ouch'}
+        actual = service_configuration_lib.read_service_configuration_from_dir('never', 'die')
+        join_patch.assert_has_calls([mock.call('never','die','port'), mock.call('never','die','vip'),
+                mock.call('never','die','lb.yaml'), mock.call('never','die','service.yaml')])
+        port_patch.assert_called_once_with('forever_joined')
+        vip_patch.assert_called_once_with('forever_joined')
+        lb_patch.assert_called_once_with('forever_joined')
+        info_patch.assert_called_once_with('forever_joined')
+        gen_patch.assert_called_once_with('1111', 'ULTRA_VIP', 'no_extras', 'no_info')
         T.assert_equal(expected, actual)
 
 if __name__ == '__main__':
