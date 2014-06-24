@@ -139,9 +139,31 @@ def services_needing_puppet_help_on(hostname, service_configuration=None):
     return [s for s in deployed_services if service_configuration[s].get('needs_puppet_help')]
 
 def all_nodes_that_run(service, service_configuration=None):
+    return all_nodes_that_receive(service, service_configuration=service_configuration, run_only=True)
+
+def all_nodes_that_receive(service, service_configuration=None, run_only=False, deploy_to_only=False):
+    """ If run_only, returns only the services that are in the runs_on list.
+    If deploy_to_only, returns only the services in the deployed_to list.
+    If neither, both are returned, duplicates stripped.
+    Results are always sorted.
+    """
+    assert not (run_only and deploy_to_only)
+
     if service_configuration is None:
         service_configuration = read_services_configuration()
-    return service_configuration[service]['runs_on']
+    runs_on = service_configuration[service]['runs_on']
+    deployed_to = service_configuration[service].get('deployed_to')
+    if deployed_to is None:
+        deployed_to = []
+
+    if run_only:
+        result = runs_on
+    elif deploy_to_only:
+        result = deployed_to
+    else:
+        result = set(runs_on) | set(deployed_to)
+
+    return list(sorted(result))
 
 def services_using_ssl_on(hostname, service_configuration=None):
     if service_configuration is None:
