@@ -143,16 +143,16 @@ def all_nodes_that_receive(service, service_configuration=None, run_only=False, 
     if service_configuration is None:
         service_configuration = read_services_configuration()
     runs_on = service_configuration[service]['runs_on']
-    deploys_to = service_configuration[service].get('deployed_to')
-    if deploys_to is None:
-        deploys_to = []
+    deployed_to = service_configuration[service].get('deployed_to')
+    if deployed_to is None:
+        deployed_to = []
 
     if run_only:
         result = runs_on
     elif deploy_to_only:
-        result = deploys_to
+        result = deployed_to
     else:
-        result = set(runs_on) | set(deploys_to)
+        result = set(runs_on) | set(deployed_to)
 
     return list(sorted(result))
 
