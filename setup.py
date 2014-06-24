@@ -14,6 +14,7 @@ setup(
     install_requires=['PyYAML >= 3.0'],
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
+        'scripts/all_nodes_that_receive',
         'scripts/all_nodes_that_run',
         'scripts/dump_service_configuration_yaml',
         'scripts/services_deployed_here',
