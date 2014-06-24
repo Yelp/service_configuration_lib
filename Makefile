@@ -20,6 +20,7 @@ itest_lucid: package_lucid
 	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
 
 package_lucid: test_lucid
+	rm -rf .tox
 	$(DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
 	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
 
