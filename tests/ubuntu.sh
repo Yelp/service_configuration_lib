@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-SCRIPTS="all_nodes_that_run
+SCRIPTS="all_nodes_that_receive
+all_nodes_that_run
 dump_service_configuration_yaml
 services_deployed_here
 services_needing_puppet_help
