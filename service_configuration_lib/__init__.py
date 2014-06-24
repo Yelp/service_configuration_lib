@@ -65,7 +65,7 @@ def generate_service_info(port, vip, lb_extras, service_information):
 
 def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR):
     return read_service_information(os.path.join(
-        os.path.abspath(soa_dir), service_name, extra_info, ".yaml"))
+        os.path.abspath(soa_dir), service_name, extra_info + ".yaml"))
 
 def read_service_configuration_from_dir(rootdir, service_dirname):
     port_file = os.path.join(rootdir, service_dirname, "port")
