@@ -173,7 +173,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_extra_service_information('noname',
                 'noinfo', soa_dir='whatsadir')
         abs_patch.assert_called_once_with('whatsadir')
-        join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo', '.yaml')
+        join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo.yaml')
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
