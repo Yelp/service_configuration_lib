@@ -4,8 +4,13 @@ import os
 import sys
 import yaml
 import socket
+import curl
+import json
+import re
+import logging
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
+log = logging.getLogger(__name__)
 
 def read_port(port_file):
     # Try to read port information
@@ -105,8 +110,8 @@ def services_that_run_on(hostname, service_configuration=None):
         service_configuration = read_services_configuration()
     for service in service_configuration:
         if 'runs_on' in service_configuration[service] and \
-           service_configuration[service]['runs_on'] and \
-           hostname in service_configuration[service]['runs_on']:
+            service_configuration[service]['runs_on'] and \
+            hostname in service_configuration[service]['runs_on']:
             running_services.append(service)
     return running_services
 
@@ -174,6 +179,30 @@ def services_using_ssl_on(hostname, service_configuration=None):
 def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
+
+def services_running_in_mesos_on(hostname='localhost', port='5051', timeout=30):
+    # DO NOT CHANGE ID_SPACER UNLESS YOU ALSO CHANGE IT IN OTHER LIBRARIES!
+    # (see service_deployment_tools/setup_marathon_job.py)
+    ID_SPACER = '.'
+
+    req = curl.Curl()
+    req.set_timeout(timeout)
+    slave_state = json.loads(req.get('http://%s:%s/state.json' % (hostname, port)))
+    executors = [ex for fw in \
+                 slave_state.get('frameworks', []) \
+                 if 'marathon' in fw['name'] \
+                 for ex in fw.get('executors', [])]
+    srv_list = []
+    for executor in executors:
+        srv_name = '%s%s%s' % (executor['id'].split(ID_SPACER)[0], ID_SPACER, \
+                               executor['id'].split(ID_SPACER)[1])
+        port = int(re.search('[0-9]+', executor['resources']['ports']).group(0))
+        srv_list.append((srv_name, port))
+    return srv_list
+
+def services_running_in_mesos_here(port='5051', timeout=30):
+    hostname = socket.getfqdn()
+    return services_running_in_mesos_on(hostname, port, timeout)
 
 # vim: et ts=4 sw=4
 
