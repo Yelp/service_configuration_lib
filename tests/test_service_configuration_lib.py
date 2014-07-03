@@ -177,6 +177,52 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
+    @mock.patch('curl.Curl', return_value=mock.Mock(set_timeout=mock.Mock(), get=mock.Mock()))
+    @mock.patch('json.loads')
+    def test_services_running_in_mesos_on(self, json_load_patch, curl_patch):
+        id_1 = 'klingon.ships.detected.249qwiomelht4jioewglkemr'
+        id_2 = 'fire.photon.torepedos.jtgriemot5yhtwe94'
+        id_3 = 'dota.axe.cleave.482u9jyoi4wed'
+        id_4 = 'mesos.deployment.is.hard'
+        ports_1 = '[111-111]'
+        ports_2 = '[222-222]'
+        ports_3 = '[333-333]'
+        ports_4 = '[444-444]'
+        hostname = 'io-dev.oiio.io'
+        port = 123456789
+        timeout = -99
+        curl_patch.return_value.get.return_value ='curl_into_a_corner'
+        json_load_patch.return_value = {'frameworks': [
+                                            {'executors': [
+                                                {'id': id_1, 'resources': {'ports': ports_1}},
+                                                {'id': id_2, 'resources': {'ports': ports_2}}],
+                                             'name': 'marathon-1111111'},
+                                            {'executors': [
+                                                {'id': id_3, 'resources': {'ports': ports_3}},
+                                                {'id': id_4, 'resources': {'ports': ports_4}}],
+                                             'name': 'marathon-3145jgreoifd'},
+                                            {'executors': [
+                                                {'id': 'bunk', 'resources': {'ports': '[65-65]'}}],
+                                             'name': 'super_bunk'}
+                                        ]}
+        expected = [('klingon.ships', 111), ('fire.photon', 222),
+                    ('dota.axe', 333), ('mesos.deployment', 444)]
+        actual = service_configuration_lib.services_running_in_mesos_on(hostname, port, timeout)
+        curl_patch.return_value.set_timeout.assert_called_once_with(timeout)
+        curl_patch.return_value.get.assert_called_once_with('http://%s:%s/state.json' % (hostname, port))
+        json_load_patch.assert_called_once_with(curl_patch.return_value.get.return_value)
+        assert expected == actual
+
+    @mock.patch('service_configuration_lib.services_running_in_mesos_on', return_value='chipotle')
+    @mock.patch('socket.getfqdn', return_value='burrito')
+    def test_services_running_in_mesos_here(self, fqdn_patch, mesos_on_patch):
+        port = 808
+        timeout = 9999
+        assert service_configuration_lib.services_running_in_mesos_here(port, timeout) == 'chipotle'
+        fqdn_patch.assert_called_once_with()
+        mesos_on_patch.assert_called_once_with('burrito', port, timeout)
+
+
 if __name__ == '__main__':
     T.run()
 
