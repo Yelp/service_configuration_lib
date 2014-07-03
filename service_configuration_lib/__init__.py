@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
+import logging
 import os
-import sys
-import yaml
+import re
 import socket
+import sys
+
 import curl
 import json
-import re
-import logging
+import yaml
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
 log = logging.getLogger(__name__)
@@ -180,33 +181,39 @@ def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
 
-def services_running_in_mesos_on(hostname='localhost', port='5051', timeout=30):
+def services_running_in_mesos_on(hostname='localhost', port='5051', timeout_s=30):
     """See what services are being run by a mesos-slave via marathon on
     the host hostname, where port is the port the mesos-slave is running on.
 
-    Returns a list of tuples, where the tuples are (service_name, srv_port), and
-    srv_port is the external port to connect on to reach that service's mesos task."""
+    Returns a list of tuples, where the tuples are (service_name, srv_ports), and
+    srv_ports is a list of external ports to connect on to reach that service's
+    mesos task."""
     # DO NOT CHANGE ID_SPACER UNLESS YOU ALSO CHANGE IT IN OTHER LIBRARIES!
     # (see service_deployment_tools/setup_marathon_job.py)
     ID_SPACER = '.'
 
     req = curl.Curl()
-    req.set_timeout(timeout)
+    req.set_timeout(timeout_s)
+    # If there's an I/O error here, we should fail and know about it- cron's
+    # running this method, and if cron fails to configure nerve because of
+    # a failure here we should know.
     slave_state = json.loads(req.get('http://%s:%s/state.json' % (hostname, port)))
-    executors = [ex for fw in \
-                 slave_state.get('frameworks', []) \
-                 if 'marathon' in fw['name'] \
-                 for ex in fw.get('executors', [])]
+    frameworks = [fw for fw in slave_state.get('frameworks', []) if 'marathon' in fw['name']]
+    executors = [ex for fw in frameworks for ex in fw.get('executors', [])]
     srv_list = []
     for executor in executors:
         srv_name = '%s%s%s' % (executor['id'].split(ID_SPACER)[0], ID_SPACER, \
                                executor['id'].split(ID_SPACER)[1])
-        port = int(re.search('[0-9]+', executor['resources']['ports']).group(0))
-        srv_list.append((srv_name, port))
+        ports = re.findall('[0-9]+', executor['resources']['ports'])
+        port_list = []
+        for port in ports:
+            if int(port) not in port_list:
+                port_list.append(int(port))
+        srv_list.append((srv_name, port_list))
     return srv_list
 
-def services_running_in_mesos_here(port='5051', timeout=30):
-    return services_running_in_mesos_on(port=port, timeout=timeout)
+def services_running_in_mesos_here(port='5051', timeout_s=30):
+    return services_running_in_mesos_on(port=port, timeout_s=timeout_s)
 
 # vim: et ts=4 sw=4
 
