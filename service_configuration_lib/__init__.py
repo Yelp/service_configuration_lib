@@ -181,6 +181,11 @@ def services_using_ssl_here():
     return services_using_ssl_on(hostname)
 
 def services_running_in_mesos_on(hostname='localhost', port='5051', timeout=30):
+    """See what services are being run by a mesos-slave via marathon on
+    the host hostname, where port is the port the mesos-slave is running on.
+
+    Returns a list of tuples, where the tuples are (service_name, srv_port), and
+    srv_port is the external port to connect on to reach that service's mesos task."""
     # DO NOT CHANGE ID_SPACER UNLESS YOU ALSO CHANGE IT IN OTHER LIBRARIES!
     # (see service_deployment_tools/setup_marathon_job.py)
     ID_SPACER = '.'
@@ -201,8 +206,7 @@ def services_running_in_mesos_on(hostname='localhost', port='5051', timeout=30):
     return srv_list
 
 def services_running_in_mesos_here(port='5051', timeout=30):
-    hostname = socket.getfqdn()
-    return services_running_in_mesos_on(hostname, port, timeout)
+    return services_running_in_mesos_on(port=port, timeout=timeout)
 
 # vim: et ts=4 sw=4
 

@@ -214,13 +214,11 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         assert expected == actual
 
     @mock.patch('service_configuration_lib.services_running_in_mesos_on', return_value='chipotle')
-    @mock.patch('socket.getfqdn', return_value='burrito')
-    def test_services_running_in_mesos_here(self, fqdn_patch, mesos_on_patch):
+    def test_services_running_in_mesos_here(self, mesos_on_patch):
         port = 808
         timeout = 9999
         assert service_configuration_lib.services_running_in_mesos_here(port, timeout) == 'chipotle'
-        fqdn_patch.assert_called_once_with()
-        mesos_on_patch.assert_called_once_with('burrito', port, timeout)
+        mesos_on_patch.assert_called_once_with(port=port, timeout=timeout)
 
 
 if __name__ == '__main__':
