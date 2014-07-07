@@ -101,6 +101,10 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
         all_services.update( { service_name: service_info } )
     return all_services
 
+def read_service_instance_namespace(name, instance, cluster, soa_dir=DEFAULT_SOA_DIR):
+    srv_info = read_extra_service_information(name, "marathon-%s" % cluster, soa_dir)[instance]
+    return srv_info['nerve_ns'] if 'nerve_ns' in srv_info else None
+
 def services_that_run_here():
     hostname = socket.getfqdn()
     return services_that_run_on(hostname)
@@ -181,11 +185,14 @@ def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
 
-def services_running_in_mesos_on(hostname='localhost', port='5051', timeout_s=30):
+def services_running_in_mesos_on(cluster, hostname='localhost', port='5051',
+                                 timeout_s=30, soa_dir=DEFAULT_SOA_DIR):
     """See what services are being run by a mesos-slave via marathon on
     the host hostname, where port is the port the mesos-slave is running on.
 
-    Returns a list of tuples, where the tuples are (service_name, srv_ports), and
+    Returns a list of tuples, where the tuples are (service_name, srv_ports).
+    service_name is NAME.NAMESPACE, where NAME is the service/dir name and NAMESPACE
+    is the nerve_ns associated with a service instance.
     srv_ports is a list of external ports to connect on to reach that service's
     mesos task."""
     # DO NOT CHANGE ID_SPACER UNLESS YOU ALSO CHANGE IT IN OTHER LIBRARIES!
@@ -202,10 +209,12 @@ def services_running_in_mesos_on(hostname='localhost', port='5051', timeout_s=30
     executors = [ex for fw in frameworks for ex in fw.get('executors', [])]
     srv_list = []
     for executor in executors:
-        srv_name = '%s%s%s' % (executor['id'].split(ID_SPACER)[0], ID_SPACER, \
-                               executor['id'].split(ID_SPACER)[1])
+        srv_name = executor['id'].split(ID_SPACER)[0]
+        srv_instance = executor['id'].split(ID_SPACER)[1]
+        srv_namespace = read_service_instance_namespace(srv_name, srv_instance, cluster, soa_dir)
+        nerve_name = '%s%s%s' % (srv_name, ID_SPACER, srv_namespace if srv_namespace else srv_instance)
         srv_port = int(re.findall('[0-9]+', executor['resources']['ports'])[0])
-        srv_list.append((srv_name, srv_port))
+        srv_list.append((nerve_name, srv_port))
     return srv_list
 
 def services_running_in_mesos_here(port='5051', timeout_s=30):

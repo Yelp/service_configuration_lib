@@ -177,9 +177,33 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
+    @mock.patch('service_configuration_lib.read_extra_service_information')
+    def test_read_service_instance_namespace_has_value(self, read_info_patch):
+        name = 'dont_worry'
+        instance = 'im_a_professional'
+        cluster = 'andromeda'
+        namespace = 'spacename'
+        soa_dir = 'dirdirdir'
+        read_info_patch.return_value = {instance: {'nerve_ns': namespace}}
+        actual = service_configuration_lib.read_service_instance_namespace(name, instance, cluster, soa_dir)
+        assert actual == namespace
+        read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
+
+    @mock.patch('service_configuration_lib.read_extra_service_information')
+    def test_read_service_instance_namespace_no_value(self, read_info_patch):
+        name = 'wall_light'
+        instance = 'ceiling_light'
+        cluster = 'no_light'
+        soa_dir = 'warehouse_light'
+        read_info_patch.return_value = {instance: {'aaaaaaaa': ['bbbbbbbb']}}
+        actual = service_configuration_lib.read_service_instance_namespace(name, instance, cluster, soa_dir)
+        assert actual is None
+        read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
+
+    @mock.patch('service_configuration_lib.read_service_instance_namespace')
     @mock.patch('curl.Curl', return_value=mock.Mock(set_timeout=mock.Mock(), get=mock.Mock()))
     @mock.patch('json.loads')
-    def test_services_running_in_mesos_on(self, json_load_patch, curl_patch):
+    def test_services_running_in_mesos_on(self, json_load_patch, curl_patch, read_ns_patch):
         id_1 = 'klingon.ships.detected.249qwiomelht4jioewglkemr'
         id_2 = 'fire.photon.torepedos.jtgriemot5yhtwe94'
         id_3 = 'dota.axe.cleave.482u9jyoi4wed'
@@ -189,9 +213,13 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         ports_3 = '[333-333]'
         ports_4 = '[444-444]'
         hostname = 'io-dev.oiio.io'
+        cluster = 'westerlund'
+        soa_dir = 'rid_aos'
         port = 123456789
         timeout = -99
-        curl_patch.return_value.get.return_value ='curl_into_a_corner'
+        read_ns_patch_ret_vals = [None, None, 'test_ns2', 'test_ns1']
+        read_ns_patch.side_effect = lambda a,b,c,d: read_ns_patch_ret_vals.pop()
+        curl_patch.return_value.get.return_value = 'curl_into_a_corner'
         json_load_patch.return_value = {'frameworks': [
                                             {'executors': [
                                                 {'id': id_1, 'resources': {'ports': ports_1}},
@@ -205,9 +233,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                                 {'id': 'bunk', 'resources': {'ports': '[65-65]'}}],
                                              'name': 'super_bunk'}
                                         ]}
-        expected = [('klingon.ships', 111), ('fire.photon', 222),
+        expected = [('klingon.test_ns1', 111), ('fire.test_ns2', 222),
                     ('dota.axe', 333), ('mesos.deployment', 444)]
-        actual = service_configuration_lib.services_running_in_mesos_on(hostname, port, timeout)
+        actual = service_configuration_lib.services_running_in_mesos_on(cluster, hostname, port,
+                                                                        timeout, soa_dir)
+        read_ns_patch.assert_any_call('klingon', 'ships', cluster, soa_dir)
+        read_ns_patch.assert_any_call('fire', 'photon', cluster, soa_dir)
+        read_ns_patch.assert_any_call('dota', 'axe', cluster, soa_dir)
+        read_ns_patch.assert_any_call('mesos', 'deployment', cluster, soa_dir)
+        assert read_ns_patch.call_count == 4
         curl_patch.return_value.set_timeout.assert_called_once_with(timeout)
         curl_patch.return_value.get.assert_called_once_with('http://%s:%s/state.json' % (hostname, port))
         json_load_patch.assert_called_once_with(curl_patch.return_value.get.return_value)
