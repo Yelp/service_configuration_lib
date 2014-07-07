@@ -205,8 +205,8 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                                 {'id': 'bunk', 'resources': {'ports': '[65-65]'}}],
                                              'name': 'super_bunk'}
                                         ]}
-        expected = [('klingon.ships', [111]), ('fire.photon', [222]),
-                    ('dota.axe', [333]), ('mesos.deployment', [444])]
+        expected = [('klingon.ships', 111), ('fire.photon', 222),
+                    ('dota.axe', 333), ('mesos.deployment', 444)]
         actual = service_configuration_lib.services_running_in_mesos_on(hostname, port, timeout)
         curl_patch.return_value.set_timeout.assert_called_once_with(timeout)
         curl_patch.return_value.get.assert_called_once_with('http://%s:%s/state.json' % (hostname, port))
