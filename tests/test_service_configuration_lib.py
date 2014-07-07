@@ -197,13 +197,13 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         soa_dir = 'warehouse_light'
         read_info_patch.return_value = {instance: {'aaaaaaaa': ['bbbbbbbb']}}
         actual = service_configuration_lib.read_service_instance_namespace(name, instance, cluster, soa_dir)
-        assert actual is None
+        assert actual == instance
         read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
 
     @mock.patch('service_configuration_lib.read_service_instance_namespace')
     @mock.patch('curl.Curl', return_value=mock.Mock(set_timeout=mock.Mock(), get=mock.Mock()))
     @mock.patch('json.loads')
-    def test_services_running_in_mesos_on(self, json_load_patch, curl_patch, read_ns_patch):
+    def test_marathon_services_running_on(self, json_load_patch, curl_patch, read_ns_patch):
         id_1 = 'klingon.ships.detected.249qwiomelht4jioewglkemr'
         id_2 = 'fire.photon.torepedos.jtgriemot5yhtwe94'
         id_3 = 'dota.axe.cleave.482u9jyoi4wed'
@@ -217,7 +217,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         soa_dir = 'rid_aos'
         port = 123456789
         timeout = -99
-        read_ns_patch_ret_vals = [None, None, 'test_ns2', 'test_ns1']
+        read_ns_patch_ret_vals = ['deployment', 'axe', 'test_ns2', 'test_ns1']
         read_ns_patch.side_effect = lambda a,b,c,d: read_ns_patch_ret_vals.pop()
         curl_patch.return_value.get.return_value = 'curl_into_a_corner'
         json_load_patch.return_value = {'frameworks': [
@@ -235,7 +235,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                         ]}
         expected = [('klingon.test_ns1', 111), ('fire.test_ns2', 222),
                     ('dota.axe', 333), ('mesos.deployment', 444)]
-        actual = service_configuration_lib.services_running_in_mesos_on(cluster, hostname, port,
+        actual = service_configuration_lib.marathon_services_running_on(cluster, hostname, port,
                                                                         timeout, soa_dir)
         read_ns_patch.assert_any_call('klingon', 'ships', cluster, soa_dir)
         read_ns_patch.assert_any_call('fire', 'photon', cluster, soa_dir)
@@ -247,12 +247,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         json_load_patch.assert_called_once_with(curl_patch.return_value.get.return_value)
         assert expected == actual
 
-    @mock.patch('service_configuration_lib.services_running_in_mesos_on', return_value='chipotle')
-    def test_services_running_in_mesos_here(self, mesos_on_patch):
+    @mock.patch('service_configuration_lib.marathon_services_running_on', return_value='chipotle')
+    def test_marathon_services_running_here(self, mesos_on_patch):
+        cluster = 'dull'
         port = 808
         timeout = 9999
-        assert service_configuration_lib.services_running_in_mesos_here(port, timeout) == 'chipotle'
-        mesos_on_patch.assert_called_once_with(port=port, timeout_s=timeout)
+        soa_dir = 'llud'
+        assert service_configuration_lib.marathon_services_running_here(cluster, port,
+                                                                        timeout, soa_dir) == 'chipotle'
+        mesos_on_patch.assert_called_once_with(cluster, port=port, timeout_s=timeout, soa_dir=soa_dir)
 
 
 if __name__ == '__main__':

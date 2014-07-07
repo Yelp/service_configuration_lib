@@ -103,7 +103,7 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
 
 def read_service_instance_namespace(name, instance, cluster, soa_dir=DEFAULT_SOA_DIR):
     srv_info = read_extra_service_information(name, "marathon-%s" % cluster, soa_dir)[instance]
-    return srv_info['nerve_ns'] if 'nerve_ns' in srv_info else None
+    return srv_info['nerve_ns'] if 'nerve_ns' in srv_info else instance
 
 def services_that_run_here():
     hostname = socket.getfqdn()
@@ -185,7 +185,7 @@ def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
 
-def services_running_in_mesos_on(cluster, hostname='localhost', port='5051',
+def marathon_services_running_on(cluster, hostname='localhost', port='5051',
                                  timeout_s=30, soa_dir=DEFAULT_SOA_DIR):
     """See what services are being run by a mesos-slave via marathon on
     the host hostname, where port is the port the mesos-slave is running on.
@@ -212,13 +212,13 @@ def services_running_in_mesos_on(cluster, hostname='localhost', port='5051',
         srv_name = executor['id'].split(ID_SPACER)[0]
         srv_instance = executor['id'].split(ID_SPACER)[1]
         srv_namespace = read_service_instance_namespace(srv_name, srv_instance, cluster, soa_dir)
-        nerve_name = '%s%s%s' % (srv_name, ID_SPACER, srv_namespace if srv_namespace else srv_instance)
+        nerve_name = '%s%s%s' % (srv_name, ID_SPACER, srv_namespace)
         srv_port = int(re.findall('[0-9]+', executor['resources']['ports'])[0])
         srv_list.append((nerve_name, srv_port))
     return srv_list
 
-def services_running_in_mesos_here(port='5051', timeout_s=30):
-    return services_running_in_mesos_on(port=port, timeout_s=timeout_s)
+def marathon_services_running_here(cluster, port='5051', timeout_s=30, soa_dir=DEFAULT_SOA_DIR):
+    return marathon_services_running_on(cluster, port=port, timeout_s=timeout_s, soa_dir=soa_dir)
 
 # vim: et ts=4 sw=4
 
