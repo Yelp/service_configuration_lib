@@ -204,12 +204,8 @@ def services_running_in_mesos_on(hostname='localhost', port='5051', timeout_s=30
     for executor in executors:
         srv_name = '%s%s%s' % (executor['id'].split(ID_SPACER)[0], ID_SPACER, \
                                executor['id'].split(ID_SPACER)[1])
-        ports = re.findall('[0-9]+', executor['resources']['ports'])
-        port_list = []
-        for port in ports:
-            if int(port) not in port_list:
-                port_list.append(int(port))
-        srv_list.append((srv_name, port_list))
+        srv_port = int(re.findall('[0-9]+', executor['resources']['ports'])[0])
+        srv_list.append((srv_name, srv_port))
     return srv_list
 
 def services_running_in_mesos_here(port='5051', timeout_s=30):
