@@ -101,10 +101,6 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
         all_services.update( { service_name: service_info } )
     return all_services
 
-def read_service_instance_namespace(name, instance, cluster, soa_dir=DEFAULT_SOA_DIR):
-    srv_info = read_extra_service_information(name, "marathon-%s" % cluster, soa_dir)[instance]
-    return srv_info['nerve_ns'] if 'nerve_ns' in srv_info else instance
-
 def services_that_run_here():
     hostname = socket.getfqdn()
     return services_that_run_on(hostname)
