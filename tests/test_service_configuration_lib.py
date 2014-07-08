@@ -177,29 +177,6 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
-    @mock.patch('service_configuration_lib.read_extra_service_information')
-    def test_read_service_instance_namespace_has_value(self, read_info_patch):
-        name = 'dont_worry'
-        instance = 'im_a_professional'
-        cluster = 'andromeda'
-        namespace = 'spacename'
-        soa_dir = 'dirdirdir'
-        read_info_patch.return_value = {instance: {'nerve_ns': namespace}}
-        actual = service_configuration_lib.read_service_instance_namespace(name, instance, cluster, soa_dir)
-        assert actual == namespace
-        read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
-
-    @mock.patch('service_configuration_lib.read_extra_service_information')
-    def test_read_service_instance_namespace_no_value(self, read_info_patch):
-        name = 'wall_light'
-        instance = 'ceiling_light'
-        cluster = 'no_light'
-        soa_dir = 'warehouse_light'
-        read_info_patch.return_value = {instance: {'aaaaaaaa': ['bbbbbbbb']}}
-        actual = service_configuration_lib.read_service_instance_namespace(name, instance, cluster, soa_dir)
-        assert actual == instance
-        read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
-
 
 if __name__ == '__main__':
     T.run()
