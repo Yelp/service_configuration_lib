@@ -200,63 +200,6 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         assert actual == instance
         read_info_patch.assert_called_once_with(name, 'marathon-%s' % cluster, soa_dir)
 
-    @mock.patch('service_configuration_lib.read_service_instance_namespace')
-    @mock.patch('curl.Curl', return_value=mock.Mock(set_timeout=mock.Mock(), get=mock.Mock()))
-    @mock.patch('json.loads')
-    def test_marathon_services_running_on(self, json_load_patch, curl_patch, read_ns_patch):
-        id_1 = 'klingon.ships.detected.249qwiomelht4jioewglkemr'
-        id_2 = 'fire.photon.torepedos.jtgriemot5yhtwe94'
-        id_3 = 'dota.axe.cleave.482u9jyoi4wed'
-        id_4 = 'mesos.deployment.is.hard'
-        ports_1 = '[111-111]'
-        ports_2 = '[222-222]'
-        ports_3 = '[333-333]'
-        ports_4 = '[444-444]'
-        hostname = 'io-dev.oiio.io'
-        cluster = 'westerlund'
-        soa_dir = 'rid_aos'
-        port = 123456789
-        timeout = -99
-        read_ns_patch_ret_vals = ['deployment', 'axe', 'test_ns2', 'test_ns1']
-        read_ns_patch.side_effect = lambda a,b,c,d: read_ns_patch_ret_vals.pop()
-        curl_patch.return_value.get.return_value = 'curl_into_a_corner'
-        json_load_patch.return_value = {'frameworks': [
-                                            {'executors': [
-                                                {'id': id_1, 'resources': {'ports': ports_1}},
-                                                {'id': id_2, 'resources': {'ports': ports_2}}],
-                                             'name': 'marathon-1111111'},
-                                            {'executors': [
-                                                {'id': id_3, 'resources': {'ports': ports_3}},
-                                                {'id': id_4, 'resources': {'ports': ports_4}}],
-                                             'name': 'marathon-3145jgreoifd'},
-                                            {'executors': [
-                                                {'id': 'bunk', 'resources': {'ports': '[65-65]'}}],
-                                             'name': 'super_bunk'}
-                                        ]}
-        expected = [('klingon.test_ns1', 111), ('fire.test_ns2', 222),
-                    ('dota.axe', 333), ('mesos.deployment', 444)]
-        actual = service_configuration_lib.marathon_services_running_on(cluster, hostname, port,
-                                                                        timeout, soa_dir)
-        read_ns_patch.assert_any_call('klingon', 'ships', cluster, soa_dir)
-        read_ns_patch.assert_any_call('fire', 'photon', cluster, soa_dir)
-        read_ns_patch.assert_any_call('dota', 'axe', cluster, soa_dir)
-        read_ns_patch.assert_any_call('mesos', 'deployment', cluster, soa_dir)
-        assert read_ns_patch.call_count == 4
-        curl_patch.return_value.set_timeout.assert_called_once_with(timeout)
-        curl_patch.return_value.get.assert_called_once_with('http://%s:%s/state.json' % (hostname, port))
-        json_load_patch.assert_called_once_with(curl_patch.return_value.get.return_value)
-        assert expected == actual
-
-    @mock.patch('service_configuration_lib.marathon_services_running_on', return_value='chipotle')
-    def test_marathon_services_running_here(self, mesos_on_patch):
-        cluster = 'dull'
-        port = 808
-        timeout = 9999
-        soa_dir = 'llud'
-        assert service_configuration_lib.marathon_services_running_here(cluster, port,
-                                                                        timeout, soa_dir) == 'chipotle'
-        mesos_on_patch.assert_called_once_with(cluster, port=port, timeout_s=timeout, soa_dir=soa_dir)
-
 
 if __name__ == '__main__':
     T.run()

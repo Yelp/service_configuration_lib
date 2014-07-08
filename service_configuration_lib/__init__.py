@@ -185,40 +185,5 @@ def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
 
-def marathon_services_running_on(cluster, hostname='localhost', port='5051',
-                                 timeout_s=30, soa_dir=DEFAULT_SOA_DIR):
-    """See what services are being run by a mesos-slave via marathon on
-    the host hostname, where port is the port the mesos-slave is running on.
-
-    Returns a list of tuples, where the tuples are (service_name, srv_ports).
-    service_name is NAME.NAMESPACE, where NAME is the service/dir name and NAMESPACE
-    is the nerve_ns associated with a service instance.
-    srv_ports is a list of external ports to connect on to reach that service's
-    mesos task."""
-    # DO NOT CHANGE ID_SPACER UNLESS YOU ALSO CHANGE IT IN OTHER LIBRARIES!
-    # (see service_deployment_tools/setup_marathon_job.py)
-    ID_SPACER = '.'
-
-    req = curl.Curl()
-    req.set_timeout(timeout_s)
-    # If there's an I/O error here, we should fail and know about it- cron's
-    # running this method, and if cron fails to configure nerve because of
-    # a failure here we should know.
-    slave_state = json.loads(req.get('http://%s:%s/state.json' % (hostname, port)))
-    frameworks = [fw for fw in slave_state.get('frameworks', []) if 'marathon' in fw['name']]
-    executors = [ex for fw in frameworks for ex in fw.get('executors', [])]
-    srv_list = []
-    for executor in executors:
-        srv_name = executor['id'].split(ID_SPACER)[0]
-        srv_instance = executor['id'].split(ID_SPACER)[1]
-        srv_namespace = read_service_instance_namespace(srv_name, srv_instance, cluster, soa_dir)
-        nerve_name = '%s%s%s' % (srv_name, ID_SPACER, srv_namespace)
-        srv_port = int(re.findall('[0-9]+', executor['resources']['ports'])[0])
-        srv_list.append((nerve_name, srv_port))
-    return srv_list
-
-def marathon_services_running_here(cluster, port='5051', timeout_s=30, soa_dir=DEFAULT_SOA_DIR):
-    return marathon_services_running_on(cluster, port=port, timeout_s=timeout_s, soa_dir=soa_dir)
-
 # vim: et ts=4 sw=4
 
