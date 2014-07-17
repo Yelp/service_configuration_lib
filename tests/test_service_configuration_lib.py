@@ -8,6 +8,9 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     fake_service_configuration = {
          'fake_service1': {'deployed_to': None,
                            'lb_extras': {},
+                           'monitoring': {
+                               'fake_monitoring_key': 'fake_monitoring_value'
+                            },
                            'port': 11111,
                            'runs_on': ['fake_hostname3',
                                        'fake_hostname2',
@@ -17,6 +20,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                             'fake_deployed_hostname2',
                                             'fake_hostname4'],
                      'lb_extras': {'exclude_forwardfor': True},
+                     'monitoring': {},
                      'port': 22222,
                      'runs_on': ['fake_hostname2',
                                  'fake_hostname3',
@@ -24,6 +28,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                      'vip': 'fakevip2'},
          'fake_service3': {'deployed_to': None,
                           'lb_extras': {},
+                          'monitoring': {},
                           'port': 33333,
                           'runs_on': ['fake_hostname3',
                                       'fake_hostname4',
@@ -37,16 +42,19 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         fake_port = 9999
         fake_vip  = 'fakevip9'
         fake_lb_extras = { 'fakekey': 'fakevalue' }
+        fake_monitoring = { 'fakemkey': 'fakemvalue' }
         fake_service_information = { 'fakekey2': 'fakevalue2' }
         actual = service_configuration_lib.generate_service_info(
-            fake_port,
-            fake_vip,
-            fake_lb_extras,
             fake_service_information,
+            port=fake_port,
+            vip=fake_vip,
+            lb_extras=fake_lb_extras,
+            monitoring=fake_monitoring
         )
         expected = {
             'lb_extras': fake_lb_extras,
             'vip': fake_vip,
+            'monitoring': fake_monitoring,
             # Can't use the fake_service_information because it's an
             # un-nested hash at this point
             'fakekey2': 'fakevalue2',
@@ -60,6 +68,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         fake_vip_file = 'fake_vip_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_vip(fake_vip_file)
+        T.assert_equal(expected, actual)
+
+    def test_read_monitoring_should_return_empty_when_file_doesnt_exist(self):
+        expected = {}
+        fake_monitoring_file = 'fake_monitoring_file'
+        # TODO: Mock open?
+        actual = service_configuration_lib.read_monitoring(
+            fake_monitoring_file
+        )
         T.assert_equal(expected, actual)
 
     def test_services_that_run_on_should_properly_read_configuration(self):
@@ -150,19 +167,29 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_port', return_value='1111')
     @mock.patch('service_configuration_lib.read_vip', return_value='ULTRA_VIP')
     @mock.patch('service_configuration_lib.read_lb_extras', return_value='no_extras')
+    @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
-    def test_read_service_configuration_from_dir(self, gen_patch, info_patch, lb_patch, vip_patch,
-                                                 port_patch, join_patch):
+    def test_read_service_configuration_from_dir(self, gen_patch, info_patch,
+                                                 monitoring_patch, lb_patch,
+                                                 vip_patch, port_patch,
+                                                 join_patch):
         expected = {'oof' : 'ouch'}
         actual = service_configuration_lib.read_service_configuration_from_dir('never', 'die')
-        join_patch.assert_has_calls([mock.call('never','die','port'), mock.call('never','die','vip'),
-                mock.call('never','die','lb.yaml'), mock.call('never','die','service.yaml')])
+        join_patch.assert_has_calls([
+            mock.call('never','die','port'),
+            mock.call('never','die','vip'),
+            mock.call('never','die','lb.yaml'),
+            mock.call('never','die','service.yaml'),
+            mock.call('never','die','monitoring.yaml')])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
         lb_patch.assert_called_once_with('forever_joined')
         info_patch.assert_called_once_with('forever_joined')
-        gen_patch.assert_called_once_with('1111', 'ULTRA_VIP', 'no_extras', 'no_info')
+        gen_patch.assert_called_once_with('no_info', port='1111',
+                                          vip='ULTRA_VIP',
+                                          lb_extras='no_extras',
+                                          monitoring='no_monitoring')
         T.assert_equal(expected, actual)
 
     @mock.patch('os.path.join', return_value='together_forever')
