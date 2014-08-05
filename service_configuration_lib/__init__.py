@@ -187,6 +187,15 @@ def all_nodes_that_receive(service, service_configuration=None, run_only=False, 
 
     return list(sorted(result))
 
+def all_nodes_that_run_in_env(service, env, service_configuration=None):
+    if service_configuration is None:
+        service_configuration = read_services_configuration()
+    env_runs_on = service_configuration[service]['env_runs_on']
+    if env in env_runs_on:
+        return list(sorted(env_runs_on[env]))
+    else:
+        return None
+
 def services_using_ssl_on(hostname, service_configuration=None):
     if service_configuration is None:
         service_configuration = read_services_configuration()
