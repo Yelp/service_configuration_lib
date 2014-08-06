@@ -38,20 +38,6 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                           'vip': 'fakevip3'}
     }
 
-    fake_structured_configuration = {
-         'fake_service1': {'deployed_to': None,
-                           'lb_extras': {},
-                           'monitoring': {
-                               'fake_monitoring_key': 'fake_monitoring_value'
-                            },
-                           'port': 11111,
-                           'runs_on': {'devc':['fake_hostname1',
-                                       'fake_hostname2'],
-                                       'prod':['fake_hostname3']
-                            },
-                           'vip': 'fakevip1'}
-    }
-
     def test_generate_service_info_should_have_all_keys(self):
         fake_port = 9999
         fake_vip  = 'fakevip9'
@@ -218,18 +204,6 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
-    def test_structured_services_yaml_noenv(self):
-        expected=['fake_hostname1', 'fake_hostname2', 'fake_hostname3']
-        actual = service_configuration_lib.all_nodes_that_run('fake_service1',
-                    service_configuration=self.fake_structured_configuration)
-        T.assert_equal(expected, actual)
-    
-    def test_structured_services_yaml_withenv(self):
-        expected=['fake_hostname1', 'fake_hostname2']
-        actual=service_configuration_lib.all_nodes_that_run('fake_service1', 
-            service_configuration=self.fake_structured_configuration,
-            environment='devc')
-        T.assert_equal(expected, actual)
 
 if __name__ == '__main__':
     T.run()

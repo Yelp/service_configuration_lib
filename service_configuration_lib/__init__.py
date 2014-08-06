@@ -160,10 +160,10 @@ def services_needing_puppet_help_on(hostname, service_configuration=None):
     deployed_services = services_deployed_on(hostname, service_configuration)
     return [s for s in deployed_services if service_configuration[s].get('needs_puppet_help')]
 
-def all_nodes_that_run(service, service_configuration=None, environment=None):
-    return all_nodes_that_receive(service, service_configuration=service_configuration, run_only=True, environment=environment)
+def all_nodes_that_run(service, service_configuration=None):
+    return all_nodes_that_receive(service, service_configuration=service_configuration, run_only=True)
 
-def all_nodes_that_receive(service, service_configuration=None, run_only=False, deploy_to_only=False, environment=None):
+def all_nodes_that_receive(service, service_configuration=None, run_only=False, deploy_to_only=False):
     """ If run_only, returns only the services that are in the runs_on list.
     If deploy_to_only, returns only the services in the deployed_to list.
     If neither, both are returned, duplicates stripped.
@@ -173,27 +173,11 @@ def all_nodes_that_receive(service, service_configuration=None, run_only=False, 
 
     if service_configuration is None:
         service_configuration = read_services_configuration()
-    runs_on = []
-    container = service_configuration[service]['runs_on']
-
-    # This case returns nothing if there are no environments set in the
-    # configuration file. it allows a config to specify environment buckets
-    # when specifying hosts. we need this in order to avoud regexing
-    # to figure out which hosts belong in which habitat.
-
-    if environment:
-        if isinstance(container, dict) and environment in container:
-            runs_on = container[environment]
-    else:
-        if isinstance(container, dict):
-            for key in container:
-                runs_on.extend(container[key])
-        else:
-            runs_on = container
-
+    runs_on = service_configuration[service]['runs_on']
     deployed_to = service_configuration[service].get('deployed_to')
     if deployed_to is None:
         deployed_to = []
+
     if run_only:
         result = runs_on
     elif deploy_to_only:
