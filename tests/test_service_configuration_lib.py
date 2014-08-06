@@ -33,6 +33,10 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                           'runs_on': ['fake_hostname3',
                                       'fake_hostname4',
                                       'fake_hostname5'],
+                          'env_runs_on': {
+                            'fake_env1': ['fake_hostname3'],
+                            'fake_env2': ['fake_hostname4', 'fake_hostname5']
+                            },
                           'needs_puppet_help': True,
                           'ssl': True,
                           'vip': 'fakevip3'}
@@ -204,6 +208,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
+    def test_env_runs_on(self):
+        expected = ['fake_hostname3']
+        actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env1', service_configuration=self.fake_service_configuration)
+        T.assert_equal(expected, actual)
+
+        expected = ['fake_hostname4', 'fake_hostname5']
+        actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env2', service_configuration=self.fake_service_configuration)
+        T.assert_equal(expected, actual)
 
 if __name__ == '__main__':
     T.run()
