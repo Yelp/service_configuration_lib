@@ -187,6 +187,28 @@ def all_nodes_that_receive(service, service_configuration=None, run_only=False, 
 
     return list(sorted(result))
 
+def all_nodes_that_run_in_env(service, env, service_configuration=None):
+    """ Returns all nodes that run in an environment. This needs
+    to be specified in field named 'env_runs_on' one level under services
+    in the configuration, and needs to contain an object which maps strings
+    to lists (environments to nodes).
+
+    :param service: A string specifying which service to look up nodes for
+    :param env: A string specifying which environment's nodes should be returned
+    :param service_configuration: A service_configuration dict to look in or None to
+                                  use the default dict.
+
+    :returns: list of all nodes running in a certain environment
+    """
+
+    if service_configuration is None:
+        service_configuration = read_services_configuration()
+    env_runs_on = service_configuration[service]['env_runs_on']
+    if env in env_runs_on:
+        return list(sorted(env_runs_on[env]))
+    else:
+        return []
+
 def services_using_ssl_on(hostname, service_configuration=None):
     if service_configuration is None:
         service_configuration = read_services_configuration()
