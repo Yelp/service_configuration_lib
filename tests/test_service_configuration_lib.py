@@ -173,11 +173,12 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_lb_extras', return_value='no_extras')
     @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
+    @mock.patch('service_configuration_lib.read_data', return_value='no_data')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
-    def test_read_service_configuration_from_dir(self, gen_patch, info_patch,
-                                                 monitoring_patch, lb_patch,
-                                                 vip_patch, port_patch,
-                                                 join_patch):
+    def test_read_service_configuration_from_dir(self, gen_patch, data_patch,
+                                                 info_patch, monitoring_patch,
+                                                 lb_patch, vip_patch,
+                                                 port_patch, join_patch):
         expected = {'oof' : 'ouch'}
         actual = service_configuration_lib.read_service_configuration_from_dir('never', 'die')
         join_patch.assert_has_calls([
@@ -185,7 +186,8 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             mock.call('never','die','vip'),
             mock.call('never','die','lb.yaml'),
             mock.call('never','die','service.yaml'),
-            mock.call('never','die','monitoring.yaml')])
+            mock.call('never','die','monitoring.yaml'),
+            mock.call('never','die','data.yaml')])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
         lb_patch.assert_called_once_with('forever_joined')
@@ -193,12 +195,13 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         gen_patch.assert_called_once_with('no_info', port='1111',
                                           vip='ULTRA_VIP',
                                           lb_extras='no_extras',
-                                          monitoring='no_monitoring')
+                                          monitoring='no_monitoring',
+                                          data='no_data')
         T.assert_equal(expected, actual)
 
     @mock.patch('os.path.join', return_value='together_forever')
     @mock.patch('os.path.abspath', return_value='real_soa_dir')
-    @mock.patch('service_configuration_lib.read_service_information', return_value={'what': 'info'})
+    @mock.patch('service_configuration_lib._read_yaml_file', return_value={'what': 'info'})
     def test_read_extra_service_information(self, info_patch, abs_patch, join_patch):
         expected = {'what': 'info'}
         actual = service_configuration_lib.read_extra_service_information('noname',
