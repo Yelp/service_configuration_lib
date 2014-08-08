@@ -38,43 +38,30 @@ def load_yaml(fd):
     else:
         return yaml.load(fd)
 
-def read_monitoring(monitoring_file):
-    monitoring_data = {}
-    try:
-        with open(monitoring_file, 'r') as monitoring_file_fd:
-            monitoring_data = load_yaml(monitoring_file_fd.read())
-            monitoring_data = monitoring_data or {}
-    except IOError:
-        pass
-    except:
-        print >>sys.stderr, "Failed to parse YAML from %s" % monitoring_file
-        raise
-    return monitoring_data
-
 def read_lb_extras(lb_extras_file):
-    lb_extras = {}
-    try:
-        with open(lb_extras_file, 'r') as lbe_file_fd:
-            lb_extras = load_yaml(lbe_file_fd.read())
-            lb_extras = lb_extras or {}
-    except IOError:
-        pass
-    except:
-        print >>sys.stderr, "Failed to parse YAML from %s" % lb_extras_file
-        raise
-    return lb_extras
+    return _read_yaml_file(lb_extras_file)
+
+def read_monitoring(monitoring_file):
+    return _read_yaml_file(monitoring_file)
 
 def read_service_information(service_file):
+    return _read_yaml_file(service_file)
+
+def read_data(data_file):
+    return _read_yaml_file(data_file)
+
+def _read_yaml_file(file_name):
+    data = {}
     try:
-        with open(service_file, 'r') as service_file_fd:
-            service_information = load_yaml(service_file_fd.read())
-            service_information = service_information or {}
+        with open(file_name, 'r') as fd:
+            data = load_yaml(fd.read())
+            data = data or {}
     except IOError:
-        service_information = {}
+        pass
     except:
-        print >>sys.stderr, "Failed to parse YAML from %s" % service_file
+        print >>sys.stderr, "Failed to parse YAML from %s" % file_name
         raise
-    return service_information
+    return data
 
 def generate_service_info(service_information, **kwargs):
     service_info = kwargs
@@ -82,7 +69,7 @@ def generate_service_info(service_information, **kwargs):
     return service_info
 
 def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR):
-    return read_service_information(os.path.join(
+    return _read_yaml_file(os.path.join(
         os.path.abspath(soa_dir), service_name, extra_info + ".yaml"))
 
 def read_service_configuration_from_dir(rootdir, service_dirname):
@@ -91,16 +78,18 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
     service_file = os.path.join(rootdir, service_dirname, "service.yaml")
     monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
+    data_file = os.path.join(rootdir, service_dirname, "data.yaml")
 
     port = read_port(port_file)
     vip = read_vip(vip_file)
     lb_extras = read_lb_extras(lb_extras_file)
     monitoring = read_monitoring(monitoring_file)
+    data = read_data(data_file)
     service_information = read_service_information(service_file)
 
     return generate_service_info(service_information,
                                  port=port, vip=vip,
-                                 lb_extras=lb_extras, monitoring=monitoring)
+                                 lb_extras=lb_extras, monitoring=monitoring, data=data)
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
     return read_service_configuration_from_dir(os.path.abspath(soa_dir), service_name)
