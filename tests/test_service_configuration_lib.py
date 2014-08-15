@@ -211,6 +211,44 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
+    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('service_configuration_lib.load_yaml', return_value={'data': 'mock'})
+    def test_read_yaml_file_single(self, load_patch, open_patch):
+        expected = {'data': 'mock'}
+        filename = 'fake_fname_uno'
+        actual = service_configuration_lib._read_yaml_file(filename)
+        open_patch.assert_called_once_with(filename, 'r')
+        load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
+        T.assert_equal(expected, actual)
+
+    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('service_configuration_lib.load_yaml', return_value={'mmmm': 'tests'})
+    def test_read_yaml_file_with_cache(self, load_patch, open_patch):
+        expected = {'mmmm': 'tests'}
+        filename = 'fake_fname_dos'
+        service_configuration_lib.enable_yaml_cache()
+        actual = service_configuration_lib._read_yaml_file(filename)
+        actual_two = service_configuration_lib._read_yaml_file(filename)
+        open_patch.assert_called_once_with(filename, 'r')
+        load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
+        T.assert_equal(expected, actual)
+        T.assert_equal(expected, actual_two)
+
+    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('service_configuration_lib.load_yaml', return_value={'water': 'slide'})
+    def test_read_yaml_file_no_cache(self, load_patch, open_patch):
+        expected = {'water': 'slide'}
+        filename = 'fake_fname_tres'
+        service_configuration_lib.disable_yaml_cache()
+        actual = service_configuration_lib._read_yaml_file(filename)
+        actual_two = service_configuration_lib._read_yaml_file(filename)
+        open_patch.assert_any_call(filename, 'r')
+        assert open_patch.call_count == 2
+        load_patch.assert_any_call(open_patch.return_value.__enter__().read())
+        assert load_patch.call_count == 2
+        T.assert_equal(expected, actual)
+        T.assert_equal(expected, actual_two)
+
     def test_env_runs_on(self):
         expected = ['fake_hostname3']
         actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env1', service_configuration=self.fake_service_configuration)
