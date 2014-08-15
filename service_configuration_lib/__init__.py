@@ -2,16 +2,22 @@
 
 import logging
 import os
-import re
 import socket
 import sys
-
-import curl
-import json
 import yaml
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
 log = logging.getLogger(__name__)
+_yaml_cache = {}
+_use_yaml_cache = True
+
+def enable_yaml_cache():
+    global _use_yaml_cache
+    _use_yaml_cache = True
+
+def disable_yaml_cache():
+    global _use_yaml_cache
+    _use_yaml_cache = False
 
 def read_port(port_file):
     # Try to read port information
@@ -51,11 +57,15 @@ def read_data(data_file):
     return _read_yaml_file(data_file)
 
 def _read_yaml_file(file_name):
+    if _use_yaml_cache and file_name in _yaml_cache:
+        return _yaml_cache[file_name]
     data = {}
     try:
         with open(file_name, 'r') as fd:
             data = load_yaml(fd.read())
             data = data or {}
+            if _use_yaml_cache:
+                _yaml_cache[file_name] = data
     except IOError:
         pass
     except:
