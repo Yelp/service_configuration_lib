@@ -141,12 +141,19 @@ def services_deployed_on(hostname, service_configuration=None):
     running_services = services_that_run_on(hostname, service_configuration)
     # Deployed services are a superset of running ones
     deployed_services = running_services
+
     for service in service_configuration:
-        if 'deployed_to' in service_configuration[service] and \
-           service_configuration[service]['deployed_to'] and \
-           hostname in service_configuration[service]['deployed_to'] and \
-           service not in running_services :
+        if (
+            'deployed_to' in service_configuration[service] and
+            service_configuration[service]['deployed_to'] and
+            (
+                service_configuration[service]['deployed_to'] is True or
+                hostname in service_configuration[service]['deployed_to']
+            ) and
+           service not in running_services
+        ):
             deployed_services.append(service)
+
     return deployed_services
 
 def services_needing_puppet_help_here():

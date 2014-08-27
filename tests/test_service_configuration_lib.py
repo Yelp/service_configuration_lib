@@ -39,7 +39,16 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                             },
                           'needs_puppet_help': True,
                           'ssl': True,
-                          'vip': 'fakevip3'}
+                          'vip': 'fakevip3',
+         },
+        'fake_service4': { 'deployed_to': True,
+                           'runs_on': [],
+                           'needs_puppet_help': True,
+        },
+        'fake_service5': { 'deployed_to': [],
+                           'runs_on': [],
+                           'needs_puppet_help': True,
+        },
     }
 
     def test_generate_service_info_should_have_all_keys(self):
@@ -98,14 +107,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         T.assert_equal(expected, actual)
 
     def test_services_deployed_to_should_return_deployed_and_running_services(self):
-        expected = ['fake_service1', 'fake_service2', 'fake_service3']
+        expected = ['fake_service1', 'fake_service2', 'fake_service3', 'fake_service4']
         fake_hostname = 'fake_hostname3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_deployed_on(fake_hostname, fake_service_configuration)
         T.assert_equal(expected, actual)
 
     def test_services_needing_puppet_help_on_should_properly_read_configuration(self):
-        expected = [ 'fake_service3' ]
+        expected = [ 'fake_service3', 'fake_service4' ]
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_needing_puppet_help_on(fake_hostname, fake_service_configuration)
