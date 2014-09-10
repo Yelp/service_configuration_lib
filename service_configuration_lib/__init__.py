@@ -4,7 +4,9 @@ import logging
 import os
 import socket
 import sys
+
 import yaml
+
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
 log = logging.getLogger(__name__)
