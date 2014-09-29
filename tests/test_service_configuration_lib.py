@@ -52,29 +52,25 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     }
 
     def test_generate_service_info_should_have_all_keys(self):
-        fake_port = 9999
-        fake_vip  = 'fakevip9'
-        fake_lb_extras = { 'fakekey': 'fakevalue' }
-        fake_monitoring = { 'fakemkey': 'fakemvalue' }
+        """I'm not entirely sure what this test is testing since I can add a
+        new value or remove an old value and the test passes without changing
+        any code. I simplified it to make it less misleading and focus on the
+        one thing it does to, which is test that the arg service_information is
+        updated.
+        """
         fake_service_information = { 'fakekey2': 'fakevalue2' }
+        fake_port = 9999
         actual = service_configuration_lib.generate_service_info(
             fake_service_information,
             port=fake_port,
-            vip=fake_vip,
-            lb_extras=fake_lb_extras,
-            monitoring=fake_monitoring
         )
         expected = {
-            'lb_extras': fake_lb_extras,
-            'vip': fake_vip,
-            'monitoring': fake_monitoring,
             # Can't use the fake_service_information because it's an
             # un-nested hash at this point
             'fakekey2': 'fakevalue2',
-            'port': fake_port
+            'port': fake_port,
         }
         T.assert_equal(expected, actual)
-        print actual
 
     def test_read_vip_should_return_none_when_file_doesnt_exist(self):
         expected = None
