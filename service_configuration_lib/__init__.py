@@ -93,18 +93,23 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
     service_file = os.path.join(rootdir, service_dirname, "service.yaml")
     monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
+    deploy_file = os.path.join(rootdir, service_dirname, "deploy.yaml")
     data_file = os.path.join(rootdir, service_dirname, "data.yaml")
 
     port = read_port(port_file)
     vip = read_vip(vip_file)
     lb_extras = read_lb_extras(lb_extras_file)
     monitoring = read_monitoring(monitoring_file)
+    deploy = read_deploy(deploy_file)
     data = read_data(data_file)
     service_information = read_service_information(service_file)
 
     return generate_service_info(service_information,
                                  port=port, vip=vip,
-                                 lb_extras=lb_extras, monitoring=monitoring, data=data)
+                                 lb_extras=lb_extras,
+                                 monitoring=monitoring,
+                                 deploy=deploy,
+                                 data=data)
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
     return read_service_configuration_from_dir(os.path.abspath(soa_dir), service_name)
