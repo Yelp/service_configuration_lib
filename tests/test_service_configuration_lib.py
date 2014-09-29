@@ -11,6 +11,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                            'monitoring': {
                                'fake_monitoring_key': 'fake_monitoring_value'
                             },
+                           'deploy': {},
                            'port': 11111,
                            'runs_on': ['fake_hostname3',
                                        'fake_hostname2',
