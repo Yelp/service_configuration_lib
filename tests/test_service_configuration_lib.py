@@ -186,13 +186,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_vip', return_value='ULTRA_VIP')
     @mock.patch('service_configuration_lib.read_lb_extras', return_value='no_extras')
     @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
+    @mock.patch('service_configuration_lib.read_deploy', return_value='no_deploy')
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
     @mock.patch('service_configuration_lib.read_data', return_value='no_data')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
     def test_read_service_configuration_from_dir(self, gen_patch, data_patch,
-                                                 info_patch, monitoring_patch,
-                                                 lb_patch, vip_patch,
-                                                 port_patch, join_patch):
+                                                 info_patch, deploy_patch,
+                                                 monitoring_patch, lb_patch,
+                                                 vip_patch, port_patch,
+                                                 join_patch):
         expected = {'oof' : 'ouch'}
         actual = service_configuration_lib.read_service_configuration_from_dir('never', 'die')
         join_patch.assert_has_calls([
@@ -201,6 +203,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             mock.call('never','die','lb.yaml'),
             mock.call('never','die','service.yaml'),
             mock.call('never','die','monitoring.yaml'),
+            mock.call('never','die','deploy.yaml'),
             mock.call('never','die','data.yaml')])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
@@ -210,6 +213,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                           vip='ULTRA_VIP',
                                           lb_extras='no_extras',
                                           monitoring='no_monitoring',
+                                          deploy='no_deploy',
                                           data='no_data')
         T.assert_equal(expected, actual)
 
