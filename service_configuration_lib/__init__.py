@@ -52,6 +52,9 @@ def read_lb_extras(lb_extras_file):
 def read_monitoring(monitoring_file):
     return _read_yaml_file(monitoring_file)
 
+def read_deploy(deploy_file):
+    return _read_yaml_file(deploy_file)
+
 def read_service_information(service_file):
     return _read_yaml_file(service_file)
 
