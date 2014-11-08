@@ -4,5 +4,5 @@ import sys
 sys.path.append('/nail/sys/srv-deploy/lib/')
 import service_configuration_lib
 
-print '\n'.join(service_configuration_lib.services_deployed_here())
-
+for service in service_configuration_lib.services_deployed_here():
+    print service
