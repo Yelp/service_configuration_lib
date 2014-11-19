@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import copy
 import logging
 import os
 import socket
@@ -63,7 +64,7 @@ def read_data(data_file):
 
 def _read_yaml_file(file_name):
     if _use_yaml_cache and file_name in _yaml_cache:
-        return _yaml_cache[file_name]
+        return copy.deepcopy(_yaml_cache[file_name])
     data = {}
     try:
         with open(file_name, 'r') as fd:

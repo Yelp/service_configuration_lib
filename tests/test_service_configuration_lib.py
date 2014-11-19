@@ -252,6 +252,10 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         T.assert_equal(expected, actual)
         T.assert_equal(expected, actual_two)
+        # When we cache, we can NOT return a pointer to the original object
+        # because the caller might mutate it. We need to ensure that
+        # the returned object is a copy.
+        T.assert_is_not(actual, actual_two)
 
     @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
     @mock.patch('service_configuration_lib.load_yaml', return_value={'water': 'slide'})
