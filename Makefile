@@ -1,6 +1,7 @@
 UID:=`id -u`
 GID:=`id -g`
-DOCKER_RUN:=docker run -h fake.docker.hostname -v $(CURDIR):/work:rw lucid_container
+LUCID_DOCKER_RUN:=docker run -h fake.docker.hostname -v $(CURDIR):/work:rw scl_lucid_container
+TRUSTY_DOCKER_RUN:=docker run -h fake.docker.hostname -v $(CURDIR):/work:rw scl_trusty_container
 
 .PHONY: all production test tests coverage clean
 
@@ -16,21 +17,30 @@ tests: test
 coverage: test
 
 itest_lucid: package_lucid
-	$(DOCKER_RUN) /bin/bash -c "/work/tests/ubuntu.sh"
-	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
+	$(LUCID_DOCKER_RUN) /bin/bash -c "/work/tests/ubuntu.sh"
+	$(LUCID_DOCKER_RUN) chown -R $(UID):$(GID) /work
 
-package_lucid: test_lucid
-	rm -rf .tox
-	$(DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
-	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
-
-test_lucid: build_lucid_docker
-	$(DOCKER_RUN) bash -c "tox"
-	$(DOCKER_RUN) chown -R $(UID):$(GID) /work
+package_lucid: build_lucid_docker
+	$(LUCID_DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
+	$(LUCID_DOCKER_RUN) chown -R $(UID):$(GID) /work
 
 build_lucid_docker:
 	[ -d dist ] || mkdir dist
-	cd dockerfiles/lucid/ && docker build -t "lucid_container" .
+	cd dockerfiles/lucid/ && docker build -t "scl_lucid_container" .
+
+
+itest_trusty: package_trusty
+	$(TRUSTY_DOCKER_RUN) /bin/bash -c "/work/tests/ubuntu.sh"
+	$(TRUSTY_DOCKER_RUN) chown -R $(UID):$(GID) /work
+
+package_trusty: build_trusty_docker
+	$(TRUSTY_DOCKER_RUN) /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
+	$(TRUSTY_DOCKER_RUN) chown -R $(UID):$(GID) /work
+
+build_trusty_docker:
+	[ -d dist ] || mkdir dist
+	cd dockerfiles/trusty/ && docker build -t "scl_trusty_container" .
+
 
 clean:
 	rm -rf dist/

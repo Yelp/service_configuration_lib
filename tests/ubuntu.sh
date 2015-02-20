@@ -34,7 +34,7 @@ else
   exit 1
 fi
 
-if tox >/dev/null; then
+if python -c 'import service_configuration_lib' >/dev/null; then
   echo "Library can be imported..."
 else
   echo "Package installed but library failed to import!"

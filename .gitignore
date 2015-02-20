@@ -5,3 +5,4 @@ dist/
 build/
 .*.sw?
 virtualenv_run
+.bash_history
