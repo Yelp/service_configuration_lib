@@ -181,7 +181,7 @@ def all_nodes_that_run(service, service_configuration=None):
     return all_nodes_that_receive(service, service_configuration=service_configuration, run_only=True)
 
 def all_nodes_that_receive(service, service_configuration=None, run_only=False, deploy_to_only=False):
-    """ If run_only, returns only the services that are in the runs_on list.
+    """If run_only, returns only the services that are in the runs_on list.
     If deploy_to_only, returns only the services in the deployed_to list.
     If neither, both are returned, duplicates stripped.
     Results are always sorted.
