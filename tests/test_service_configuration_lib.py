@@ -112,6 +112,26 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.services_that_run_on(fake_hostname, fake_service_configuration)
         T.assert_equal(expected, actual)
 
+    def test_list_extra_deployed_here(self):
+        expected = ['fake_service1', 'fake_service2']
+        actual = service_configuration_lib.list_extra_deployed_here('tests/fake_extra')
+        T.assert_sorted_equal(expected, actual)
+
+    def test_list_extra_deployed_here_no_directory(self):
+        expected = []
+        actual = service_configuration_lib.list_extra_deployed_here('missing/directory')
+        T.assert_equal(expected, actual)
+
+    def test_list_extra_run_here(self):
+        expected = ['fake_service1']
+        actual = service_configuration_lib.list_extra_run_here('tests/fake_extra')
+        T.assert_sorted_equal(expected, actual)
+
+    def test_list_extra_run_here_no_directory(self):
+        expected = []
+        actual = service_configuration_lib.list_extra_run_here('missing/directory')
+        T.assert_sorted_equal(expected, actual)
+
     def test_services_deployed_to_should_return_deployed_and_running_services(self):
         expected = ['fake_service1', 'fake_service2', 'fake_service3', 'fake_service4']
         fake_hostname = 'fake_hostname3'
