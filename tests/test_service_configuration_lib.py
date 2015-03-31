@@ -112,23 +112,35 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.services_that_run_on(fake_hostname, fake_service_configuration)
         T.assert_equal(expected, actual)
 
-    def test_list_extra_deployed_here(self):
+    @mock.patch('service_configuration_lib.os.path.isdir', autospec=True)
+    @mock.patch('service_configuration_lib.os.listdir', autospec=True)
+    def test_list_extra_deployed_here(self, mock_listdir, mock_isdir):
         expected = ['fake_service1', 'fake_service2']
+        mock_listdir.return_value = expected
+        mock_isdir.return_value = True
         actual = service_configuration_lib.list_extra_deployed_here('tests/fake_extra')
         T.assert_sorted_equal(expected, actual)
 
-    def test_list_extra_deployed_here_no_directory(self):
+    @mock.patch('service_configuration_lib.os.path.isdir', autospec=True)
+    def test_list_extra_deployed_here_no_directory(self, mock_isdir):
         expected = []
+        mock_isdir.return_value = False
         actual = service_configuration_lib.list_extra_deployed_here('missing/directory')
         T.assert_equal(expected, actual)
 
-    def test_list_extra_run_here(self):
+    @mock.patch('service_configuration_lib.os.path.isdir', autospec=True)
+    @mock.patch('service_configuration_lib.os.listdir', autospec=True)
+    def test_list_extra_run_here(self, mock_listdir, mock_isdir):
         expected = ['fake_service1']
+        mock_isdir.return_value = True
+        mock_listdir.return_value = expected
         actual = service_configuration_lib.list_extra_run_here('tests/fake_extra')
         T.assert_sorted_equal(expected, actual)
 
-    def test_list_extra_run_here_no_directory(self):
+    @mock.patch('service_configuration_lib.os.path.isdir', autospec=True)
+    def test_list_extra_run_here_no_directory(self, mock_isdir):
         expected = []
+        mock_isdir.return_value = False
         actual = service_configuration_lib.list_extra_run_here('missing/directory')
         T.assert_sorted_equal(expected, actual)
 
