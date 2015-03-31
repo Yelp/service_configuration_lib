@@ -4,5 +4,5 @@ import sys
 sys.path.append('/nail/sys/srv-deploy/lib/')
 import service_configuration_lib
 
-for service in service_configuration_lib.services_that_run_here():
+for service in sorted(service_configuration_lib.services_that_run_here()):
     print service
