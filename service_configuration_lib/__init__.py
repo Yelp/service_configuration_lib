@@ -131,7 +131,7 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
 def list_extra_run_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
     # This list includes additional services that we want to run on
     # the instance.
-    rootdir = os.path.join(os.path.abspath(extra_soa_dir), 'runs_here')
+    rootdir = os.path.join(os.path.abspath(extra_soa_dir), 'run_here')
     # We expect to have a file for each service, but some instances may not
     # have any extra service and also missing the base directory.
     # In that case we return an empty list.
