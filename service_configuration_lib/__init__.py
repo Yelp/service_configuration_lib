@@ -128,10 +128,10 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
         all_services.update( { service_name: service_info } )
     return all_services
 
-def list_extra_run_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
+def _list_extra_soa(action, extra_soa_dir):
     # This list includes additional services that we want to run on
     # the instance.
-    rootdir = os.path.join(os.path.abspath(extra_soa_dir), 'run_here')
+    rootdir = os.path.join(os.path.abspath(extra_soa_dir), action)
     # We expect to have a file for each service, but some instances may not
     # have any extra service and also missing the base directory.
     # In that case we return an empty list.
@@ -139,6 +139,9 @@ def list_extra_run_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
         return os.listdir(rootdir)
     else:
         return []
+
+def list_extra_run_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
+    return _list_extra_soa('run_here', extra_soa_dir)
 
 def services_that_run_here():
     hostname = socket.getfqdn()
@@ -156,16 +159,7 @@ def services_that_run_on(hostname, service_configuration=None):
     return running_services
 
 def list_extra_deployed_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
-    # This list includes additional services that we want to deploy on
-    # the instance.
-    rootdir = os.path.join(os.path.abspath(extra_soa_dir), 'deployed_here')
-    # We expect to have a file for each service, but some instances may not
-    # have any extra service and also missing the base directory.
-    # In that case we return an empty list.
-    if os.path.isdir(rootdir):
-        return os.listdir(rootdir)
-    else:
-        return []
+    return _list_extra_soa('deployed_here', extra_soa_dir)
 
 def services_deployed_here():
     hostname = socket.getfqdn()
