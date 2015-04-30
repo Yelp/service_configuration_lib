@@ -230,12 +230,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
     @mock.patch('service_configuration_lib.read_deploy', return_value='no_deploy')
     @mock.patch('service_configuration_lib.read_data', return_value='no_data')
+    @mock.patch('service_configuration_lib.read_smartstack', return_value='no_smartstack')
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
     def test_read_service_configuration_from_dir(
         self,
         gen_patch,
         info_patch,
+        smartstack_patch,
         data_patch,
         deploy_patch,
         monitoring_patch,
@@ -253,6 +255,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             mock.call('never','die','monitoring.yaml'),
             mock.call('never','die','deploy.yaml'),
             mock.call('never','die','data.yaml'),
+            mock.call('never','die','smartstack.yaml'),
             mock.call('never','die','service.yaml'),
         ])
         port_patch.assert_called_once_with('forever_joined')
@@ -261,13 +264,16 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         monitoring_patch.assert_called_once_with('forever_joined')
         deploy_patch.assert_called_once_with('forever_joined')
         data_patch.assert_called_once_with('forever_joined')
+        smartstack_patch.assert_called_once_with('forever_joined')
         info_patch.assert_called_once_with('forever_joined')
         gen_patch.assert_called_once_with('no_info', port='1111',
                                           vip='ULTRA_VIP',
                                           lb_extras='no_extras',
                                           monitoring='no_monitoring',
                                           deploy='no_deploy',
-                                          data='no_data')
+                                          data='no_data',
+                                          smartstack='no_smartstack',
+        )
         T.assert_equal(expected, actual)
 
     @mock.patch('os.path.join', return_value='together_forever')

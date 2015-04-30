@@ -99,6 +99,7 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
     deploy_file = os.path.join(rootdir, service_dirname, "deploy.yaml")
     data_file = os.path.join(rootdir, service_dirname, "data.yaml")
+    smartstack_file = os.path.join(rootdir, service_dirname, "smartstack.yaml")
     service_file = os.path.join(rootdir, service_dirname, "service.yaml")
 
     port = read_port(port_file)
@@ -107,14 +108,19 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     monitoring = read_monitoring(monitoring_file)
     deploy = read_deploy(deploy_file)
     data = read_data(data_file)
+    smartstack = read_smartstack(smartstack_file)
     service_information = read_service_information(service_file)
 
-    return generate_service_info(service_information,
-                                 port=port, vip=vip,
-                                 lb_extras=lb_extras,
-                                 monitoring=monitoring,
-                                 deploy=deploy,
-                                 data=data)
+    return generate_service_info(
+        service_information,
+        port=port,
+        vip=vip,
+        lb_extras=lb_extras,
+        monitoring=monitoring,
+        deploy=deploy,
+        data=data,
+        smartstack=smartstack,
+    )
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
     return read_service_configuration_from_dir(os.path.abspath(soa_dir), service_name)
