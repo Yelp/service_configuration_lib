@@ -98,6 +98,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         )
         T.assert_equal(expected, actual)
 
+    def test_read_smartstack_should_return_empty_when_file_doesnt_exist(self):
+        expected = {}
+        fake_smartstack_file = 'fake_smartstack_file'
+        # TODO: Mock open?
+        actual = service_configuration_lib.read_smartstack(
+            fake_smartstack_file
+        )
+        T.assert_equal(expected, actual)
+
     def test_services_that_run_on_should_properly_read_configuration(self):
         expected = [ 'fake_service1', 'fake_service2' ]
         fake_hostname = 'fake_hostname2'

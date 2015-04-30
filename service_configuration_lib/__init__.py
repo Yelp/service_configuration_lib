@@ -57,11 +57,14 @@ def read_monitoring(monitoring_file):
 def read_deploy(deploy_file):
     return _read_yaml_file(deploy_file)
 
-def read_service_information(service_file):
-    return _read_yaml_file(service_file)
-
 def read_data(data_file):
     return _read_yaml_file(data_file)
+
+def read_smartstack(smartstack_file):
+    return _read_yaml_file(smartstack_file)
+
+def read_service_information(service_file):
+    return _read_yaml_file(service_file)
 
 def _read_yaml_file(file_name):
     if _use_yaml_cache and file_name in _yaml_cache:
