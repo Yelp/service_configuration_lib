@@ -96,10 +96,10 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     port_file = os.path.join(rootdir, service_dirname, "port")
     vip_file = os.path.join(rootdir, service_dirname, "vip")
     lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
-    service_file = os.path.join(rootdir, service_dirname, "service.yaml")
     monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
     deploy_file = os.path.join(rootdir, service_dirname, "deploy.yaml")
     data_file = os.path.join(rootdir, service_dirname, "data.yaml")
+    service_file = os.path.join(rootdir, service_dirname, "service.yaml")
 
     port = read_port(port_file)
     vip = read_vip(vip_file)
