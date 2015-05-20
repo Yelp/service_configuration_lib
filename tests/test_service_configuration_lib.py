@@ -341,6 +341,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
 
 
     def test_bad_port_get_service_from_port(self):
+        "Test for bad inputs"
         service_name = service_configuration_lib.get_service_from_port(None)
         assert service_name is None
         
@@ -348,6 +349,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         assert service_name is None
 
     def test_valid_port_get_service_from_port(self):
+        "Test that if there is a service for that port it returns it"
         all_services = { 
                 "Other Service": {
                     'port': 2352
@@ -367,6 +369,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         assert found_service_name == "Test Service"
 
     def test_no_service_for_port_get_service_from_port(self):
+        "Test if there is no service with that port it returns None"
         # Service should not have port since it is above valid port range
         service_name = service_configuration_lib.get_service_from_port(66666)
         assert service_name is None
