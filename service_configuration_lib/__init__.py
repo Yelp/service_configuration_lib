@@ -137,6 +137,12 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
         all_services.update( { service_name: service_info } )
     return all_services
 
+def get_service_from_port(port):
+    all_services = read_services_configuration()
+    for name, info in all_services.items():
+        if port == info['port']:
+            return name
+
 def _list_extra_soa(action, extra_soa_dir):
     # This list includes additional services that we want to run on
     # the instance.
