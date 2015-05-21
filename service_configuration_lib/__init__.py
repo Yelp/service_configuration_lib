@@ -160,11 +160,10 @@ def get_service_from_port(port, all_services=None):
         if srv_port is not None and port == int(srv_port):
             return name
 
-        if info.has_key('smartstack'):
-            for elem in info.get('smartstack', {}).values():
-                elem_port = elem.get('proxy_port')
-                if elem_port is not None and port == int(elem_port):
-                    return name
+        for elem in info.get('smartstack', {}).values():
+            elem_port = elem.get('proxy_port')
+            if elem_port is not None and port == int(elem_port):
+                return name
 
 def _list_extra_soa(action, extra_soa_dir):
     # This list includes additional services that we want to run on
