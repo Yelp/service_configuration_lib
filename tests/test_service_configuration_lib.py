@@ -360,6 +360,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                 "Test Service": {
                     'port': 100
                     },
+                "Smart Service": {
+                    'port': 345,
+                    'smartstack': {
+                        'main': {
+                            'proxy_port': 3444
+                            }
+                        }
+                    },
                 "Service 36": {
                     'port': 636
                     }
@@ -367,6 +375,9 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             
         found_service_name = service_configuration_lib.get_service_from_port(100, all_services)
         assert found_service_name == "Test Service"
+
+        found_service_name = service_configuration_lib.get_service_from_port(3444, all_services)
+        assert found_service_name == "Smart Service"
 
     def test_no_service_for_port_get_service_from_port(self):
         "Test if there is no service with that port it returns None"
