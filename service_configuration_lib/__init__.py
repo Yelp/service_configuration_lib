@@ -138,13 +138,18 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     return all_services
 
 def get_service_from_port(port, all_services=None):
-    """
-    Gets the name of the service from the port
-    all_services allows you to feed in the services to look through
+    """Gets the name of the service from the port
+    all_services allows you to feed in the services to look through, pass
+    in a dict of service names to service information eg.
+    {
+        'service_name': {
+            'port': port_number
+        }
+    }
     
     Returns the name of the service
     """
-    if port is None and not isinstance(port, int):
+    if port is None or not isinstance(port, int):
         return None
 
     if all_services is None:
