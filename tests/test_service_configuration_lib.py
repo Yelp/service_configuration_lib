@@ -339,6 +339,53 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env2', service_configuration=self.fake_service_configuration)
         T.assert_equal(expected, actual)
 
+
+    def test_bad_port_get_service_from_port(self):
+        "Test for bad inputs"
+        service_name = service_configuration_lib.get_service_from_port(None)
+        assert service_name is None
+        
+        service_name = service_configuration_lib.get_service_from_port({})
+        assert service_name is None
+
+    def test_valid_port_get_service_from_port(self):
+        "Test that if there is a service for that port it returns it"
+        all_services = { 
+                "Other Service": {
+                    'port': 2352
+                    },
+                "Service 23": {
+                    'port': 656
+                    },
+                "Test Service": {
+                    'port': 100
+                    },
+                "Smart Service": {
+                    'port': 345,
+                    'smartstack': {
+                        'main': {
+                            'proxy_port': 3444
+                            }
+                        }
+                    },
+                "Service 36": {
+                    'port': 636
+                    }
+                }
+            
+        found_service_name = service_configuration_lib.get_service_from_port(100, all_services)
+        assert found_service_name == "Test Service"
+
+        found_service_name = service_configuration_lib.get_service_from_port(3444, all_services)
+        assert found_service_name == "Smart Service"
+
+    def test_no_service_for_port_get_service_from_port(self):
+        "Test if there is no service with that port it returns None"
+        # Service should not have port since it is above valid port range
+        service_name = service_configuration_lib.get_service_from_port(66666)
+        assert service_name is None
+
+
 if __name__ == '__main__':
     T.run()
 
