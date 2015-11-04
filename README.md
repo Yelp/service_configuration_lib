@@ -10,3 +10,15 @@ opening an issue or better yet a pull request.
 You can learn more about Yelp's SOA architecture by watching
 [this](https://t.co/5khQ5KHDWL) video.
 
+## Building
+
+You can build service_configuration_lib as a deb by using the provided `package_python` script:
+
+Example usage:
+
+```
+$ ./package-python myversion .
+
+Created deb package {:path=>"/home/robj/service_configuration_lib/python-service-configuration-lib_0.10.0-myversion_all.deb"}
+
+```
