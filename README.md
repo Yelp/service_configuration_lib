@@ -14,11 +14,11 @@ You can learn more about Yelp's SOA architecture by watching
 
 From source:
 
-  python setup.py install
+    python setup.py install
 
 From pypi:
 
-  pip install service-configuration-lib
+    pip install service-configuration-lib
 
 
 ## License
