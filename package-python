@@ -49,7 +49,7 @@ FULL_NAME="James McGuinness"
 EMAIL="jrm@yelp.com"
 MAINTAINER="$FULL_NAME <$EMAIL>"
 
-PYPI_SERVER=http://pypi.yelpcorp.com/simple
+PYPI_SERVER=https://pypi.yelpcorp.com/simple
 
 FPM_ARGS=(
  -s python -t deb -m "${MAINTAINER}"
