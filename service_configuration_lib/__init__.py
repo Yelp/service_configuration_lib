@@ -88,7 +88,7 @@ def _read_yaml_file(file_name):
             data = load_yaml(fd.read())
             data = data or {}
             if _use_yaml_cache:
-                _yaml_cache[file_name] = data
+                _yaml_cache[file_name] = copy.deepcopy(data)
     except IOError:
         pass
     except:
