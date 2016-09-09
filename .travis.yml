@@ -1,0 +1,11 @@
+---
+language: python
+install: pip install tox
+deploy:
+- provider: pypi
+  user: yelplabs
+  password:
+    secure: CmPeU+GjhJRF/HUpQHhxij4KtzOYprNHAEVlTRxvth9Gm8qlV5wokZDGPk+y4pStC4KJjSOQoFP5KBzAwRP0nXbDkhM7TmEMWzJbwVkfPODwMHWnPAX0YC6Z/sjGYrsIzeTTc6kApVhsuFNvZfzSRAgblIUk49mnaC4S7XI2cYZmRH1HpbPK9H5jD4xfmoP8OvPkN30MEfw5KU+CxhdCPKUOw24z0Uaris5TgMd9U7g68H8/IVLNL598S+lLOhKlmESoT+xdHV+n/yWGGPCYLQ9vBpQPbXQDVV4UnEFuPWV8QlRtDZYZEt+J2I7sxBUDDla2vIpwa9kodpP1irFJqrM5cXhZP3FRppgscVLx7LPrtMJQ6SdzJCcjRWodFRtgFltvwqkt5tJnzbDepil5DCkzjSY7A5IEl4sjRGxKjqMO/QQra4/LHjzA9wKhFzNTKOo0+P+yHy3MDh32VjfCreFowERij8w8xTHZOgN8ba2XLVnHkP1mSyN2lpMixiljx6dk1lNmwdlvLXQyPhGS0lHlos+LqM6tRa7P4GAxpCDaI9OE5Hcaf6SEMH7BoO0ZpzQctBZv2T/b05Npw7L2sf9NWkJw8HOY8u6ZcDj2JDlWYgGwPsdylNCjTxzQsTT/tDbleh8FMJIKC69wCnS70y4D43zMrQBnA16uUZX1JdY=
+  on:
+    tags: true
+    repo: Yelp/service_configuration_lib
