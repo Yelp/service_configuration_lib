@@ -1,6 +1,7 @@
 ---
 language: python
 install: pip install tox
+script: tox
 deploy:
 - provider: pypi
   user: yelplabs
