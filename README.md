@@ -1,5 +1,7 @@
 # Service Configuration Lib
 
+[![Build Status](https://travis-ci.org/Yelp/service_configuration_lib.svg?branch=master)](https://travis-ci.org/Yelp/service_configuration_lib)
+
 service_configuration_lib is a Python interface to Yelp's SOA architecture.
 
 WARNING: service_configuration_lib has been running in production at Yelp for more than a year, and
