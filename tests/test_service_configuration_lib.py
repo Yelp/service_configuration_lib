@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
+import mock
 import service_configuration_lib
 import testify as T
-import mock
 
 class ServiceConfigurationLibTestCase(T.TestCase):
     fake_service_configuration = {
@@ -301,7 +302,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         info_patch.assert_called_once_with('together_forever')
         T.assert_equal(expected, actual)
 
-    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'data': 'mock'})
     def test_read_yaml_file_single(self, load_patch, open_patch):
         expected = {'data': 'mock'}
@@ -311,7 +312,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         T.assert_equal(expected, actual)
 
-    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'mmmm': 'tests'})
     def test_read_yaml_file_with_cache(self, load_patch, open_patch):
         expected = {'mmmm': 'tests'}
@@ -328,7 +329,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         # the returned object is a copy.
         T.assert_is_not(actual, actual_two)
 
-    @mock.patch('service_configuration_lib.open', create=True, return_value=mock.MagicMock(spec=file))
+    @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'water': 'slide'})
     def test_read_yaml_file_no_cache(self, load_patch, open_patch):
         expected = {'water': 'slide'}
@@ -357,7 +358,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         "Test for bad inputs"
         service_name = service_configuration_lib.get_service_from_port(None)
         assert service_name is None
-        
+
         service_name = service_configuration_lib.get_service_from_port({})
         assert service_name is None
 
@@ -385,7 +386,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                     'port': 636
                     }
                 }
-            
+
         found_service_name = service_configuration_lib.get_service_from_port(100, all_services)
         assert found_service_name == "Test Service"
 

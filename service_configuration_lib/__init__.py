@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
 
 import copy
 import logging
 import os
 import socket
 import sys
+import io
 
 import yaml
 
@@ -39,7 +41,7 @@ def disable_yaml_cache():
 def read_port(port_file):
     # Try to read port information
     try:
-        with open(port_file, 'r') as port_file_fd:
+        with io.open(port_file, 'r') as port_file_fd:
             port = int(port_file_fd.read().strip())
     except IOError:
         port = None
@@ -49,7 +51,7 @@ def read_port(port_file):
 
 def read_vip(vip_file):
     try:
-        with open(vip_file, 'r') as vip_file_fd:
+        with io.open(vip_file, 'r') as vip_file_fd:
             vip = vip_file_fd.read().strip()
     except IOError:
         vip = None
@@ -84,7 +86,7 @@ def _read_yaml_file(file_name):
         return copy.deepcopy(_yaml_cache[file_name])
     data = {}
     try:
-        with open(file_name, 'r') as fd:
+        with io.open(file_name, 'r') as fd:
             data = load_yaml(fd.read())
             data = data or {}
             if _use_yaml_cache:
@@ -92,7 +94,7 @@ def _read_yaml_file(file_name):
     except IOError:
         pass
     except:
-        print >>sys.stderr, "Failed to parse YAML from %s" % file_name
+        print("Failed to parse YAML from %s" % file_name, file=sys.stderr)
         raise
     return data
 
