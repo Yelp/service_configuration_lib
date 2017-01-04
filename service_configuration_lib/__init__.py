@@ -59,9 +59,9 @@ def read_vip(vip_file):
 
 def load_yaml(fd):
     if yaml.__with_libyaml__:
-        return yaml.load(fd, Loader=yaml.CLoader)
+        return yaml.safe_load(fd, Loader=yaml.CLoader)
     else:
-        return yaml.load(fd)
+        return yaml.safe_load(fd)
 
 def read_lb_extras(lb_extras_file):
     return _read_yaml_file(lb_extras_file)
