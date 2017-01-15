@@ -40,7 +40,10 @@ SERVICES_NOTHING="fake_total_bunk"
 mkdir -p /nail/etc
 [ -L /nail/etc/services ] || ln -s /work/tests/fake_services /nail/etc/services
 
-if dpkg -i /work/dist/*.deb; then
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gdebi-core
+
+if gdebi -n /work/dist/*.deb; then
   echo "Package installed correctly..."
 else
   echo "Dpkg install failed!"

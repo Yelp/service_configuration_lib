@@ -24,11 +24,6 @@
 ## Package a twisted and add some extra fpm options
 ## ./package-python yelp1 --replace python-twisted-core python-twisted
 
-# The shebangs inside the source python scripts should contain '/usr/bin/env python' which will then
-# get resolved by setup.py. We want those to resolve to /usr/bin/python and not /usr/local/bin/python or
-# any other python we might have kicking around in our path
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-
 # By default the files will be owned by you. This fixes that
 USER=root
 GROUP=root
