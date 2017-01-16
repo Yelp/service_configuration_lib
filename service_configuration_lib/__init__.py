@@ -23,6 +23,10 @@ import io
 
 import yaml
 
+try:
+    from yaml.cyaml import CSafeLoader as Loader
+except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
+    Loader = yaml.SafeLoader
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
 DEFAULT_EXTRA_SOA_DIR = "/nail/etc/extra_soa/"
@@ -58,10 +62,7 @@ def read_vip(vip_file):
     return vip
 
 def load_yaml(fd):
-    if yaml.__with_libyaml__:
-        return yaml.safe_load(fd, Loader=yaml.CLoader)
-    else:
-        return yaml.safe_load(fd)
+    return yaml.load(fd, Loader=Loader)
 
 def read_lb_extras(lb_extras_file):
     return _read_yaml_file(lb_extras_file)
