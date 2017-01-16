@@ -308,7 +308,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         expected = {'data': 'mock'}
         filename = 'fake_fname_uno'
         actual = service_configuration_lib._read_yaml_file(filename)
-        open_patch.assert_called_once_with(filename, 'r')
+        open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         T.assert_equal(expected, actual)
 
@@ -320,7 +320,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         service_configuration_lib.enable_yaml_cache()
         actual = service_configuration_lib._read_yaml_file(filename)
         actual_two = service_configuration_lib._read_yaml_file(filename)
-        open_patch.assert_called_once_with(filename, 'r')
+        open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         T.assert_equal(expected, actual)
         T.assert_equal(expected, actual_two)
@@ -337,7 +337,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         service_configuration_lib.disable_yaml_cache()
         actual = service_configuration_lib._read_yaml_file(filename)
         actual_two = service_configuration_lib._read_yaml_file(filename)
-        open_patch.assert_any_call(filename, 'r')
+        open_patch.assert_any_call(filename, 'r', encoding='UTF-8')
         assert open_patch.call_count == 2
         load_patch.assert_any_call(open_patch.return_value.__enter__().read())
         assert load_patch.call_count == 2
