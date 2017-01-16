@@ -45,7 +45,7 @@ def disable_yaml_cache():
 def read_port(port_file):
     # Try to read port information
     try:
-        with io.open(port_file, 'r') as port_file_fd:
+        with io.open(port_file, 'r', encoding='UTF-8') as port_file_fd:
             port = int(port_file_fd.read().strip())
     except IOError:
         port = None
@@ -55,7 +55,7 @@ def read_port(port_file):
 
 def read_vip(vip_file):
     try:
-        with io.open(vip_file, 'r') as vip_file_fd:
+        with io.open(vip_file, 'r', encoding='UTF-8') as vip_file_fd:
             vip = vip_file_fd.read().strip()
     except IOError:
         vip = None
@@ -87,7 +87,7 @@ def _read_yaml_file(file_name):
         return copy.deepcopy(_yaml_cache[file_name])
     data = {}
     try:
-        with io.open(file_name, 'r') as fd:
+        with io.open(file_name, 'r', encoding='UTF-8') as fd:
             data = load_yaml(fd.read())
             data = data or {}
             if _use_yaml_cache:
