@@ -121,6 +121,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         )
         T.assert_equal(expected, actual)
 
+    def test_read_dependencies_return_empty_when_file_doesnt_exist(self):
+        expected = {}
+        fake_dependencies_file = 'fake_dependencies_file'
+        # TODO: Mock open?
+        actual = service_configuration_lib.read_smartstack(
+            fake_dependencies_file
+        )
+        T.assert_equal(expected, actual)
+
     def test_services_that_run_on_should_properly_read_configuration(self):
         expected = [ 'fake_service1', 'fake_service2' ]
         fake_hostname = 'fake_hostname2'
@@ -246,10 +255,12 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_data', return_value='no_data')
     @mock.patch('service_configuration_lib.read_smartstack', return_value='no_smartstack')
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
+    @mock.patch('service_configuration_lib.read_dependencies', return_value='no_dependencies')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
     def test_read_service_configuration_from_dir(
         self,
         gen_patch,
+        deps_patch,
         info_patch,
         smartstack_patch,
         data_patch,
@@ -271,6 +282,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             mock.call('never','die','data.yaml'),
             mock.call('never','die','smartstack.yaml'),
             mock.call('never','die','service.yaml'),
+            mock.call('never','die','dependencies.yaml'),
         ])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
@@ -280,12 +292,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         data_patch.assert_called_once_with('forever_joined')
         smartstack_patch.assert_called_once_with('forever_joined')
         info_patch.assert_called_once_with('forever_joined')
+        deps_patch.assert_called_once_with('forever_joined')
         gen_patch.assert_called_once_with('no_info', port='1111',
                                           vip='ULTRA_VIP',
                                           lb_extras='no_extras',
                                           monitoring='no_monitoring',
                                           deploy='no_deploy',
                                           data='no_data',
+                                          dependencies='no_dependencies',
                                           smartstack='no_smartstack',
         )
         T.assert_equal(expected, actual)
@@ -364,7 +378,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
 
     def test_valid_port_get_service_from_port(self):
         "Test that if there is a service for that port it returns it"
-        all_services = { 
+        all_services = {
                 "Other Service": {
                     'port': 2352
                     },

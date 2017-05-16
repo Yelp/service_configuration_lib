@@ -82,6 +82,9 @@ def read_smartstack(smartstack_file):
 def read_service_information(service_file):
     return _read_yaml_file(service_file)
 
+def read_dependencies(dependencies_file):
+    return _read_yaml_file(dependencies_file)
+
 def _read_yaml_file(file_name):
     if _use_yaml_cache and file_name in _yaml_cache:
         return copy.deepcopy(_yaml_cache[file_name])
@@ -117,6 +120,7 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     data_file = os.path.join(rootdir, service_dirname, "data.yaml")
     smartstack_file = os.path.join(rootdir, service_dirname, "smartstack.yaml")
     service_file = os.path.join(rootdir, service_dirname, "service.yaml")
+    dependencies_file = os.path.join(rootdir, service_dirname, "dependencies.yaml")
 
     port = read_port(port_file)
     vip = read_vip(vip_file)
@@ -126,6 +130,7 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     data = read_data(data_file)
     smartstack = read_smartstack(smartstack_file)
     service_information = read_service_information(service_file)
+    dependencies = read_dependencies(dependencies_file)
 
     return generate_service_info(
         service_information,
@@ -136,6 +141,7 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
         deploy=deploy,
         data=data,
         smartstack=smartstack,
+        dependencies=dependencies,
     )
 
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
