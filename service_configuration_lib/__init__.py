@@ -122,13 +122,13 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     service_file = os.path.join(rootdir, service_dirname, "service.yaml")
     dependencies_file = os.path.join(rootdir, service_dirname, "dependencies.yaml")
 
-    port = read_port(port_file)
+    smartstack = read_smartstack(smartstack_file)
+    port = smartstack.get('port', read_port(port_file))
     vip = read_vip(vip_file)
     lb_extras = read_lb_extras(lb_extras_file)
     monitoring = read_monitoring(monitoring_file)
     deploy = read_deploy(deploy_file)
     data = read_data(data_file)
-    smartstack = read_smartstack(smartstack_file)
     service_information = read_service_information(service_file)
     dependencies = read_dependencies(dependencies_file)
 

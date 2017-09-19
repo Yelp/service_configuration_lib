@@ -253,7 +253,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
     @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
     @mock.patch('service_configuration_lib.read_deploy', return_value='no_deploy')
     @mock.patch('service_configuration_lib.read_data', return_value='no_data')
-    @mock.patch('service_configuration_lib.read_smartstack', return_value='no_smartstack')
+    @mock.patch('service_configuration_lib.read_smartstack', return_value={})
     @mock.patch('service_configuration_lib.read_service_information', return_value='no_info')
     @mock.patch('service_configuration_lib.read_dependencies', return_value='no_dependencies')
     @mock.patch('service_configuration_lib.generate_service_info', return_value={'oof': 'ouch'})
@@ -300,7 +300,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                           deploy='no_deploy',
                                           data='no_data',
                                           dependencies='no_dependencies',
-                                          smartstack='no_smartstack',
+                                          smartstack={},
         )
         T.assert_equal(expected, actual)
 
