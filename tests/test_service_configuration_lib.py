@@ -237,6 +237,15 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             [mock.call('nodir', '1'), mock.call('nodir', '2'), mock.call('nodir', '3')])
         T.assert_equal(expected, actual)
 
+    @mock.patch('os.path.abspath', return_value='nodir')
+    @mock.patch('os.listdir', return_value=["1","2","3"])
+    def test_list_services(self, listdir_patch, abs_patch):
+        expected = ['1', '2', '3']
+        actual = service_configuration_lib.list_services(soa_dir='testdir')
+        abs_patch.assert_called_once_with('testdir')
+        listdir_patch.assert_called_once_with('nodir')
+        T.assert_equal(expected, actual)
+
     @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='bye')
     @mock.patch('os.path.abspath', return_value='cafe')
     def test_read_service_configuration(self, abs_patch, read_patch):

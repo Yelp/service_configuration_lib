@@ -159,6 +159,10 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
         all_services.update( { service_name: service_info } )
     return all_services
 
+def list_services(soa_dir=DEFAULT_SOA_DIR):
+    rootdir = os.path.abspath(soa_dir)
+    return os.listdir(rootdir)
+
 def get_service_from_port(port, all_services=None):
     """Gets the name of the service from the port
     all_services allows you to feed in the services to look through, pass
