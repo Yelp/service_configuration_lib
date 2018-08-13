@@ -29,7 +29,6 @@ except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
     Loader = yaml.SafeLoader
 
 DEFAULT_SOA_DIR = "/nail/etc/services"
-DEFAULT_EXTRA_SOA_DIR = "/nail/etc/extra_soa/"
 log = logging.getLogger(__name__)
 _yaml_cache = {}
 _use_yaml_cache = True
@@ -191,24 +190,9 @@ def get_service_from_port(port, all_services=None):
             if elem_port is not None and port == int(elem_port):
                 return name
 
-def _list_extra_soa(action, extra_soa_dir):
-    # This list includes additional services that we want to run on
-    # the instance.
-    rootdir = os.path.join(os.path.abspath(extra_soa_dir), action)
-    # We expect to have a file for each service, but some instances may not
-    # have any extra service and also missing the base directory.
-    # In that case we return an empty list.
-    if os.path.isdir(rootdir):
-        return os.listdir(rootdir)
-    else:
-        return []
-
-def list_extra_run_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
-    return _list_extra_soa('run_here', extra_soa_dir)
-
 def services_that_run_here():
     hostname = socket.getfqdn()
-    return set(list_extra_run_here() + services_that_run_on(hostname))
+    return set(services_that_run_on(hostname))
 
 def services_that_run_on(hostname, service_configuration=None):
     running_services = []
@@ -221,12 +205,9 @@ def services_that_run_on(hostname, service_configuration=None):
             running_services.append(service)
     return running_services
 
-def list_extra_deployed_here(extra_soa_dir=DEFAULT_EXTRA_SOA_DIR):
-    return _list_extra_soa('deployed_here', extra_soa_dir)
-
 def services_deployed_here():
     hostname = socket.getfqdn()
-    return set(list_extra_deployed_here() + services_deployed_on(hostname))
+    return set(services_deployed_on(hostname))
 
 def services_deployed_on(hostname, service_configuration=None):
     if service_configuration is None:
