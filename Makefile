@@ -33,8 +33,7 @@ itest_%: package_%
 
 package_%:
 	mkdir -p dist
-	docker build -t "scl_$*_container" dockerfiles/$*
-	docker run -h fake.docker.hostname -v $(CURDIR):/work:rw scl_$*_container /bin/bash -c "./package-python yelp1 . && mv *.deb dist/"
+	docker run -h fake.docker.hostname -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_pkgbuild /bin/bash -c "cd /work && ./package-python yelp1 . && mv *.deb dist/"
 	docker run -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp chown -R $(UID):$(GID) /work
 
 clean:
