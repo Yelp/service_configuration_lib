@@ -95,6 +95,8 @@ def _read_yaml_file(file_name):
             if _use_yaml_cache:
                 _yaml_cache[file_name] = copy.deepcopy(data)
     except IOError:
+        if _use_yaml_cache:
+            _yaml_cache[file_name] = {}
         pass
     except Exception:
         print("Failed to parse YAML from %s" % file_name, file=sys.stderr)
