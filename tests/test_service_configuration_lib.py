@@ -20,7 +20,6 @@ import service_configuration_lib
 class TestServiceConfigurationLib(object):
     fake_service_configuration = {
          'fake_service1': {'deployed_to': None,
-                           'lb_extras': {},
                            'monitoring': {
                                'fake_monitoring_key': 'fake_monitoring_value'
                             },
@@ -33,7 +32,6 @@ class TestServiceConfigurationLib(object):
          'fake_service2': {'deployed_to': [ 'fake_deployed_hostname1',
                                             'fake_deployed_hostname2',
                                             'fake_hostname4'],
-                     'lb_extras': {'exclude_forwardfor': True},
                      'monitoring': {},
                      'port': 22222,
                      'runs_on': ['fake_hostname2',
@@ -41,7 +39,6 @@ class TestServiceConfigurationLib(object):
                                  'fake_hostname4'],
                      'vip': 'fakevip2'},
          'fake_service3': {'deployed_to': None,
-                          'lb_extras': {},
                           'monitoring': {},
                           'port': 33333,
                           'runs_on': ['fake_hostname3',
@@ -225,7 +222,6 @@ class TestServiceConfigurationLib(object):
     @mock.patch('os.path.join', return_value='forever_joined')
     @mock.patch('service_configuration_lib.read_port', return_value='1111')
     @mock.patch('service_configuration_lib.read_vip', return_value='ULTRA_VIP')
-    @mock.patch('service_configuration_lib.read_lb_extras', return_value='no_extras')
     @mock.patch('service_configuration_lib.read_monitoring', return_value='no_monitoring')
     @mock.patch('service_configuration_lib.read_deploy', return_value='no_deploy')
     @mock.patch('service_configuration_lib.read_data', return_value='no_data')
@@ -242,7 +238,6 @@ class TestServiceConfigurationLib(object):
         data_patch,
         deploy_patch,
         monitoring_patch,
-        lb_patch,
         vip_patch,
         port_patch,
         join_patch,
@@ -252,7 +247,6 @@ class TestServiceConfigurationLib(object):
         join_patch.assert_has_calls([
             mock.call('never','die','port'),
             mock.call('never','die','vip'),
-            mock.call('never','die','lb.yaml'),
             mock.call('never','die','monitoring.yaml'),
             mock.call('never','die','deploy.yaml'),
             mock.call('never','die','data.yaml'),
@@ -262,7 +256,6 @@ class TestServiceConfigurationLib(object):
         ])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
-        lb_patch.assert_called_once_with('forever_joined')
         monitoring_patch.assert_called_once_with('forever_joined')
         deploy_patch.assert_called_once_with('forever_joined')
         data_patch.assert_called_once_with('forever_joined')
@@ -271,7 +264,6 @@ class TestServiceConfigurationLib(object):
         deps_patch.assert_called_once_with('forever_joined')
         gen_patch.assert_called_once_with('no_info', port='1111',
                                           vip='ULTRA_VIP',
-                                          lb_extras='no_extras',
                                           monitoring='no_monitoring',
                                           deploy='no_deploy',
                                           data='no_data',

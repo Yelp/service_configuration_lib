@@ -63,9 +63,6 @@ def read_vip(vip_file):
 def load_yaml(fd):
     return yaml.load(fd, Loader=Loader)
 
-def read_lb_extras(lb_extras_file):
-    return _read_yaml_file(lb_extras_file)
-
 def read_monitoring(monitoring_file):
     return _read_yaml_file(monitoring_file)
 
@@ -115,7 +112,6 @@ def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA
 def read_service_configuration_from_dir(rootdir, service_dirname):
     port_file = os.path.join(rootdir, service_dirname, "port")
     vip_file = os.path.join(rootdir, service_dirname, "vip")
-    lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
     monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
     deploy_file = os.path.join(rootdir, service_dirname, "deploy.yaml")
     data_file = os.path.join(rootdir, service_dirname, "data.yaml")
@@ -126,7 +122,6 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     smartstack = read_smartstack(smartstack_file)
     port = smartstack.get('port', read_port(port_file))
     vip = read_vip(vip_file)
-    lb_extras = read_lb_extras(lb_extras_file)
     monitoring = read_monitoring(monitoring_file)
     deploy = read_deploy(deploy_file)
     data = read_data(data_file)
@@ -137,7 +132,6 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
         service_information,
         port=port,
         vip=vip,
-        lb_extras=lb_extras,
         monitoring=monitoring,
         deploy=deploy,
         data=data,
