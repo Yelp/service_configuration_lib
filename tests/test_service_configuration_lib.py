@@ -16,9 +16,8 @@
 import io
 import mock
 import service_configuration_lib
-import testify as T
 
-class ServiceConfigurationLibTestCase(T.TestCase):
+class TestServiceConfigurationLib(object):
     fake_service_configuration = {
          'fake_service1': {'deployed_to': None,
                            'lb_extras': {},
@@ -85,14 +84,14 @@ class ServiceConfigurationLibTestCase(T.TestCase):
             'fakekey2': 'fakevalue2',
             'port': fake_port,
         }
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_read_vip_should_return_none_when_file_doesnt_exist(self):
         expected = None
         fake_vip_file = 'fake_vip_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_vip(fake_vip_file)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_read_monitoring_should_return_empty_when_file_doesnt_exist(self):
         expected = {}
@@ -101,7 +100,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_monitoring(
             fake_monitoring_file
         )
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_read_deploy_should_return_empty_when_file_doesnt_exist(self):
         expected = {}
@@ -110,7 +109,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_deploy(
             fake_deploy_file
         )
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_read_smartstack_should_return_empty_when_file_doesnt_exist(self):
         expected = {}
@@ -119,7 +118,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_smartstack(
             fake_smartstack_file
         )
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_read_dependencies_return_empty_when_file_doesnt_exist(self):
         expected = {}
@@ -128,70 +127,70 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_smartstack(
             fake_dependencies_file
         )
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_services_that_run_on_should_properly_read_configuration(self):
         expected = [ 'fake_service1', 'fake_service2' ]
         fake_hostname = 'fake_hostname2'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_that_run_on(fake_hostname, fake_service_configuration)
-        T.assert_sorted_equal(expected, actual)
+        assert sorted(expected) == sorted(actual)
 
     def test_services_that_run_on_should_return_an_empty_array_when_the_hostname_isnt_anywhere(self):
         expected = []
         fake_hostname = 'non_existent_fake_hostname2'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_that_run_on(fake_hostname, fake_service_configuration)
-        T.assert_sorted_equal(expected, actual)
+        assert sorted(expected) == sorted(actual)
 
     def test_services_deployed_to_should_return_deployed_and_running_services(self):
         expected = ['fake_service1', 'fake_service2', 'fake_service3', 'fake_service4']
         fake_hostname = 'fake_hostname3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_deployed_on(fake_hostname, fake_service_configuration)
-        T.assert_equal(set(expected), set(actual))
+        assert set(expected) == set(actual)
 
     def test_services_needing_puppet_help_on_should_properly_read_configuration(self):
         expected = [ 'fake_service3', 'fake_service4' ]
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_needing_puppet_help_on(fake_hostname, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_all_nodes_that_run_should_properly_return_the_right_nodes(self):
         expected = [ 'fake_hostname3', 'fake_hostname4', 'fake_hostname5']
         fake_service = 'fake_service3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_run(fake_service, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_services_using_ssl_on_should_return_a_service(self):
         expected = [ 'fake_service3' ]
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_using_ssl_on(fake_hostname, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_all_nodes_that_receive_removes_duplicates(self):
         expected = [ 'fake_deployed_hostname1', 'fake_deployed_hostname2', 'fake_hostname2', 'fake_hostname3', 'fake_hostname4']
         fake_service = 'fake_service2'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_all_nodes_that_receive_with_no_deploys_to(self):
         expected = [ 'fake_hostname3', 'fake_hostname4', 'fake_hostname5']
         fake_service = 'fake_service3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     def test_all_nodes_that_receive_is_sorted(self):
         expected = [ 'fake_hostname1', 'fake_hostname2', 'fake_hostname3']
         fake_service = 'fake_service1'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('os.path.abspath', return_value='nodir')
     @mock.patch('os.listdir', return_value=["1","2","3"])
@@ -203,7 +202,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         listdir_patch.assert_called_once_with('nodir')
         read_patch.assert_has_calls(
             [mock.call('nodir', '1'), mock.call('nodir', '2'), mock.call('nodir', '3')])
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('os.path.abspath', return_value='nodir')
     @mock.patch('os.listdir', return_value=["1","2","3"])
@@ -212,7 +211,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.list_services(soa_dir='testdir')
         abs_patch.assert_called_once_with('testdir')
         listdir_patch.assert_called_once_with('nodir')
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='bye')
     @mock.patch('os.path.abspath', return_value='cafe')
@@ -221,7 +220,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib.read_service_configuration('boba', soa_dir='tea')
         abs_patch.assert_called_once_with('tea')
         read_patch.assert_called_once_with('cafe', 'boba')
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('os.path.join', return_value='forever_joined')
     @mock.patch('service_configuration_lib.read_port', return_value='1111')
@@ -279,7 +278,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
                                           dependencies='no_dependencies',
                                           smartstack={},
         )
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('os.path.join', return_value='together_forever')
     @mock.patch('os.path.abspath', return_value='real_soa_dir')
@@ -291,7 +290,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         abs_patch.assert_called_once_with('whatsadir')
         join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo.yaml')
         info_patch.assert_called_once_with('together_forever')
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'data': 'mock'})
@@ -301,7 +300,7 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual = service_configuration_lib._read_yaml_file(filename)
         open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'mmmm': 'tests'})
@@ -313,12 +312,12 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         actual_two = service_configuration_lib._read_yaml_file(filename)
         open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
-        T.assert_equal(expected, actual)
-        T.assert_equal(expected, actual_two)
+        assert expected == actual
+        assert expected == actual_two
         # When we cache, we can NOT return a pointer to the original object
         # because the caller might mutate it. We need to ensure that
         # the returned object is a copy.
-        T.assert_is_not(actual, actual_two)
+        assert expected is not actual_two
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'water': 'slide'})
@@ -332,17 +331,17 @@ class ServiceConfigurationLibTestCase(T.TestCase):
         assert open_patch.call_count == 2
         load_patch.assert_any_call(open_patch.return_value.__enter__().read())
         assert load_patch.call_count == 2
-        T.assert_equal(expected, actual)
-        T.assert_equal(expected, actual_two)
+        assert expected == actual
+        assert expected == actual_two
 
     def test_env_runs_on(self):
         expected = ['fake_hostname3']
         actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env1', service_configuration=self.fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
         expected = ['fake_hostname4', 'fake_hostname5']
         actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env2', service_configuration=self.fake_service_configuration)
-        T.assert_equal(expected, actual)
+        assert expected == actual
 
 
     def test_bad_port_get_service_from_port(self):
