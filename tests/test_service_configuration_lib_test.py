@@ -12,56 +12,71 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import io
 import mock
+
 import service_configuration_lib
 
-class TestServiceConfigurationLib(object):
+
+class TestServiceConfigurationLib:
     fake_service_configuration = {
-         'fake_service1': {'deployed_to': None,
-                           'lb_extras': {},
-                           'monitoring': {
-                               'fake_monitoring_key': 'fake_monitoring_value'
-                            },
-                           'deploy': {},
-                           'port': 11111,
-                           'runs_on': ['fake_hostname3',
-                                       'fake_hostname2',
-                                       'fake_hostname1'],
-                           'vip': 'fakevip1'},
-         'fake_service2': {'deployed_to': [ 'fake_deployed_hostname1',
-                                            'fake_deployed_hostname2',
-                                            'fake_hostname4'],
-                     'lb_extras': {'exclude_forwardfor': True},
-                     'monitoring': {},
-                     'port': 22222,
-                     'runs_on': ['fake_hostname2',
-                                 'fake_hostname3',
-                                 'fake_hostname4'],
-                     'vip': 'fakevip2'},
-         'fake_service3': {'deployed_to': None,
-                          'lb_extras': {},
-                          'monitoring': {},
-                          'port': 33333,
-                          'runs_on': ['fake_hostname3',
-                                      'fake_hostname4',
-                                      'fake_hostname5'],
-                          'env_runs_on': {
-                            'fake_env1': ['fake_hostname3'],
-                            'fake_env2': ['fake_hostname4', 'fake_hostname5']
-                            },
-                          'needs_puppet_help': True,
-                          'ssl': True,
-                          'vip': 'fakevip3',
-         },
-        'fake_service4': { 'deployed_to': True,
-                           'runs_on': [],
-                           'needs_puppet_help': True,
+        'fake_service1': {
+            'deployed_to': None,
+            'lb_extras': {},
+            'monitoring': {
+                'fake_monitoring_key': 'fake_monitoring_value',
+            },
+            'deploy': {},
+            'port': 11111,
+            'runs_on': [
+                'fake_hostname3',
+                'fake_hostname2',
+                'fake_hostname1',
+            ],
+            'vip': 'fakevip1',
         },
-        'fake_service5': { 'deployed_to': [],
-                           'runs_on': [],
-                           'needs_puppet_help': True,
+        'fake_service2': {
+            'deployed_to': [
+                'fake_deployed_hostname1',
+                'fake_deployed_hostname2',
+                'fake_hostname4',
+            ],
+            'lb_extras': {'exclude_forwardfor': True},
+            'monitoring': {},
+            'port': 22222,
+            'runs_on': [
+                'fake_hostname2',
+                'fake_hostname3',
+                'fake_hostname4',
+            ],
+            'vip': 'fakevip2',
+        },
+        'fake_service3': {
+            'deployed_to': None,
+            'lb_extras': {},
+            'monitoring': {},
+            'port': 33333,
+            'runs_on': [
+                'fake_hostname3',
+                'fake_hostname4',
+                'fake_hostname5',
+            ],
+            'env_runs_on': {
+                'fake_env1': ['fake_hostname3'],
+                'fake_env2': ['fake_hostname4', 'fake_hostname5'],
+            },
+            'needs_puppet_help': True,
+            'ssl': True,
+            'vip': 'fakevip3',
+        },
+        'fake_service4': {
+            'deployed_to': True,
+            'runs_on': [],
+            'needs_puppet_help': True,
+        },
+        'fake_service5': {
+            'deployed_to': [],
+            'runs_on': [],
+            'needs_puppet_help': True,
         },
     }
 
@@ -72,7 +87,7 @@ class TestServiceConfigurationLib(object):
         one thing it does to, which is test that the arg service_information is
         updated.
         """
-        fake_service_information = { 'fakekey2': 'fakevalue2' }
+        fake_service_information = {'fakekey2': 'fakevalue2'}
         fake_port = 9999
         actual = service_configuration_lib.generate_service_info(
             fake_service_information,
@@ -98,7 +113,7 @@ class TestServiceConfigurationLib(object):
         fake_monitoring_file = 'fake_monitoring_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_monitoring(
-            fake_monitoring_file
+            fake_monitoring_file,
         )
         assert expected == actual
 
@@ -107,7 +122,7 @@ class TestServiceConfigurationLib(object):
         fake_deploy_file = 'fake_deploy_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_deploy(
-            fake_deploy_file
+            fake_deploy_file,
         )
         assert expected == actual
 
@@ -116,7 +131,7 @@ class TestServiceConfigurationLib(object):
         fake_smartstack_file = 'fake_smartstack_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_smartstack(
-            fake_smartstack_file
+            fake_smartstack_file,
         )
         assert expected == actual
 
@@ -125,12 +140,12 @@ class TestServiceConfigurationLib(object):
         fake_dependencies_file = 'fake_dependencies_file'
         # TODO: Mock open?
         actual = service_configuration_lib.read_smartstack(
-            fake_dependencies_file
+            fake_dependencies_file,
         )
         assert expected == actual
 
     def test_services_that_run_on_should_properly_read_configuration(self):
-        expected = [ 'fake_service1', 'fake_service2' ]
+        expected = ['fake_service1', 'fake_service2']
         fake_hostname = 'fake_hostname2'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_that_run_on(fake_hostname, fake_service_configuration)
@@ -151,49 +166,52 @@ class TestServiceConfigurationLib(object):
         assert set(expected) == set(actual)
 
     def test_services_needing_puppet_help_on_should_properly_read_configuration(self):
-        expected = [ 'fake_service3', 'fake_service4' ]
+        expected = ['fake_service3', 'fake_service4']
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_needing_puppet_help_on(fake_hostname, fake_service_configuration)
         assert expected == actual
 
     def test_all_nodes_that_run_should_properly_return_the_right_nodes(self):
-        expected = [ 'fake_hostname3', 'fake_hostname4', 'fake_hostname5']
+        expected = ['fake_hostname3', 'fake_hostname4', 'fake_hostname5']
         fake_service = 'fake_service3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_run(fake_service, fake_service_configuration)
         assert expected == actual
 
     def test_services_using_ssl_on_should_return_a_service(self):
-        expected = [ 'fake_service3' ]
+        expected = ['fake_service3']
         fake_hostname = 'fake_hostname4'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.services_using_ssl_on(fake_hostname, fake_service_configuration)
         assert expected == actual
 
     def test_all_nodes_that_receive_removes_duplicates(self):
-        expected = [ 'fake_deployed_hostname1', 'fake_deployed_hostname2', 'fake_hostname2', 'fake_hostname3', 'fake_hostname4']
+        expected = [
+            'fake_deployed_hostname1', 'fake_deployed_hostname2', 'fake_hostname2',
+            'fake_hostname3', 'fake_hostname4',
+        ]
         fake_service = 'fake_service2'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
         assert expected == actual
 
     def test_all_nodes_that_receive_with_no_deploys_to(self):
-        expected = [ 'fake_hostname3', 'fake_hostname4', 'fake_hostname5']
+        expected = ['fake_hostname3', 'fake_hostname4', 'fake_hostname5']
         fake_service = 'fake_service3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
         assert expected == actual
 
     def test_all_nodes_that_receive_is_sorted(self):
-        expected = [ 'fake_hostname1', 'fake_hostname2', 'fake_hostname3']
+        expected = ['fake_hostname1', 'fake_hostname2', 'fake_hostname3']
         fake_service = 'fake_service1'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_receive(fake_service, fake_service_configuration)
         assert expected == actual
 
     @mock.patch('os.path.abspath', return_value='nodir')
-    @mock.patch('os.listdir', return_value=["1","2","3"])
+    @mock.patch('os.listdir', return_value=['1', '2', '3'])
     @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='hello')
     def test_read_services_configuration(self, read_patch, listdir_patch, abs_patch):
         expected = {'1': 'hello', '2': 'hello', '3': 'hello'}
@@ -201,11 +219,12 @@ class TestServiceConfigurationLib(object):
         abs_patch.assert_called_once_with('testdir')
         listdir_patch.assert_called_once_with('nodir')
         read_patch.assert_has_calls(
-            [mock.call('nodir', '1'), mock.call('nodir', '2'), mock.call('nodir', '3')])
+            [mock.call('nodir', '1'), mock.call('nodir', '2'), mock.call('nodir', '3')],
+        )
         assert expected == actual
 
     @mock.patch('os.path.abspath', return_value='nodir')
-    @mock.patch('os.listdir', return_value=["1","2","3"])
+    @mock.patch('os.listdir', return_value=['1', '2', '3'])
     def test_list_services(self, listdir_patch, abs_patch):
         expected = ['1', '2', '3']
         actual = service_configuration_lib.list_services(soa_dir='testdir')
@@ -247,18 +266,18 @@ class TestServiceConfigurationLib(object):
         port_patch,
         join_patch,
     ):
-        expected = {'oof' : 'ouch'}
+        expected = {'oof': 'ouch'}
         actual = service_configuration_lib.read_service_configuration_from_dir('never', 'die')
         join_patch.assert_has_calls([
-            mock.call('never','die','port'),
-            mock.call('never','die','vip'),
-            mock.call('never','die','lb.yaml'),
-            mock.call('never','die','monitoring.yaml'),
-            mock.call('never','die','deploy.yaml'),
-            mock.call('never','die','data.yaml'),
-            mock.call('never','die','smartstack.yaml'),
-            mock.call('never','die','service.yaml'),
-            mock.call('never','die','dependencies.yaml'),
+            mock.call('never', 'die', 'port'),
+            mock.call('never', 'die', 'vip'),
+            mock.call('never', 'die', 'lb.yaml'),
+            mock.call('never', 'die', 'monitoring.yaml'),
+            mock.call('never', 'die', 'deploy.yaml'),
+            mock.call('never', 'die', 'data.yaml'),
+            mock.call('never', 'die', 'smartstack.yaml'),
+            mock.call('never', 'die', 'service.yaml'),
+            mock.call('never', 'die', 'dependencies.yaml'),
         ])
         port_patch.assert_called_once_with('forever_joined')
         vip_patch.assert_called_once_with('forever_joined')
@@ -269,14 +288,15 @@ class TestServiceConfigurationLib(object):
         smartstack_patch.assert_called_once_with('forever_joined')
         info_patch.assert_called_once_with('forever_joined')
         deps_patch.assert_called_once_with('forever_joined')
-        gen_patch.assert_called_once_with('no_info', port='1111',
-                                          vip='ULTRA_VIP',
-                                          lb_extras='no_extras',
-                                          monitoring='no_monitoring',
-                                          deploy='no_deploy',
-                                          data='no_data',
-                                          dependencies='no_dependencies',
-                                          smartstack={},
+        gen_patch.assert_called_once_with(
+            'no_info', port='1111',
+            vip='ULTRA_VIP',
+            lb_extras='no_extras',
+            monitoring='no_monitoring',
+            deploy='no_deploy',
+            data='no_data',
+            dependencies='no_dependencies',
+            smartstack={},
         )
         assert expected == actual
 
@@ -285,8 +305,10 @@ class TestServiceConfigurationLib(object):
     @mock.patch('service_configuration_lib._read_yaml_file', return_value={'what': 'info'})
     def test_read_extra_service_information(self, info_patch, abs_patch, join_patch):
         expected = {'what': 'info'}
-        actual = service_configuration_lib.read_extra_service_information('noname',
-                'noinfo', soa_dir='whatsadir')
+        actual = service_configuration_lib.read_extra_service_information(
+            'noname',
+            'noinfo', soa_dir='whatsadir',
+        )
         abs_patch.assert_called_once_with('whatsadir')
         join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo.yaml')
         info_patch.assert_called_once_with('together_forever')
@@ -336,16 +358,19 @@ class TestServiceConfigurationLib(object):
 
     def test_env_runs_on(self):
         expected = ['fake_hostname3']
-        actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env1', service_configuration=self.fake_service_configuration)
+        actual = service_configuration_lib.all_nodes_that_run_in_env(
+            'fake_service3', 'fake_env1', service_configuration=self.fake_service_configuration,
+        )
         assert expected == actual
 
         expected = ['fake_hostname4', 'fake_hostname5']
-        actual = service_configuration_lib.all_nodes_that_run_in_env('fake_service3','fake_env2', service_configuration=self.fake_service_configuration)
+        actual = service_configuration_lib.all_nodes_that_run_in_env(
+            'fake_service3', 'fake_env2', service_configuration=self.fake_service_configuration,
+        )
         assert expected == actual
 
-
     def test_bad_port_get_service_from_port(self):
-        "Test for bad inputs"
+        'Test for bad inputs'
         service_name = service_configuration_lib.get_service_from_port(None)
         assert service_name is None
 
@@ -353,37 +378,32 @@ class TestServiceConfigurationLib(object):
         assert service_name is None
 
     def test_valid_port_get_service_from_port(self):
-        "Test that if there is a service for that port it returns it"
+        'Test that if there is a service for that port it returns it'
         all_services = {
-                "Other Service": {
-                    'port': 2352
+            'Other Service': {
+                'port': 2352,
+            },
+            'Service 23': {
+                'port': 656,
+            },
+            'Test Service': {
+                'port': 100,
+            },
+            'Smart Service': {
+                'port': 345,
+                'smartstack': {
+                    'main': {
+                        'proxy_port': 3444,
                     },
-                "Service 23": {
-                    'port': 656
-                    },
-                "Test Service": {
-                    'port': 100
-                    },
-                "Smart Service": {
-                    'port': 345,
-                    'smartstack': {
-                        'main': {
-                            'proxy_port': 3444
-                            }
-                        }
-                    },
-                "Service 36": {
-                    'port': 636
-                    }
-                }
+                },
+            },
+            'Service 36': {
+                'port': 636,
+            },
+        }
 
         found_service_name = service_configuration_lib.get_service_from_port(100, all_services)
-        assert found_service_name == "Test Service"
+        assert found_service_name == 'Test Service'
 
         found_service_name = service_configuration_lib.get_service_from_port(3444, all_services)
-        assert found_service_name == "Smart Service"
-
-
-if __name__ == '__main__':
-    T.run()
-
+        assert found_service_name == 'Smart Service'

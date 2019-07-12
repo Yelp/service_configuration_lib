@@ -3,4 +3,3 @@ needs_puppet_help: true
 runs_on: []
 deployed_to:
  - fake.docker.hostname
-

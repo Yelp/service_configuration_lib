@@ -15,11 +15,11 @@
 from __future__ import print_function
 
 import copy
+import io
 import logging
 import os
 import socket
 import sys
-import io
 
 import yaml
 
@@ -28,18 +28,21 @@ try:
 except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
     Loader = yaml.SafeLoader
 
-DEFAULT_SOA_DIR = "/nail/etc/services"
+DEFAULT_SOA_DIR = '/nail/etc/services'
 log = logging.getLogger(__name__)
 _yaml_cache = {}
 _use_yaml_cache = True
+
 
 def enable_yaml_cache():
     global _use_yaml_cache
     _use_yaml_cache = True
 
+
 def disable_yaml_cache():
     global _use_yaml_cache
     _use_yaml_cache = False
+
 
 def read_port(port_file):
     # Try to read port information
@@ -52,6 +55,7 @@ def read_port(port_file):
         port = None
     return port
 
+
 def read_vip(vip_file):
     try:
         with io.open(vip_file, 'r', encoding='UTF-8') as vip_file_fd:
@@ -60,29 +64,38 @@ def read_vip(vip_file):
         vip = None
     return vip
 
+
 def load_yaml(fd):
     return yaml.load(fd, Loader=Loader)
+
 
 def read_lb_extras(lb_extras_file):
     return _read_yaml_file(lb_extras_file)
 
+
 def read_monitoring(monitoring_file):
     return _read_yaml_file(monitoring_file)
+
 
 def read_deploy(deploy_file):
     return _read_yaml_file(deploy_file)
 
+
 def read_data(data_file):
     return _read_yaml_file(data_file)
+
 
 def read_smartstack(smartstack_file):
     return _read_yaml_file(smartstack_file)
 
+
 def read_service_information(service_file):
     return _read_yaml_file(service_file)
 
+
 def read_dependencies(dependencies_file):
     return _read_yaml_file(dependencies_file)
+
 
 def _read_yaml_file(file_name):
     if _use_yaml_cache and file_name in _yaml_cache:
@@ -97,29 +110,33 @@ def _read_yaml_file(file_name):
     except IOError:
         pass
     except Exception:
-        print("Failed to parse YAML from %s" % file_name, file=sys.stderr)
+        print('Failed to parse YAML from %s' % file_name, file=sys.stderr)
         raise
     return data
+
 
 def generate_service_info(service_information, **kwargs):
     service_info = kwargs
     service_info.update(service_information)
     return service_info
 
+
 def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR):
     return _read_yaml_file(os.path.join(
-        os.path.abspath(soa_dir), service_name, extra_info + ".yaml"))
+        os.path.abspath(soa_dir), service_name, extra_info + '.yaml',
+    ))
+
 
 def read_service_configuration_from_dir(rootdir, service_dirname):
-    port_file = os.path.join(rootdir, service_dirname, "port")
-    vip_file = os.path.join(rootdir, service_dirname, "vip")
-    lb_extras_file = os.path.join(rootdir, service_dirname, "lb.yaml")
-    monitoring_file = os.path.join(rootdir, service_dirname, "monitoring.yaml")
-    deploy_file = os.path.join(rootdir, service_dirname, "deploy.yaml")
-    data_file = os.path.join(rootdir, service_dirname, "data.yaml")
-    smartstack_file = os.path.join(rootdir, service_dirname, "smartstack.yaml")
-    service_file = os.path.join(rootdir, service_dirname, "service.yaml")
-    dependencies_file = os.path.join(rootdir, service_dirname, "dependencies.yaml")
+    port_file = os.path.join(rootdir, service_dirname, 'port')
+    vip_file = os.path.join(rootdir, service_dirname, 'vip')
+    lb_extras_file = os.path.join(rootdir, service_dirname, 'lb.yaml')
+    monitoring_file = os.path.join(rootdir, service_dirname, 'monitoring.yaml')
+    deploy_file = os.path.join(rootdir, service_dirname, 'deploy.yaml')
+    data_file = os.path.join(rootdir, service_dirname, 'data.yaml')
+    smartstack_file = os.path.join(rootdir, service_dirname, 'smartstack.yaml')
+    service_file = os.path.join(rootdir, service_dirname, 'service.yaml')
+    dependencies_file = os.path.join(rootdir, service_dirname, 'dependencies.yaml')
 
     smartstack = read_smartstack(smartstack_file)
     port = smartstack.get('port', read_port(port_file))
@@ -143,8 +160,10 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
         dependencies=dependencies,
     )
 
+
 def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
     return read_service_configuration_from_dir(os.path.abspath(soa_dir), service_name)
+
 
 def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     # Returns a dict of service information, keys are the service name
@@ -155,12 +174,14 @@ def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     for service_dirname in os.listdir(rootdir):
         service_name = service_dirname
         service_info = read_service_configuration_from_dir(rootdir, service_dirname)
-        all_services.update( { service_name: service_info } )
+        all_services.update({service_name: service_info})
     return all_services
+
 
 def list_services(soa_dir=DEFAULT_SOA_DIR):
     rootdir = os.path.abspath(soa_dir)
     return os.listdir(rootdir)
+
 
 def get_service_from_port(port, all_services=None):
     """Gets the name of the service from the port
@@ -171,7 +192,7 @@ def get_service_from_port(port, all_services=None):
             'port': port_number
         }
     }
-    
+
     Returns the name of the service
     """
     if port is None or not isinstance(port, int):
@@ -190,9 +211,11 @@ def get_service_from_port(port, all_services=None):
             if elem_port is not None and port == int(elem_port):
                 return name
 
+
 def services_that_run_here():
     hostname = socket.getfqdn()
     return set(services_that_run_on(hostname))
+
 
 def services_that_run_on(hostname, service_configuration=None):
     running_services = []
@@ -200,14 +223,16 @@ def services_that_run_on(hostname, service_configuration=None):
         service_configuration = read_services_configuration()
     for service in service_configuration:
         if 'runs_on' in service_configuration[service] and \
-            service_configuration[service]['runs_on'] and \
-            hostname in service_configuration[service]['runs_on']:
+                service_configuration[service]['runs_on'] and \
+                hostname in service_configuration[service]['runs_on']:
             running_services.append(service)
     return running_services
+
 
 def services_deployed_here():
     hostname = socket.getfqdn()
     return set(services_deployed_on(hostname))
+
 
 def services_deployed_on(hostname, service_configuration=None):
     if service_configuration is None:
@@ -219,20 +244,21 @@ def services_deployed_on(hostname, service_configuration=None):
     for service in service_configuration:
         if (
             'deployed_to' in service_configuration[service] and
-            service_configuration[service]['deployed_to'] and
-            (
+            service_configuration[service]['deployed_to'] and (
                 service_configuration[service]['deployed_to'] is True or
                 hostname in service_configuration[service]['deployed_to']
             ) and
-           service not in running_services
+            service not in running_services
         ):
             deployed_services.append(service)
 
     return deployed_services
 
+
 def services_needing_puppet_help_here():
     hostname = socket.getfqdn()
     return services_needing_puppet_help_on(hostname)
+
 
 def services_needing_puppet_help_on(hostname, service_configuration=None):
     if service_configuration is None:
@@ -240,8 +266,10 @@ def services_needing_puppet_help_on(hostname, service_configuration=None):
     deployed_services = services_deployed_on(hostname, service_configuration)
     return [s for s in deployed_services if service_configuration[s].get('needs_puppet_help')]
 
+
 def all_nodes_that_run(service, service_configuration=None):
     return all_nodes_that_receive(service, service_configuration=service_configuration, run_only=True)
+
 
 def all_nodes_that_receive(service, service_configuration=None, run_only=False, deploy_to_only=False):
     """If run_only, returns only the services that are in the runs_on list.
@@ -267,6 +295,7 @@ def all_nodes_that_receive(service, service_configuration=None, run_only=False, 
 
     return list(sorted(result))
 
+
 def all_nodes_that_run_in_env(service, env, service_configuration=None):
     """ Returns all nodes that run in an environment. This needs
     to be specified in field named 'env_runs_on' one level under services
@@ -289,15 +318,16 @@ def all_nodes_that_run_in_env(service, env, service_configuration=None):
     else:
         return []
 
+
 def services_using_ssl_on(hostname, service_configuration=None):
     if service_configuration is None:
         service_configuration = read_services_configuration()
-    deployed_services = services_deployed_on(hostname,service_configuration)
+    deployed_services = services_deployed_on(hostname, service_configuration)
     return [s for s in deployed_services if service_configuration[s].get('ssl')]
+
 
 def services_using_ssl_here():
     hostname = socket.getfqdn()
     return services_using_ssl_on(hostname)
 
 # vim: et ts=4 sw=4
-

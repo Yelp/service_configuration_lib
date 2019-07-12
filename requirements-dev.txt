@@ -1,0 +1,4 @@
+coverage
+mock
+pre-commit>=1.0.0
+pytest
