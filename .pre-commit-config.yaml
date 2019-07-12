@@ -1,6 +1,6 @@
 repos:
--   repo: git@git.yelpcorp.com:mirrors/pre-commit/pre-commit-hooks
-    sha: v2.2.3
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.2.3
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
@@ -16,28 +16,28 @@ repos:
     -   id: requirements-txt-fixer
     -   id: fix-encoding-pragma
         args: ['--remove']
--   repo: git@git.yelpcorp.com:mirrors/pre-commit/mirrors-autopep8
-    sha: v1.4.2
+-   repo: https://github.com/pre-commit/mirrors-autopep8
+    rev: v1.4.3
     hooks:
     -   id: autopep8
--   repo: git@git.yelpcorp.com:mirrors/gitlab/pycqa/flake8
+-   repo: https://gitlab.com/pycqa/flake8
     rev: 3.7.1
     hooks:
     -   id: flake8
--   repo: git@git.yelpcorp.com:mirrors/asottile/reorder_python_imports
-    sha: v1.3.2
+-   repo: https://github.com/asottile/reorder_python_imports
+    rev: v1.3.5
     hooks:
     -   id: reorder-python-imports
         args: [
             '--remove-import', 'from __future__ import absolute_import',
             '--remove-import', 'from __future__ import unicode_literals',
         ]
--   repo: git@git.yelpcorp.com:mirrors/asottile/pyupgrade
-    sha: v1.9.0
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v1.11.1
     hooks:
     -   id: pyupgrade
         args: [--py3-plus]
--   repo: git@git.yelpcorp.com:mirrors/asottile/add-trailing-comma
+-   repo: https://github.com/asottile/add-trailing-comma
     rev: v0.7.1
     hooks:
     -   id: add-trailing-comma
