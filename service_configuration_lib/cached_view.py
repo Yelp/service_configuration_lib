@@ -154,17 +154,9 @@ class ConfigsFileWatcher:
         relpath = os.path.relpath(path, self._configs_folder)
         filename = Path(relpath)
 
-        # when len == 2, thatss regular case e.g. service/config.yaml
-        # when len == 3, that's case with secrets folder, e.g. service/secrets/config.json
-        if len(filename.parts) == 2 or len(filename.parts) == 3:
-            service = filename.parts[0]
-            config_name = filename.stem
-            config_suffix = filename.suffix
-        else:
-            return None
-
-        if service == '.':
-            return None
+        service = str(filename.parts[0]) if len(filename.parts) > 1 else None
+        config_name = filename.stem
+        config_suffix = filename.suffix
 
         if not any((fnmatch.fnmatch(config_name, config) for config in self._configs_names)):
             return None
@@ -172,7 +164,7 @@ class ConfigsFileWatcher:
         if not any((fnmatch.fnmatch(config_suffix, suffix) for suffix in self._configs_suffixes)):
             return None
 
-        return str(service), config_name, config_suffix
+        return service, config_name, config_suffix
 
 
 class _EventHandler(pyinotify.ProcessEvent):

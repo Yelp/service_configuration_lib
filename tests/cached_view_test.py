@@ -45,25 +45,22 @@ def test_service_name_and_config_from_path(configs_file_watcher):
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/new_service/config.json',
     )
-    service_name, config_name, config_suffix = result
 
-    assert service_name == 'new_service'
-    assert config_name == 'config'
-    assert config_suffix == '.json'
+    assert ('new_service', 'config', '.json') == result
 
 
 def test_service_name_and_config_from_path_too_deep_config(configs_file_watcher):
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/new_service/1/2/3/config.json',
     )
-    assert result is None
+    assert ('new_service', 'config', '.json') == result
 
 
 def test_service_name_and_config_from_path_top_level_file(configs_file_watcher):
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/config.json',
     )
-    assert result is None
+    assert (None, 'config', '.json') == result
 
 
 def test_service_name_and_config_from_path_with_configs_names(configs_file_watcher):
