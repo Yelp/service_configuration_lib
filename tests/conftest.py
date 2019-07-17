@@ -46,8 +46,8 @@ def mock_watch_manager():
 
 @pytest.fixture
 def mock_notifier():
-    with patch('pyinotify.Notifier', autospec=True):
-        yield
+    with patch('pyinotify.Notifier', autospec=True) as notifier:
+        yield notifier
 
 
 @pytest.fixture

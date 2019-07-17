@@ -22,13 +22,13 @@ class YamlConfigsCachedView(BaseCachedView):
         from service_configuration_lib.cached_view import ConfigsFileWatcher
         from service_configuration_lib.yaml_cached_view import YamlConfigsCachedView
 
-        watcher = ConfigsFileWatcher(
-        configs_view=YamlConfigsCachedView(),
-            configs_names = ['smartstack', 'authorization'],
-            configs_suffixes=['.yaml']
-        )
-        watcher.process_events()
-        print(watcher.configs_view.configs['schematizer']['smartstack']
+        with ConfigsFileWatcher(
+                configs_view=YamlConfigsCachedView(),
+                configs_names = ['smartstack', 'authorization'],
+                configs_suffixes=['.yaml']
+            ) as watcher:
+                watcher.process_events()
+                print(watcher.configs_view.configs['schematizer']['smartstack']
     """
 
     def __init__(self):

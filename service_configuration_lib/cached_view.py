@@ -1,10 +1,13 @@
 import fnmatch
+from collections import namedtuple
 import logging
 import os
 from pathlib import Path
 from typing import List
 from typing import Optional
 from typing import Tuple
+from abc import ABC
+from abc import abstractmethod
 
 import pyinotify
 
@@ -13,16 +16,21 @@ DEFAULT_SOA_DIR = '/nail/etc/services'
 log = logging.getLogger(__name__)
 
 
-class BaseCachedView:
+class BaseCachedView(ABC):
     """This is the interface for ConfigsFileWatcher.
     Implementation of that interfaces should implemente 2 hooks on creation/removal of files.
     """
 
+    @abstractmethod
     def add(self, path: str, service_name: str, config_name: str, config_suffix: str) -> None:
         raise NotImplementedError()
 
+    @abstractmethod
     def remove(self, path: str, service_name: str, config_name: str, config_suffix: str) -> None:
         raise NotImplementedError()
+
+
+_ServiceConfig = namedtuple('_ServiceConfig', ['service_name', 'config_name', 'config_suffix'])
 
 
 class ConfigsFileWatcher:
@@ -47,7 +55,7 @@ class ConfigsFileWatcher:
     Args:
     :param configs_view: implementation of BaseCachedView interface
     :param configs_folder: Optional, path to configs root folder, `/nail/etc/services`
-    :param services_names: Optional, list of service names to watch
+    :param services_names: Optional, list of service names to watch, can be wildcard or exact name
     :param configs_names: Optional, list of config names to watch
     :param configs_suffixes: Optional, list of file extentions to watch
     :param exclude_folders_filters: Optional, filter of masks to exclude folders from watching
@@ -58,17 +66,18 @@ class ConfigsFileWatcher:
         configs_view: BaseCachedView,
         configs_folder: str = DEFAULT_SOA_DIR,
         services_names: List[str] = ['*'],
-        configs_names: List[str] = ['*'],
-        configs_suffixes: List[str] = ['*'],
+        configs_names: Optional[List[str]] = None,
+        configs_suffixes: Optional[List[str]] = None,
         exclude_folders_filters: List[str] = ['*.~tmp~'],
     ) -> None:
         super().__init__()
         self.configs_view = configs_view
         self._configs_folder = configs_folder
         self._services_names = services_names
-        self._configs_names = configs_names
-        self._configs_suffixes = configs_suffixes
+        self._configs_names = None if configs_names is None else set(configs_names)
+        self._configs_suffixes = None if configs_suffixes is None else set(configs_suffixes)
         self._exclude_folders_filters = exclude_folders_filters
+        self._notifier = None
         self.setup()
 
     @staticmethod
@@ -85,8 +94,16 @@ class ConfigsFileWatcher:
             self._notifier.read_events()
             self._notifier.process_events()
 
+    def close(self) -> None:
+        if self._notifier is None:
+            return
+        self._notifier.stop()
+        self._notifier = None
+
     def setup(self) -> None:
         """Recreates state of ConfigsFileWatcher. Used as reaction on queue overflow in _EventHandler"""
+        # close previous in case of re-creation
+        self.close()
         handler = _EventHandler(cache=self)
         watch_manager = pyinotify.WatchManager()
         self._notifier = pyinotify.Notifier(
@@ -96,7 +113,7 @@ class ConfigsFileWatcher:
 
         watch_manager.add_watch(
             path=self._configs_folder,
-            mask=pyinotify.IN_MOVED_TO | pyinotify.IN_CREATE | pyinotify.IN_DELETE,
+            mask=pyinotify.IN_MOVED_TO | pyinotify.IN_CREATE | pyinotify.IN_DELETE | pyinotify.IN_DELETE_SELF,
             rec=True,
             auto_add=True,
             exclude_filter=self._exclude_filter,
@@ -128,28 +145,25 @@ class ConfigsFileWatcher:
         result = self._service_name_and_config_from_path(path)
         if result is None:
             return
-        service_name, config_name, config_suffix = result
-        log.info(f'{config_name}: Config changed for {service_name}')
-        self.configs_view.add(path, service_name, config_name, config_suffix)
+        log.info(f'{result.config_name}: Config changed for {result.service_name}')
+        self.configs_view.add(path, result.service_name, result.config_name, result.config_suffix)
 
     def _maybe_remove_path_from_cache(self, path: str) -> None:
         result = self._service_name_and_config_from_path(path)
         if result is None:
             return
-        service_name, config_name, config_suffix = result
-        log.info(f'{config_name}: Removing config for {service_name}')
-        self.configs_view.remove(path, service_name, config_name, config_suffix)
+        log.info(f'{result.config_name}: Removing config for {result.service_name}')
+        self.configs_view.remove(path, result.service_name, result.config_name, result.config_suffix)
 
-    def _service_name_and_config_from_path(self, path: str) -> Optional[Tuple[str, str, str]]:
-        """Convert a config file path to a service name and config name.  For example,
+    def _service_name_and_config_from_path(self, path: str) -> Optional[_ServiceConfig]:
+        """Convert a config file path to a service name, config name and config suffix.  For example,
         `/nail/etc/services/foo/smartstack.yaml` would be converted to `foo` with a
-        config name of `smartstack`
+        config name of `smartstack` and config suffix `.yaml`
 
         Returns `None` if path is invalid or we don't care about the file, e.g. not in self._config_names
 
         :param path: the config file path e.g. `/nail/etc/services/foo/smartstack.yaml`
-        :return: a tuple of the service name, config and suffix e.g. (`foo`, `smartstack`, `yaml`),
-        or `None` if the path is invalid
+        :return: _ServiceConfig or `None` if the path is invalid
         """
         relpath = os.path.relpath(path, self._configs_folder)
         filename = Path(relpath)
@@ -158,13 +172,19 @@ class ConfigsFileWatcher:
         config_name = filename.stem
         config_suffix = filename.suffix
 
-        if not any((fnmatch.fnmatch(config_name, config) for config in self._configs_names)):
+        if self._configs_names is not None and config_name not in self._configs_names:
             return None
 
-        if not any((fnmatch.fnmatch(config_suffix, suffix) for suffix in self._configs_suffixes)):
+        if self._configs_suffixes is not None and config_suffix not in self._configs_suffixes:
             return None
 
-        return service, config_name, config_suffix
+        return _ServiceConfig(service, config_name, config_suffix)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, err_type, err_val, err_tb):
+        self.close()
 
 
 class _EventHandler(pyinotify.ProcessEvent):
@@ -182,4 +202,9 @@ class _EventHandler(pyinotify.ProcessEvent):
         self.cache._maybe_remove_path_from_cache(event.pathname)
 
     def process_IN_Q_OVERFLOW(self, event: pyinotify.Event) -> None:
+        log.warning("Got queue overflow! Recreating watchers.")
+        self.cache.setup()
+
+    def process_IN_DELETE_SELF(self, event: pyinotify.Event) -> None:
+        log.warning("Self folder was deleted! Recreating watchers.")
         self.cache.setup()

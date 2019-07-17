@@ -25,6 +25,12 @@ def test_event_handler_overflow(mock_configs_file_watcher, mock_event):
     mock_configs_file_watcher.setup.assert_called_once_with()
 
 
+def test_event_handler_delete_self(mock_configs_file_watcher, mock_event):
+    event_handler = _EventHandler(cache=mock_configs_file_watcher)
+    event_handler.process_IN_DELETE_SELF(event=mock_event)
+    mock_configs_file_watcher.setup.assert_called_once_with()
+
+
 def test_exclude_filter_exclude_folders(configs_file_watcher):
     assert configs_file_watcher._exclude_filter('/foo/bar/.~tmp~')
     assert not configs_file_watcher._exclude_filter('/foo/bar/baz')
@@ -41,6 +47,15 @@ def test_exclude_filter_service_names_filtering(configs_file_watcher):
     assert not configs_file_watcher._exclude_filter('/foo/star_service')
 
 
+def test_stoping_notifier(configs_file_watcher):
+    notifier = configs_file_watcher._notifier
+    assert notifier is not None
+    configs_file_watcher.close()
+
+    assert configs_file_watcher._notifier is None
+    notifier.stop.assert_called_once()
+
+
 def test_service_name_and_config_from_path(configs_file_watcher):
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/new_service/config.json',
@@ -53,14 +68,18 @@ def test_service_name_and_config_from_path_too_deep_config(configs_file_watcher)
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/new_service/1/2/3/config.json',
     )
-    assert ('new_service', 'config', '.json') == result
+    assert result.service_name == 'new_service'
+    assert result.config_name == 'config'
+    assert result.config_suffix == '.json'
 
 
 def test_service_name_and_config_from_path_top_level_file(configs_file_watcher):
     result = configs_file_watcher._service_name_and_config_from_path(
         configs_file_watcher._configs_folder + '/config.json',
     )
-    assert (None, 'config', '.json') == result
+    assert result.service_name is None
+    assert result.config_name == 'config'
+    assert result.config_suffix == '.json'
 
 
 def test_service_name_and_config_from_path_with_configs_names(configs_file_watcher):
