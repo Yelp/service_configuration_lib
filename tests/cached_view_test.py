@@ -100,6 +100,20 @@ def test_service_name_and_config_from_path_with_config_suffixes(configs_file_wat
     assert result is None
 
 
+def test_configs_file_watcher_process_events_with_limit(configs_file_watcher):
+    configs_file_watcher._notifier.check_events.side_effect = [True, True, True, True, False]
+
+    configs_file_watcher._notifier.process_events.side_effect = configs_file_watcher._process_inotify_event
+
+    assert configs_file_watcher._processed_events_count == 0
+
+    configs_file_watcher.process_events(limit=2)
+
+    assert configs_file_watcher._processed_events_count == 2
+    assert configs_file_watcher._notifier.read_events.call_count == 2
+    assert configs_file_watcher._notifier.process_events.call_count == 2
+
+
 def test_configs_file_watcher_process_events(configs_file_watcher):
     configs_file_watcher._notifier.check_events.side_effect = [True, False]
 

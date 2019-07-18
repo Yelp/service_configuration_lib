@@ -3,7 +3,7 @@ from collections import namedtuple
 import logging
 import os
 from pathlib import Path
-from typing import List
+from typing import Sequence
 from typing import Optional
 from typing import Tuple
 from abc import ABC
@@ -12,6 +12,7 @@ from abc import abstractmethod
 import pyinotify
 
 DEFAULT_SOA_DIR = '/nail/etc/services'
+DEFAULT_PROCESS_EVENTS_LIMIT = 100
 
 log = logging.getLogger(__name__)
 
@@ -65,10 +66,10 @@ class ConfigsFileWatcher:
         self,
         configs_view: BaseCachedView,
         configs_folder: str = DEFAULT_SOA_DIR,
-        services_names: List[str] = ['*'],
-        configs_names: Optional[List[str]] = None,
-        configs_suffixes: Optional[List[str]] = None,
-        exclude_folders_filters: List[str] = ['*.~tmp~'],
+        services_names: Sequence[str] = ['*'],
+        configs_names: Optional[Sequence[str]] = None,
+        configs_suffixes: Optional[Sequence[str]] = None,
+        exclude_folders_filters: Sequence[str] = ['*.~tmp~'],
     ) -> None:
         super().__init__()
         self.configs_view = configs_view
@@ -86,13 +87,18 @@ class ConfigsFileWatcher:
         log.info(f'max_user_instances: {pyinotify.max_user_instances.value}')
         log.info(f'max_user_watches: {pyinotify.max_user_watches.value}')
 
-    def process_events(self) -> None:
+    def process_events(self, limit: int = DEFAULT_PROCESS_EVENTS_LIMIT) -> None:
         """This method should be periodically invoked to process queued inotify
         events.  See the class docstring for more context.
+        Args:
+        :param limit: Optional, rough limit of events to process per call
         """
-        while self._notifier.check_events(timeout=0):
+        before_processed_count = self._processed_events_count
+        currently_processed = 0
+        while currently_processed >= 0 and currently_processed < limit and self._notifier.check_events(timeout=0):
             self._notifier.read_events()
             self._notifier.process_events()
+            currently_processed = self._processed_events_count - before_processed_count
 
     def close(self) -> None:
         if self._notifier is None:
@@ -104,6 +110,7 @@ class ConfigsFileWatcher:
         """Recreates state of ConfigsFileWatcher. Used as reaction on queue overflow in _EventHandler"""
         # close previous in case of re-creation
         self.close()
+        self._processed_events_count = 0
         handler = _EventHandler(cache=self)
         watch_manager = pyinotify.WatchManager()
         self._notifier = pyinotify.Notifier(
@@ -180,6 +187,9 @@ class ConfigsFileWatcher:
 
         return _ServiceConfig(service, config_name, config_suffix)
 
+    def _process_inotify_event(self):
+        self._processed_events_count += 1
+
     def __enter__(self):
         return self
 
@@ -193,12 +203,15 @@ class _EventHandler(pyinotify.ProcessEvent):
 
     # When acceptance testing, sometimes a move is seen as a create
     def process_IN_CREATE(self, event: pyinotify.Event) -> None:
+        self.cache._process_inotify_event()
         self.cache._maybe_add_path_to_cache(event.pathname)
 
     def process_IN_MOVED_TO(self, event: pyinotify.Event) -> None:
+        self.cache._process_inotify_event()
         self.cache._maybe_add_path_to_cache(event.pathname)
 
     def process_IN_DELETE(self, event: pyinotify.Event) -> None:
+        self.cache._process_inotify_event()
         self.cache._maybe_remove_path_from_cache(event.pathname)
 
     def process_IN_Q_OVERFLOW(self, event: pyinotify.Event) -> None:
