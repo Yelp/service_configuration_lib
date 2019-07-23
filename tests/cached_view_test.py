@@ -131,7 +131,7 @@ def test_configs_file_watcher_process_events_with_overflow_in_the_middle(configs
 
     configs_file_watcher.process_events(limit=3)
 
-    assert configs_file_watcher._processed_events_count == 0 # because overflow was resetting the counter
+    assert configs_file_watcher._processed_events_count == 0  # because overflow was resetting the counter
     assert configs_file_watcher._notifier.read_events.call_count == 1
     assert configs_file_watcher._notifier.process_events.call_count == 1
 

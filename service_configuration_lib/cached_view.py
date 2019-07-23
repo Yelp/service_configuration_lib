@@ -1,13 +1,12 @@
 import fnmatch
-from collections import namedtuple
 import logging
 import os
-from pathlib import Path
-from typing import Sequence
-from typing import Optional
-from typing import Tuple
 from abc import ABC
 from abc import abstractmethod
+from collections import namedtuple
+from pathlib import Path
+from typing import Optional
+from typing import Sequence
 
 import pyinotify
 
@@ -103,7 +102,7 @@ class ConfigsFileWatcher:
             self._notifier.process_events()
 
             diff = self._processed_events_count - before_processed_count
-            if diff <= 0: # in case of overflow
+            if diff <= 0:  # in case of overflow
                 return
             currently_processed += diff
             before_processed_count = self._processed_events_count
@@ -223,9 +222,9 @@ class _EventHandler(pyinotify.ProcessEvent):
         self.cache._maybe_remove_path_from_cache(event.pathname)
 
     def process_IN_Q_OVERFLOW(self, event: pyinotify.Event) -> None:
-        log.warning("Got queue overflow! Recreating watchers.")
+        log.warning('Got queue overflow! Recreating watchers.')
         self.cache.setup()
 
     def process_IN_DELETE_SELF(self, event: pyinotify.Event) -> None:
-        log.warning("Self folder was deleted! Recreating watchers.")
+        log.warning('Self folder was deleted! Recreating watchers.')
         self.cache.setup()

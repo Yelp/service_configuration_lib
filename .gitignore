@@ -1,8 +1,11 @@
 .tox
+.coverage
+.cache
 *.pyc
 *.egg-info
 dist/
 build/
 .*.sw?
 virtualenv_run
+venv
 .bash_history
