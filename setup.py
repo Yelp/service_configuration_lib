@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from setuptools import setup, find_packages
+from setuptools import find_packages
+from setuptools import setup
 
 setup(
     name='service-configuration-lib',
@@ -24,7 +24,7 @@ setup(
     author='Yelp Operations Team',
     author_email='opensource+scl@yelp.com',
     packages=find_packages(exclude=['tests', 'scripts']),
-    install_requires=['PyYAML >= 3.0'],
+    install_requires=['PyYAML >= 3.0', 'pyinotify'],
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
         'scripts/all_nodes_that_receive',
@@ -33,6 +33,6 @@ setup(
         'scripts/services_deployed_here',
         'scripts/services_needing_puppet_help',
         'scripts/services_that_run_here',
-        'scripts/services_using_ssl'
+        'scripts/services_using_ssl',
     ],
 )
