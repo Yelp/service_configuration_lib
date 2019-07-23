@@ -47,7 +47,7 @@ def test_exclude_filter_service_names_filtering(configs_file_watcher):
     assert not configs_file_watcher._exclude_filter('/foo/star_service')
 
 
-def test_stoping_notifier(configs_file_watcher):
+def test_stopping_notifier(configs_file_watcher):
     notifier = configs_file_watcher._notifier
     assert notifier is not None
     configs_file_watcher.close()
@@ -102,9 +102,7 @@ def test_service_name_and_config_from_path_with_config_suffixes(configs_file_wat
 
 def test_configs_file_watcher_process_events_with_limit(configs_file_watcher):
     configs_file_watcher._notifier.check_events.side_effect = [True, True, True, True, False]
-
     configs_file_watcher._notifier.process_events.side_effect = configs_file_watcher._process_inotify_event
-
     assert configs_file_watcher._processed_events_count == 0
 
     configs_file_watcher.process_events(limit=2)
@@ -112,6 +110,30 @@ def test_configs_file_watcher_process_events_with_limit(configs_file_watcher):
     assert configs_file_watcher._processed_events_count == 2
     assert configs_file_watcher._notifier.read_events.call_count == 2
     assert configs_file_watcher._notifier.process_events.call_count == 2
+
+
+def test_configs_file_watcher_process_events_with_limit_2nd_iteration(configs_file_watcher):
+    configs_file_watcher._notifier.check_events.side_effect = [True, True, True, True, False]
+    configs_file_watcher._notifier.process_events.side_effect = configs_file_watcher._process_inotify_event
+
+    configs_file_watcher.process_events(limit=2)
+    configs_file_watcher.process_events(limit=2)
+
+    assert configs_file_watcher._processed_events_count == 4
+    assert configs_file_watcher._notifier.read_events.call_count == 4
+    assert configs_file_watcher._notifier.process_events.call_count == 4
+
+
+def test_configs_file_watcher_process_events_with_overflow_in_the_middle(configs_file_watcher):
+    configs_file_watcher._notifier.check_events.side_effect = [True, True, True, True, False]
+    configs_file_watcher._processed_events_count = 2
+    configs_file_watcher._notifier.process_events.side_effect = configs_file_watcher.setup
+
+    configs_file_watcher.process_events(limit=3)
+
+    assert configs_file_watcher._processed_events_count == 0 # because overflow was resetting the counter
+    assert configs_file_watcher._notifier.read_events.call_count == 1
+    assert configs_file_watcher._notifier.process_events.call_count == 1
 
 
 def test_configs_file_watcher_process_events(configs_file_watcher):

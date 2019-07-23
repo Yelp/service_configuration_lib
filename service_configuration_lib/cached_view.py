@@ -40,7 +40,10 @@ class ConfigsFileWatcher:
 
     What's special about this cache is that we watch for inotify events on these
     files, processing these events whenever the `process_events` method is
-    invoked.
+    invoked. By default `process_events` will process roughly 100 events per
+    invocation.
+    ConfigsFileWatcher instance must be closed with explicit `close()` call or
+    with usage of `with...` statement.
 
     The benefit of the explicit event processing is that it obviates the need
     for a background thread (which would bring its own set of problems).  The
@@ -51,14 +54,14 @@ class ConfigsFileWatcher:
     10 to 20 events per minute, and a queue size (max_queued_events) of 16384.
     This gives us about half a day of non-processing before the queue overflows
     and the cache becomes inconsistent.  In the unlikely case that the queue
-    does overflow, then the cache will resetupt itself.
+    does overflow, then the cache will re-setup itself.
 
     Args:
     :param configs_view: implementation of BaseCachedView interface
     :param configs_folder: Optional, path to configs root folder, `/nail/etc/services`
     :param services_names: Optional, list of service names to watch, can be wildcard or exact name
-    :param configs_names: Optional, list of config names to watch
-    :param configs_suffixes: Optional, list of file extentions to watch
+    :param configs_names: Optional, list of config names to watch, default None will watch for everything
+    :param configs_suffixes: Optional, list of file extentions to watch, default None will watch for everything
     :param exclude_folders_filters: Optional, filter of masks to exclude folders from watching
     """
 
@@ -95,10 +98,15 @@ class ConfigsFileWatcher:
         """
         before_processed_count = self._processed_events_count
         currently_processed = 0
-        while currently_processed >= 0 and currently_processed < limit and self._notifier.check_events(timeout=0):
+        while currently_processed < limit and self._notifier.check_events(timeout=0):
             self._notifier.read_events()
             self._notifier.process_events()
-            currently_processed = self._processed_events_count - before_processed_count
+
+            diff = self._processed_events_count - before_processed_count
+            if diff <= 0: # in case of overflow
+                return
+            currently_processed += diff
+            before_processed_count = self._processed_events_count
 
     def close(self) -> None:
         if self._notifier is None:
