@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import sys
+
 import yaml
-sys.path.append('/nail/sys/srv-deploy/lib/')
+
 import service_configuration_lib
+sys.path.append('/nail/sys/srv-deploy/lib/')
 
-print yaml.dump(service_configuration_lib.read_services_configuration(), default_flow_style=False)
-
+print(yaml.dump(service_configuration_lib.read_services_configuration(), default_flow_style=False))

@@ -55,10 +55,15 @@ package_%:
 		'
 	docker run -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp chown -R $(UID):$(GID) /work
 
+venv: requirements.txt setup.py tox.ini
+	tox -e venv
+
 clean:
+	rm -rf .cache
 	rm -rf dist/
 	rm -rf build/
 	rm -rf .tox
 	rm -rf service_configuration_lib.egg-info/
+	rm -rf venv
 	find . -name '*.pyc' -delete
 	find . -name '__pycache__' -delete
