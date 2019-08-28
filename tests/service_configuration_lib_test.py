@@ -62,7 +62,6 @@ class TestServiceConfigurationLib:
                 'fake_env2': ['fake_hostname4', 'fake_hostname5'],
             },
             'needs_puppet_help': True,
-            'ssl': True,
             'vip': 'fakevip3',
         },
         'fake_service4': {
@@ -174,13 +173,6 @@ class TestServiceConfigurationLib:
         fake_service = 'fake_service3'
         fake_service_configuration = self.fake_service_configuration
         actual = service_configuration_lib.all_nodes_that_run(fake_service, fake_service_configuration)
-        assert expected == actual
-
-    def test_services_using_ssl_on_should_return_a_service(self):
-        expected = ['fake_service3']
-        fake_hostname = 'fake_hostname4'
-        fake_service_configuration = self.fake_service_configuration
-        actual = service_configuration_lib.services_using_ssl_on(fake_hostname, fake_service_configuration)
         assert expected == actual
 
     def test_all_nodes_that_receive_removes_duplicates(self):

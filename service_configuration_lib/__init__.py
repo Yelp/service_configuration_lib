@@ -312,15 +312,4 @@ def all_nodes_that_run_in_env(service, env, service_configuration=None):
         return []
 
 
-def services_using_ssl_on(hostname, service_configuration=None):
-    if service_configuration is None:
-        service_configuration = read_services_configuration()
-    deployed_services = services_deployed_on(hostname, service_configuration)
-    return [s for s in deployed_services if service_configuration[s].get('ssl')]
-
-
-def services_using_ssl_here():
-    hostname = socket.getfqdn()
-    return services_using_ssl_on(hostname)
-
 # vim: et ts=4 sw=4
