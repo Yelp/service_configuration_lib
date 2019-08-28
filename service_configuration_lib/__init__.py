@@ -56,15 +56,6 @@ def read_port(port_file):
     return port
 
 
-def read_vip(vip_file):
-    try:
-        with io.open(vip_file, 'r', encoding='UTF-8') as vip_file_fd:
-            vip = vip_file_fd.read().strip()
-    except IOError:
-        vip = None
-    return vip
-
-
 def load_yaml(fd):
     return yaml.load(fd, Loader=Loader)
 
@@ -125,7 +116,6 @@ def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA
 
 def read_service_configuration_from_dir(rootdir, service_dirname):
     port_file = os.path.join(rootdir, service_dirname, 'port')
-    vip_file = os.path.join(rootdir, service_dirname, 'vip')
     monitoring_file = os.path.join(rootdir, service_dirname, 'monitoring.yaml')
     deploy_file = os.path.join(rootdir, service_dirname, 'deploy.yaml')
     data_file = os.path.join(rootdir, service_dirname, 'data.yaml')
@@ -135,7 +125,6 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
 
     smartstack = read_smartstack(smartstack_file)
     port = smartstack.get('port', read_port(port_file))
-    vip = read_vip(vip_file)
     monitoring = read_monitoring(monitoring_file)
     deploy = read_deploy(deploy_file)
     data = read_data(data_file)
@@ -145,7 +134,6 @@ def read_service_configuration_from_dir(rootdir, service_dirname):
     return generate_service_info(
         service_information,
         port=port,
-        vip=vip,
         monitoring=monitoring,
         deploy=deploy,
         data=data,
@@ -161,7 +149,6 @@ def read_service_configuration(service_name, soa_dir=DEFAULT_SOA_DIR):
 def read_services_configuration(soa_dir=DEFAULT_SOA_DIR):
     # Returns a dict of service information, keys are the service name
     # Not all services have all fields. Who knows what might be in there
-    # You can't depend on every service having a vip, for example
     all_services = {}
     rootdir = os.path.abspath(soa_dir)
     for service_dirname in os.listdir(rootdir):
