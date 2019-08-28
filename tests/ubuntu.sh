@@ -19,8 +19,7 @@ all_nodes_that_run
 dump_service_configuration_yaml
 services_deployed_here
 services_needing_puppet_help
-services_that_run_here
-services_using_ssl"
+services_that_run_here"
 
 SERVICES_DEPLOYED="fake_runs_on_1
 fake_runs_on_2

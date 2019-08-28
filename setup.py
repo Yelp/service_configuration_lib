@@ -33,6 +33,5 @@ setup(
         'scripts/services_deployed_here',
         'scripts/services_needing_puppet_help',
         'scripts/services_that_run_here',
-        'scripts/services_using_ssl',
     ],
 )
