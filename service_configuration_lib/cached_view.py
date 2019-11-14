@@ -59,7 +59,8 @@ class ConfigsFileWatcher:
     :param configs_view: implementation of BaseCachedView interface
     :param configs_folder: Optional, path to configs root folder, `/nail/etc/services`
     :param services_names: Optional, list of service names to watch, can be wildcard or exact name
-    :param configs_names: Optional, list of config names to watch, default None will watch for everything
+    :param configs_names: Optional, list of config names to watch, can be wildcard or exact name,
+                          default None will watch for everything
     :param configs_suffixes: Optional, list of file extentions to watch, default None will watch for everything
     :param exclude_folders_filters: Optional, filter of masks to exclude folders from watching
     """
@@ -174,7 +175,7 @@ class ConfigsFileWatcher:
         `/nail/etc/services/foo/smartstack.yaml` would be converted to `foo` with a
         config name of `smartstack` and config suffix `.yaml`
 
-        Returns `None` if path is invalid or we don't care about the file, e.g. not in self._config_names
+        Returns `None` if path is invalid or we don't care about the file, e.g. not in self._configs_names
 
         :param path: the config file path e.g. `/nail/etc/services/foo/smartstack.yaml`
         :return: _ServiceConfig or `None` if the path is invalid
@@ -186,7 +187,8 @@ class ConfigsFileWatcher:
         config_name = filename.stem
         config_suffix = filename.suffix
 
-        if self._configs_names is not None and config_name not in self._configs_names:
+        if self._configs_names is not None and \
+           not any(fnmatch.fnmatch(config_name, pattern) for pattern in self._configs_names):
             return None
 
         if self._configs_suffixes is not None and config_suffix not in self._configs_suffixes:
