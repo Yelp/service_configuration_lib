@@ -1,4 +1,6 @@
 from service_configuration_lib.cached_view import _EventHandler
+from service_configuration_lib.cached_view import ConfigsFileWatcher
+from service_configuration_lib.yaml_cached_view import YamlConfigsCachedView
 
 
 def test_event_handler_create(mock_configs_file_watcher, mock_event):
@@ -146,3 +148,31 @@ def test_configs_file_watcher_process_events(configs_file_watcher):
 
     assert configs_file_watcher._notifier.read_events.call_count == 1
     assert configs_file_watcher._notifier.process_events.call_count == 1
+
+
+def test_wildcard_configs_names(
+    tmpdir,
+    mock_inotify_constants,
+    mock_watch_manager,
+    mock_notifier,
+):
+    tmpdir.join('foo', 'bar-dev.yaml').write('{baz: 42}', ensure=True)
+    tmpdir.join('foo', 'bar-prod.yaml').write('{baz: 3939}', ensure=True)
+
+    watcher = ConfigsFileWatcher(
+        configs_view=YamlConfigsCachedView(),
+        configs_names=['bar-*'],
+        configs_suffixes=['.yaml'],
+        configs_folder=tmpdir,
+    )
+
+    assert watcher.configs_view.configs == {
+        'foo': {
+            'bar-dev': {
+                'baz': 42,
+            },
+            'bar-prod': {
+                'baz': 3939,
+            },
+        },
+    }
