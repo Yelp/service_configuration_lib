@@ -76,6 +76,7 @@ class ConfigsFileWatcher:
     ) -> None:
         super().__init__()
         self.configs_view = configs_view
+        self._needs_reconfigure = False
         self._configs_folder = configs_folder
         self._services_names = services_names
         self._configs_names = None if configs_names is None else set(configs_names)
@@ -102,6 +103,9 @@ class ConfigsFileWatcher:
             self._notifier.read_events()
             self._notifier.process_events()
 
+            if self._needs_reconfigure:
+                self.setup()
+
             diff = self._processed_events_count - before_processed_count
             if diff <= 0:  # in case of overflow
                 return
@@ -113,6 +117,7 @@ class ConfigsFileWatcher:
             return
         self._notifier.stop()
         self._notifier = None
+        self._needs_reconfigure = False
 
     def setup(self) -> None:
         """Recreates state of ConfigsFileWatcher. Used as reaction on queue overflow in _EventHandler"""
@@ -225,8 +230,9 @@ class _EventHandler(pyinotify.ProcessEvent):
 
     def process_IN_Q_OVERFLOW(self, event: pyinotify.Event) -> None:
         log.warning('Got queue overflow! Recreating watchers.')
-        self.cache.setup()
+        self.cache._needs_reconfigure = True
 
     def process_IN_DELETE_SELF(self, event: pyinotify.Event) -> None:
-        log.warning('Self folder was deleted! Recreating watchers.')
-        self.cache.setup()
+        if event.pathname == os.path.abspath(self.cache._configs_folder):
+            log.warning(f'{self.cache._configs_folder} was deleted! Recreating watchers.')
+            self.cache._needs_reconfigure = True

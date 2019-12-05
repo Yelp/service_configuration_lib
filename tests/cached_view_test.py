@@ -1,3 +1,6 @@
+import mock
+import pytest
+
 from service_configuration_lib.cached_view import _EventHandler
 from service_configuration_lib.cached_view import ConfigsFileWatcher
 from service_configuration_lib.yaml_cached_view import YamlConfigsCachedView
@@ -24,13 +27,15 @@ def test_event_handler_delete(mock_configs_file_watcher, mock_event):
 def test_event_handler_overflow(mock_configs_file_watcher, mock_event):
     event_handler = _EventHandler(cache=mock_configs_file_watcher)
     event_handler.process_IN_Q_OVERFLOW(event=mock_event)
-    mock_configs_file_watcher.setup.assert_called_once_with()
+    assert mock_configs_file_watcher._needs_reconfigure
 
 
-def test_event_handler_delete_self(mock_configs_file_watcher, mock_event):
+@pytest.mark.parametrize('deleted_folder', ['/foo', '/foo/bar'])
+def test_event_handler_delete_self(mock_configs_file_watcher, mock_event, deleted_folder):
     event_handler = _EventHandler(cache=mock_configs_file_watcher)
+    mock_event.pathname = deleted_folder
     event_handler.process_IN_DELETE_SELF(event=mock_event)
-    mock_configs_file_watcher.setup.assert_called_once_with()
+    assert mock_configs_file_watcher._needs_reconfigure == (deleted_folder == '/foo')
 
 
 def test_exclude_filter_exclude_folders(configs_file_watcher):
@@ -144,10 +149,27 @@ def test_configs_file_watcher_process_events(configs_file_watcher):
     assert configs_file_watcher._notifier.read_events.call_count == 0
     assert configs_file_watcher._notifier.process_events.call_count == 0
 
+    configs_file_watcher.setup = mock.Mock()
     configs_file_watcher.process_events()
 
     assert configs_file_watcher._notifier.read_events.call_count == 1
     assert configs_file_watcher._notifier.process_events.call_count == 1
+    assert configs_file_watcher.setup.call_count == 0
+
+
+def test_configs_file_watcher_process_events_reconfigure(configs_file_watcher):
+    configs_file_watcher._notifier.check_events.side_effect = [True, True, False]
+    configs_file_watcher._needs_reconfigure = True
+
+    assert configs_file_watcher._notifier.read_events.call_count == 0
+    assert configs_file_watcher._notifier.process_events.call_count == 0
+
+    configs_file_watcher.setup = mock.Mock()
+    configs_file_watcher.process_events()
+
+    assert configs_file_watcher._notifier.read_events.call_count == 1
+    assert configs_file_watcher._notifier.process_events.call_count == 1
+    assert configs_file_watcher.setup.call_count == 1
 
 
 def test_wildcard_configs_names(

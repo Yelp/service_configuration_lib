@@ -11,7 +11,7 @@ from service_configuration_lib.yaml_cached_view import YamlConfigsCachedView
 
 @pytest.fixture
 def mock_configs_file_watcher():
-    return MagicMock(spec=ConfigsFileWatcher)
+    return MagicMock(spec=ConfigsFileWatcher, _configs_folder='/foo', _needs_reconfigure=False)
 
 
 @pytest.fixture
