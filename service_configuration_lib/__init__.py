@@ -28,7 +28,7 @@ try:
 except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
     Loader = yaml.SafeLoader
 
-DEFAULT_SOA_DIR = '/nail/etc/services'
+DEFAULT_SOA_DIR = os.getenv('DEFAULT_SOA_DIR', '/nail/etc/services')
 log = logging.getLogger(__name__)
 _yaml_cache = {}
 _use_yaml_cache = True
