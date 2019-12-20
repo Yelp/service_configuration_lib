@@ -20,17 +20,18 @@ import logging
 import os
 import socket
 import sys
+from typing import Mapping
 
 import yaml
 
 try:
     from yaml.cyaml import CSafeLoader as Loader
 except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
-    Loader = yaml.SafeLoader
+    Loader = yaml.SafeLoader  # type: ignore
 
 DEFAULT_SOA_DIR = '/nail/etc/services'
 log = logging.getLogger(__name__)
-_yaml_cache = {}
+_yaml_cache: Mapping[str, Mapping] = {}
 _use_yaml_cache = True
 
 
