@@ -21,10 +21,15 @@ setup(
     provides=['service_configuration_lib'],
     description='Start, stop, and inspect Yelp SOA services',
     url='https://github.com/Yelp/service_configuration_lib',
-    author='Yelp Operations Team',
+    author='Yelp Compute Infrastructure Team',
     author_email='opensource+scl@yelp.com',
     packages=find_packages(exclude=['tests', 'scripts']),
-    install_requires=['PyYAML >= 3.0', 'pyinotify'],
+    install_requires=[
+        'ephemeral-port-reserve >= 1.1.0',
+        'PyYAML >= 5.1',
+        'pyinotify',
+        'requests>=2.18.4',
+    ],
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
         'scripts/all_nodes_that_receive',

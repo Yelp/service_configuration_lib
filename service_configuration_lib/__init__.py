@@ -15,6 +15,7 @@
 from __future__ import print_function
 
 import copy
+import hashlib
 import io
 import logging
 import os
@@ -22,6 +23,7 @@ import socket
 import sys
 from typing import Mapping
 
+import ephemeral_port_reserve
 import yaml
 
 try:
@@ -62,30 +64,30 @@ def load_yaml(fd):
 
 
 def read_monitoring(monitoring_file):
-    return _read_yaml_file(monitoring_file)
+    return read_yaml_file(monitoring_file)
 
 
 def read_deploy(deploy_file):
-    return _read_yaml_file(deploy_file)
+    return read_yaml_file(deploy_file)
 
 
 def read_data(data_file):
-    return _read_yaml_file(data_file)
+    return read_yaml_file(data_file)
 
 
 def read_smartstack(smartstack_file):
-    return _read_yaml_file(smartstack_file)
+    return read_yaml_file(smartstack_file)
 
 
 def read_service_information(service_file):
-    return _read_yaml_file(service_file)
+    return read_yaml_file(service_file)
 
 
 def read_dependencies(dependencies_file):
-    return _read_yaml_file(dependencies_file)
+    return read_yaml_file(dependencies_file)
 
 
-def _read_yaml_file(file_name):
+def read_yaml_file(file_name):
     if _use_yaml_cache and file_name in _yaml_cache:
         return copy.deepcopy(_yaml_cache[file_name])
     data = {}
@@ -113,7 +115,7 @@ def generate_service_info(service_information, **kwargs):
 
 
 def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR):
-    return _read_yaml_file(os.path.join(
+    return read_yaml_file(os.path.join(
         os.path.abspath(soa_dir), service_name, extra_info + '.yaml',
     ))
 
@@ -301,6 +303,16 @@ def all_nodes_that_run_in_env(service, env, service_configuration=None):
         return list(sorted(env_runs_on[env]))
     else:
         return []
+
+
+def pick_random_port(hash_key):
+    """Return a random port.
+    Tries to return the same port for the same service each time, when
+    possible.
+    """
+    hash_number = int(hashlib.sha1(hash_key).hexdigest(), 16)
+    preferred_port = 33000 + (hash_number % 25000)
+    return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
 
 
 # vim: et ts=4 sw=4
