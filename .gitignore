@@ -9,3 +9,4 @@ build/
 virtualenv_run
 venv
 .bash_history
+.mypy_cache

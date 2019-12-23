@@ -97,6 +97,7 @@ class ConfigsFileWatcher:
         Args:
         :param limit: Optional, rough limit of events to process per call
         """
+        assert self._notifier
         before_processed_count = self._processed_events_count
         currently_processed = 0
         while currently_processed < limit and self._notifier.check_events(timeout=0):

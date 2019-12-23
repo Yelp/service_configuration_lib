@@ -274,7 +274,7 @@ class TestServiceConfigurationLib:
 
     @mock.patch('os.path.join', return_value='together_forever')
     @mock.patch('os.path.abspath', return_value='real_soa_dir')
-    @mock.patch('service_configuration_lib._read_yaml_file', return_value={'what': 'info'})
+    @mock.patch('service_configuration_lib.read_yaml_file', return_value={'what': 'info'})
     def test_read_extra_service_information(self, info_patch, abs_patch, join_patch):
         expected = {'what': 'info'}
         actual = service_configuration_lib.read_extra_service_information(
@@ -288,22 +288,22 @@ class TestServiceConfigurationLib:
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'data': 'mock'})
-    def test_read_yaml_file_single(self, load_patch, open_patch):
+    def testread_yaml_file_single(self, load_patch, open_patch):
         expected = {'data': 'mock'}
         filename = 'fake_fname_uno'
-        actual = service_configuration_lib._read_yaml_file(filename)
+        actual = service_configuration_lib.read_yaml_file(filename)
         open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         assert expected == actual
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'mmmm': 'tests'})
-    def test_read_yaml_file_with_cache(self, load_patch, open_patch):
+    def testread_yaml_file_with_cache(self, load_patch, open_patch):
         expected = {'mmmm': 'tests'}
         filename = 'fake_fname_dos'
         service_configuration_lib.enable_yaml_cache()
-        actual = service_configuration_lib._read_yaml_file(filename)
-        actual_two = service_configuration_lib._read_yaml_file(filename)
+        actual = service_configuration_lib.read_yaml_file(filename)
+        actual_two = service_configuration_lib.read_yaml_file(filename)
         open_patch.assert_called_once_with(filename, 'r', encoding='UTF-8')
         load_patch.assert_called_once_with(open_patch.return_value.__enter__().read())
         assert expected == actual
@@ -315,12 +315,12 @@ class TestServiceConfigurationLib:
 
     @mock.patch('io.open', autospec=True)
     @mock.patch('service_configuration_lib.load_yaml', return_value={'water': 'slide'})
-    def test_read_yaml_file_no_cache(self, load_patch, open_patch):
+    def testread_yaml_file_no_cache(self, load_patch, open_patch):
         expected = {'water': 'slide'}
         filename = 'fake_fname_tres'
         service_configuration_lib.disable_yaml_cache()
-        actual = service_configuration_lib._read_yaml_file(filename)
-        actual_two = service_configuration_lib._read_yaml_file(filename)
+        actual = service_configuration_lib.read_yaml_file(filename)
+        actual_two = service_configuration_lib.read_yaml_file(filename)
         open_patch.assert_any_call(filename, 'r', encoding='UTF-8')
         assert open_patch.call_count == 2
         load_patch.assert_any_call(open_patch.return_value.__enter__().read())
