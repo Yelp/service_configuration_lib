@@ -64,7 +64,7 @@ def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
         'spark.executorEnv.PAASTA_SERVICE': 'spark-service',
         'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
         'spark.master': 'mesos://the-mesos-leader:5050',
-        'spark.mesos.constraints': 'pool:{paasta_pool}',
+        'spark.mesos.constraints': 'pool:spark-pool',
         'spark.mesos.executor.docker.forcePullImage': 'true',
         'spark.mesos.executor.docker.image': 'docker-dev.nowhere.com/spark:latest',
         'spark.mesos.executor.docker.parameters': 'cpus=2',
