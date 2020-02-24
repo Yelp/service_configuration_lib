@@ -63,7 +63,7 @@ def get_mesos_spark_env(
         'spark.executor.cores': '2',
         'spark.executor.memory': '4g',
         # Use \; for multiple constraints, e.g. 'instance_type:m4.10xlarge\;pool:default'
-        'spark.mesos.constraints': 'pool:{paasta_pool}',
+        'spark.mesos.constraints': f'pool:{paasta_pool}',
         'spark.mesos.executor.docker.forcePullImage': 'true',
         'spark.eventLog.enabled': 'true',
     }
@@ -105,8 +105,8 @@ def get_mesos_spark_env(
         raise ValueError('Executor memory {} not in format dg.'.format(spark_env['spark.executor.memory']))
     if int(exec_mem[:-1]) > 32:
         log.warning(
-            'You have specified a large amount of memory ({exec_mem[:-1]} > 32g); '
-            'please make sure that you actually need this much, or reduce your memory requirements',
+            f'You have specified a large amount of memory ({exec_mem[:-1]} > 32g); '
+            f'please make sure that you actually need this much, or reduce your memory requirements',
         )
 
     return spark_env

@@ -3,5 +3,5 @@
 coverage<5
 mock
 mypy
-pre-commit>=1.0.0
+pre-commit==1.21.0
 pytest
