@@ -23,11 +23,24 @@ NON_CONFIGURABLE_SPARK_OPTS = {
 log = logging.Logger(__name__)
 
 
+def get_mesos_spark_auth_env() -> Mapping[str, str]:
+    '''Set environment variables needed for spark driver to authenticate to Mesos.
+
+    See https://spark.apache.org/docs/latest/running-on-mesos.html#authenticating-to-mesos for
+    more details.
+    '''
+    return {
+        'SPARK_MESOS_PRINCIPAL': 'spark',
+        # The actual mesos secret will be decrypted and injected on mesos master when assigning
+        # tasks.
+        'SPARK_MESOS_SECRET': 'SHARED_SECRET(SPARK_MESOS_SECRET)',
+    }
+
+
 def get_mesos_spark_env(
     spark_app_name: str,
     spark_ui_port: str,
     mesos_leader: str,
-    mesos_secret: str,
     paasta_cluster: str,
     paasta_pool: str,
     paasta_service: str,
@@ -54,8 +67,6 @@ def get_mesos_spark_env(
             f'label=paasta_service={paasta_service},label=paasta_instance={paasta_instance}',
         'spark.mesos.executor.docker.volumes': ','.join(volumes),
         'spark.mesos.executor.docker.image': docker_img,
-        'spark.mesos.principal': 'spark',
-        'spark.mesos.secret': mesos_secret,
 
         # User-configurable defaults here
         'spark.app.name': spark_app_name,

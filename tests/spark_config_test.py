@@ -1,5 +1,6 @@
 import pytest
 
+from service_configuration_lib.spark_config import get_mesos_spark_auth_env
 from service_configuration_lib.spark_config import get_mesos_spark_env
 
 
@@ -9,7 +10,6 @@ def config_args():
         spark_app_name='my-spark-app',
         spark_ui_port='1234',
         mesos_leader='the-mesos-leader:5050',
-        mesos_secret='SUPER_SECRET_STRING',
         paasta_cluster='westeros-devc',
         paasta_pool='spark-pool',
         paasta_service='spark-service',
@@ -69,11 +69,16 @@ def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
         'spark.mesos.executor.docker.image': 'docker-dev.nowhere.com/spark:latest',
         'spark.mesos.executor.docker.parameters': 'cpus=2',
         'spark.mesos.executor.docker.volumes': '/nail/var:/nail/var:ro,/etc/foo:/etc/foo:ro',
-        'spark.mesos.principal': 'spark',
-        'spark.mesos.secret': 'SUPER_SECRET_STRING',
         'spark.sql.shuffle.partitions': shuffle_partitions or '8',
         'spark.ui.port': '1234',
     }
     if needs_docker_cfg:
         expected['spark.mesos.uris'] = 'file:///root/.dockercfg'
     assert spark_env == expected
+
+
+def test_get_mesos_spark_auth_env():
+    assert get_mesos_spark_auth_env() == {
+        'SPARK_MESOS_PRINCIPAL': 'spark',
+        'SPARK_MESOS_SECRET': 'SHARED_SECRET(SPARK_MESOS_SECRET)',
+    }
