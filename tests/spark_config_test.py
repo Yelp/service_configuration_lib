@@ -1,5 +1,6 @@
 import pytest
 
+from service_configuration_lib.spark_config import get_k8s_spark_env
 from service_configuration_lib.spark_config import get_mesos_spark_auth_env
 from service_configuration_lib.spark_config import get_mesos_spark_env
 
@@ -16,6 +17,20 @@ def config_args():
         paasta_instance='batch',
         docker_img='docker-dev.nowhere.com/spark:latest',
         volumes=['/nail/var:/nail/var:ro', '/etc/foo:/etc/foo:ro'],
+        user_spark_opts={},
+        event_log_dir='/var/log',
+    )
+
+
+@pytest.fixture
+def k8s_config_args():
+    return dict(
+        spark_app_name='my-spark-app',
+        spark_ui_port='1234',
+        paasta_cluster='westeros-devc',
+        paasta_service='spark-service',
+        paasta_instance='batch',
+        docker_img='docker-dev.nowhere.com/spark:latest',
         user_spark_opts={},
         event_log_dir='/var/log',
     )
@@ -81,4 +96,31 @@ def test_get_mesos_spark_auth_env():
     assert get_mesos_spark_auth_env() == {
         'SPARK_MESOS_PRINCIPAL': 'spark',
         'SPARK_MESOS_SECRET': 'SHARED_SECRET(SPARK_MESOS_SECRET)',
+    }
+
+
+@pytest.mark.parametrize('shuffle_partitions', [None, 20])
+def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
+    k8s_config_args['user_spark_opts']['spark.sql.shuffle.partitions'] = shuffle_partitions
+    assert get_k8s_spark_env(**k8s_config_args) == {
+        'spark.master': 'k8s://https://k8s.paasta-westeros-devc.yelp:16443',
+        'spark.ui.port': '1234',
+        'spark.executorEnv.PAASTA_SERVICE': 'spark-service',
+        'spark.executorEnv.PAASTA_INSTANCE': 'batch',
+        'spark.executorEnv.PAASTA_CLUSTER': 'westeros-devc',
+        'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
+        'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
+        'spark.kubernetes.pyspark.pythonVersion': '3',
+        'spark.kubernetes.container.image': 'docker-dev.nowhere.com/spark:latest',
+        'spark.kubernetes.namespace': 'spark',
+        'spark.kubernetes.authenticate.caCertFile': '/etc/spark_k8s_secrets/westeros-devc-ca.crt',
+        'spark.kubernetes.authenticate.clientKeyFile': '/etc/spark_k8s_secrets/westeros-devc-client.key',
+        'spark.kubernetes.authenticate.clientCertFile': '/etc/spark_k8s_secrets/westeros-devc-client.crt',
+        'spark.app.name': 'my-spark-app',
+        'spark.cores.max': '4',
+        'spark.executor.cores': '2',
+        'spark.executor.memory': '4g',
+        'spark.eventLog.enabled': 'true',
+        'spark.sql.shuffle.partitions': shuffle_partitions or '8',
+        'spark.eventLog.dir': '/var/log',
     }
