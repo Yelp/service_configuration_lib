@@ -19,7 +19,14 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.executorEnv.SPARK_EXECUTOR_DIRS',
     'spark.hadoop.fs.s3a.access.key',
     'spark.hadoop.fs.s3a.secret.key',
+    'spark.kubernetes.pyspark.pythonVersion',
+    'spark.kubernetes.container.image',
+    'spark.kubernetes.namespace',
+    'spark.kubernetes.authenticate.caCertFile',
+    'spark.kubernetes.authenticate.clientKeyFile',
+    'spark.kubernetes.authenticate.clientCertFile',
 }
+K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 log = logging.Logger(__name__)
 
 
@@ -37,6 +44,12 @@ def get_mesos_spark_auth_env() -> Mapping[str, str]:
     }
 
 
+def _check_non_configurable_spark_opts(user_spark_opts: Mapping[str, Any]) -> None:
+    user_non_config_opts = set(user_spark_opts) & NON_CONFIGURABLE_SPARK_OPTS
+    if user_non_config_opts:
+        raise ValueError(f'The following Spark options are not user-configurable: {user_non_config_opts}')
+
+
 def get_mesos_spark_env(
     spark_app_name: str,
     spark_ui_port: str,
@@ -51,9 +64,7 @@ def get_mesos_spark_env(
     event_log_dir: Optional[str] = None,
     needs_docker_cfg: bool = False,
 ) -> Mapping[str, str]:
-    user_non_config_opts = set(user_spark_opts) & NON_CONFIGURABLE_SPARK_OPTS
-    if user_non_config_opts:
-        raise ValueError(f'The following Spark options are not user-configurable: {user_non_config_opts}')
+    _check_non_configurable_spark_opts(user_spark_opts)
 
     spark_env: MutableMapping[str, str] = {
         'spark.master': f'mesos://{mesos_leader}',
@@ -82,7 +93,55 @@ def get_mesos_spark_env(
         spark_env['spark.mesos.uris'] = 'file:///root/.dockercfg'
 
     spark_env = {**spark_env, **user_spark_opts}
+    spark_env['spark.mesos.executor.docker.parameters'] = 'cpus={}'.format(spark_env['spark.executor.cores'])
+    _validate_spark_env(spark_env, event_log_dir)
 
+    return spark_env
+
+
+def get_k8s_spark_env(
+    spark_app_name: str,
+    spark_ui_port: str,
+    paasta_cluster: str,
+    paasta_service: str,
+    paasta_instance: str,
+    docker_img: str,
+    user_spark_opts: Mapping[str, Any],
+    event_log_dir: Optional[str] = None,
+) -> Mapping[str, str]:
+    _check_non_configurable_spark_opts(user_spark_opts)
+
+    spark_env: MutableMapping[str, str] = {
+        'spark.master': f'k8s://https://k8s.paasta-{paasta_cluster}.yelp:16443',
+        'spark.ui.port': spark_ui_port,
+        'spark.executorEnv.PAASTA_SERVICE': paasta_service,
+        'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
+        'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
+        'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
+        'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
+        'spark.kubernetes.pyspark.pythonVersion': '3',
+        'spark.kubernetes.container.image': docker_img,
+        'spark.kubernetes.namespace': 'spark',
+        'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
+        'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
+        'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
+
+        # User-configurable defaults here
+        'spark.app.name': spark_app_name,
+        'spark.cores.max': '4',
+        'spark.executor.cores': '2',
+        'spark.executor.memory': '4g',
+        'spark.eventLog.enabled': 'true',
+    }
+    spark_env = {**spark_env, **user_spark_opts}
+    _validate_spark_env(spark_env, event_log_dir)
+
+    return spark_env
+
+
+def _validate_spark_env(spark_env: MutableMapping[str, str], event_log_dir: Optional[str]) -> None:
+    '''Validate, and possibly modify, values of spark_env
+    '''
     # spark_opts could be a mix of string and numbers.
     if int(spark_env['spark.executor.cores']) > int(spark_env['spark.cores.max']):
         raise ValueError(
@@ -110,7 +169,6 @@ def get_mesos_spark_env(
             spark_env['spark.eventLog.dir'] = event_log_dir
         log.info(f'Spark event logs available in {event_log_dir}')
 
-    spark_env['spark.mesos.executor.docker.parameters'] = 'cpus={}'.format(spark_env['spark.executor.cores'])
     exec_mem = spark_env['spark.executor.memory']
     if exec_mem[-1] != 'g' or not exec_mem[:-1].isdigit():
         raise ValueError('Executor memory {} not in format dg.'.format(spark_env['spark.executor.memory']))
@@ -119,8 +177,6 @@ def get_mesos_spark_env(
             f'You have specified a large amount of memory ({exec_mem[:-1]} > 32g); '
             f'please make sure that you actually need this much, or reduce your memory requirements',
         )
-
-    return spark_env
 
 
 def stringify_spark_env(spark_env: Mapping[str, str]) -> str:
