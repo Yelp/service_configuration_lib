@@ -25,6 +25,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.authenticate.caCertFile',
     'spark.kubernetes.authenticate.clientKeyFile',
     'spark.kubernetes.authenticate.clientCertFile',
+    'spark.kubernetes.container.image.pullPolicy',
 }
 K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 log = logging.Logger(__name__)
@@ -46,7 +47,13 @@ def get_mesos_spark_auth_env() -> Mapping[str, str]:
 
 def _check_non_configurable_spark_opts(user_spark_opts: Mapping[str, Any]) -> None:
     user_non_config_opts = set(user_spark_opts) & NON_CONFIGURABLE_SPARK_OPTS
-    if user_non_config_opts:
+    if (
+        user_non_config_opts or
+        any([
+            spark_opt.startswith('spark.kubernetes.executor.volumes.hostPath')
+            for spark_opt in user_spark_opts.keys()
+        ])
+    ):
         raise ValueError(f'The following Spark options are not user-configurable: {user_non_config_opts}')
 
 
@@ -66,6 +73,16 @@ def get_mesos_spark_env(
 ) -> Mapping[str, str]:
     _check_non_configurable_spark_opts(user_spark_opts)
 
+    for i, volume in enumerate(volumes):
+        volume_elements = volume.split(':')
+        if len(volume_elements) == 3:
+            volume_elements[-1] = volume_elements[-1].lower()
+            if volume_elements[-1] not in ('rw', 'ro'):
+                raise ValueError(
+                    f'{volume} has incorrect file mode format. Valid formats are rw and ro (lowercased).',
+                )
+            else:
+                volumes[i] = ':'.join(volume_elements)
     spark_env: MutableMapping[str, str] = {
         'spark.master': f'mesos://{mesos_leader}',
         'spark.ui.port': spark_ui_port,
@@ -93,10 +110,17 @@ def get_mesos_spark_env(
         spark_env['spark.mesos.uris'] = 'file:///root/.dockercfg'
 
     spark_env = {**spark_env, **user_spark_opts}
-    spark_env['spark.mesos.executor.docker.parameters'] = 'cpus={}'.format(spark_env['spark.executor.cores'])
+    spark_env['spark.mesos.executor.docker.parameters'] = 'cpus={},{}'.format(
+        spark_env['spark.executor.cores'],
+        spark_env['spark.mesos.executor.docker.parameters'],
+    )
     _validate_spark_env(spark_env, event_log_dir)
 
     return spark_env
+
+
+def _generate_volume_name(volume):
+    return volume['containerPath']
 
 
 def get_k8s_spark_env(
@@ -106,6 +130,7 @@ def get_k8s_spark_env(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
+    volumes: List[Mapping[str, str]],
     user_spark_opts: Mapping[str, Any],
     event_log_dir: Optional[str] = None,
 ) -> Mapping[str, str]:
@@ -125,6 +150,7 @@ def get_k8s_spark_env(
         'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
         'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
         'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
+        'spark.kubernetes.container.image.pullPolicy': 'Always',
 
         # User-configurable defaults here
         'spark.app.name': spark_app_name,
@@ -133,6 +159,13 @@ def get_k8s_spark_env(
         'spark.executor.memory': '4g',
         'spark.eventLog.enabled': 'true',
     }
+    for volume in volumes:
+        volume_name = _generate_volume_name(volume)
+        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
+        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
+            'true' if volume['mode'].lower() == 'ro' else 'false'
+        )
+        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
     spark_env = {**spark_env, **user_spark_opts}
     _validate_spark_env(spark_env, event_log_dir)
 
