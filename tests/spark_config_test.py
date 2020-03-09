@@ -16,7 +16,7 @@ def config_args():
         paasta_service='spark-service',
         paasta_instance='batch',
         docker_img='docker-dev.nowhere.com/spark:latest',
-        volumes=['/nail/var:/nail/var:ro', '/etc/foo:/etc/foo:ro'],
+        volumes=['/nail/var:/nail/var:ro', '/etc/foo:/etc/foo:RO'],
         user_spark_opts={},
         event_log_dir='/var/log',
     )
@@ -33,11 +33,29 @@ def k8s_config_args():
         docker_img='docker-dev.nowhere.com/spark:latest',
         user_spark_opts={},
         event_log_dir='/var/log',
+        volumes=[
+            {
+                'hostPath': '/nail/etc/beep',
+                'containerPath': '/nail/etc/beep',
+                'mode': 'RO',
+            },
+            {
+                'hostPath': '/nail/etc/bop',
+                'containerPath': '/nail/etc/bop',
+                'mode': 'RW',
+            },
+        ],
     )
 
 
 def test_non_config_opts(config_args):
     config_args['user_spark_opts']['spark.master'] = 'foo'
+    with pytest.raises(ValueError):
+        get_mesos_spark_env(**config_args)
+
+
+def test_non_config_opts_k8s_volume(config_args):
+    config_args['user_spark_opts']['spark.kubernetes.executor.volumes.hostPath.some_path.mount.path'] = 'foo'
     with pytest.raises(ValueError):
         get_mesos_spark_env(**config_args)
 
@@ -82,7 +100,8 @@ def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
         'spark.mesos.constraints': 'pool:spark-pool',
         'spark.mesos.executor.docker.forcePullImage': 'true',
         'spark.mesos.executor.docker.image': 'docker-dev.nowhere.com/spark:latest',
-        'spark.mesos.executor.docker.parameters': 'cpus=2',
+        'spark.mesos.executor.docker.parameters': 'cpus=2,label=paasta_service=spark-service,'
+        'label=paasta_instance=batch',
         'spark.mesos.executor.docker.volumes': '/nail/var:/nail/var:ro,/etc/foo:/etc/foo:ro',
         'spark.sql.shuffle.partitions': shuffle_partitions or '8',
         'spark.ui.port': '1234',
@@ -90,6 +109,12 @@ def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
     if needs_docker_cfg:
         expected['spark.mesos.uris'] = 'file:///root/.dockercfg'
     assert spark_env == expected
+
+
+def test_get_mesos_spark_env_incorrect_file_mode(config_args):
+    config_args['volumes'] = ['/nail/var:/nail/var:false', '/etc/foo:/etc/foo:false']
+    with pytest.raises(ValueError):
+        get_mesos_spark_env(**config_args)
 
 
 def test_get_mesos_spark_auth_env():
@@ -116,6 +141,7 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.kubernetes.authenticate.caCertFile': '/etc/spark_k8s_secrets/westeros-devc-ca.crt',
         'spark.kubernetes.authenticate.clientKeyFile': '/etc/spark_k8s_secrets/westeros-devc-client.key',
         'spark.kubernetes.authenticate.clientCertFile': '/etc/spark_k8s_secrets/westeros-devc-client.crt',
+        'spark.kubernetes.container.image.pullPolicy': 'Always',
         'spark.app.name': 'my-spark-app',
         'spark.cores.max': '4',
         'spark.executor.cores': '2',
@@ -123,4 +149,10 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.eventLog.enabled': 'true',
         'spark.sql.shuffle.partitions': shuffle_partitions or '8',
         'spark.eventLog.dir': '/var/log',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/beep.mount.path': '/nail/etc/beep',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/beep.mount.readOnly': 'true',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/beep.options.path': '/nail/etc/beep',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/bop.mount.path': '/nail/etc/bop',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/bop.mount.readOnly': 'false',
+        'spark.kubernetes.executor.volumes.hostPath./nail/etc/bop.options.path': '/nail/etc/bop',
     }
