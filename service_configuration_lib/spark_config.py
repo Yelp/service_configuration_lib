@@ -119,10 +119,6 @@ def get_mesos_spark_env(
     return spark_env
 
 
-def _generate_volume_name(volume):
-    return volume['containerPath']
-
-
 def get_k8s_spark_env(
     spark_app_name: str,
     spark_ui_port: str,
@@ -159,8 +155,8 @@ def get_k8s_spark_env(
         'spark.executor.memory': '4g',
         'spark.eventLog.enabled': 'true',
     }
-    for volume in volumes:
-        volume_name = _generate_volume_name(volume)
+    for i, volume in enumerate(volumes):
+        volume_name = i
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
             'true' if volume['mode'].lower() == 'ro' else 'false'
