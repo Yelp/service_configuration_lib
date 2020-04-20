@@ -155,4 +155,6 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.kubernetes.executor.volumes.hostPath.1.mount.path': '/nail/etc/bop',
         'spark.kubernetes.executor.volumes.hostPath.1.mount.readOnly': 'false',
         'spark.kubernetes.executor.volumes.hostPath.1.options.path': '/nail/etc/bop',
+        'spark.kubernetes.executor.label.yelp.com/paasta_instance': 'batch',
+        'spark.kubernetes.executor.label.yelp.com/paasta_service': 'spark-service',
     }
