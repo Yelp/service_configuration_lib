@@ -26,6 +26,9 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.authenticate.clientKeyFile',
     'spark.kubernetes.authenticate.clientCertFile',
     'spark.kubernetes.container.image.pullPolicy',
+    'spark.kubernetes.executor.label.yelp.com/paasta_service',
+    'spark.kubernetes.executor.label.yelp.com/paasta_instance',
+    'spark.kubernetes.executor.label.yelp.com/paasta_cluster',
 }
 K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 log = logging.Logger(__name__)
@@ -147,6 +150,9 @@ def get_k8s_spark_env(
         'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
         'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
         'spark.kubernetes.container.image.pullPolicy': 'Always',
+        'spark.kubernetes.executor.label.yelp.com/paasta_service': paasta_service,
+        'spark.kubernetes.executor.label.yelp.com/paasta_instance': paasta_instance,
+        'spark.kubernetes.executor.label.yelp.com/paasta_cluster': paasta_cluster,
 
         # User-configurable defaults here
         'spark.app.name': spark_app_name,
