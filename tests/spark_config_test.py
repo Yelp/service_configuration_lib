@@ -158,4 +158,7 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.kubernetes.executor.label.yelp.com/paasta_instance': 'batch',
         'spark.kubernetes.executor.label.yelp.com/paasta_service': 'spark-service',
         'spark.kubernetes.executor.label.yelp.com/paasta_cluster': 'westeros-devc',
+        'spark.kubernetes.executor.label.paasta.yelp.com/service': 'spark-service',
+        'spark.kubernetes.executor.label.paasta.yelp.com/instance': 'batch',
+        'spark.kubernetes.executor.label.paasta.yelp.com/cluster': 'westeros-devc',
     }

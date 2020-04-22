@@ -29,6 +29,9 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.yelp.com/paasta_service',
     'spark.kubernetes.executor.label.yelp.com/paasta_instance',
     'spark.kubernetes.executor.label.yelp.com/paasta_cluster',
+    'spark.kubernetes.executor.label.paasta.yelp.com/service',
+    'spark.kubernetes.executor.label.paasta.yelp.com/instance',
+    'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
 K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 log = logging.Logger(__name__)
@@ -153,6 +156,9 @@ def get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/paasta_service': paasta_service,
         'spark.kubernetes.executor.label.yelp.com/paasta_instance': paasta_instance,
         'spark.kubernetes.executor.label.yelp.com/paasta_cluster': paasta_cluster,
+        'spark.kubernetes.executor.label.paasta.yelp.com/service': paasta_service,
+        'spark.kubernetes.executor.label.paasta.yelp.com/instance': paasta_instance,
+        'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
 
         # User-configurable defaults here
         'spark.app.name': spark_app_name,
