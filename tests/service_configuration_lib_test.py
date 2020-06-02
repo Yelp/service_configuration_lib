@@ -283,7 +283,7 @@ class TestServiceConfigurationLib:
         )
         abs_patch.assert_called_once_with('whatsadir')
         join_patch.assert_called_once_with('real_soa_dir', 'noname', 'noinfo.yaml')
-        info_patch.assert_called_once_with('together_forever')
+        info_patch.assert_called_once_with('together_forever', deepcopy=True)
         assert expected == actual
 
     @mock.patch('io.open', autospec=True)

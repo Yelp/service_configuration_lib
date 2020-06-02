@@ -87,9 +87,13 @@ def read_dependencies(dependencies_file):
     return read_yaml_file(dependencies_file)
 
 
-def read_yaml_file(file_name):
+def read_yaml_file(file_name, deepcopy=True):
     if _use_yaml_cache and file_name in _yaml_cache:
-        return copy.deepcopy(_yaml_cache[file_name])
+        original = _yaml_cache[file_name]
+        if deepcopy:
+            return copy.deepcopy(original)
+        else:
+            return original
     data = {}
     try:
         with io.open(file_name, 'r', encoding='UTF-8') as fd:
@@ -114,10 +118,13 @@ def generate_service_info(service_information, **kwargs):
     return service_info
 
 
-def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR):
-    return read_yaml_file(os.path.join(
-        os.path.abspath(soa_dir), service_name, extra_info + '.yaml',
-    ))
+def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR, deepcopy=True):
+    return read_yaml_file(
+        os.path.join(
+            os.path.abspath(soa_dir), service_name, extra_info + '.yaml',
+        ),
+        deepcopy=deepcopy,
+    )
 
 
 def read_service_configuration_from_dir(rootdir, service_dirname):
