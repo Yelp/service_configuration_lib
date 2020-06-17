@@ -134,6 +134,7 @@ def get_k8s_spark_env(
     docker_img: str,
     volumes: List[Mapping[str, str]],
     user_spark_opts: Mapping[str, Any],
+    paasta_pool: str,
     event_log_dir: Optional[str] = None,
 ) -> Mapping[str, str]:
     _check_non_configurable_spark_opts(user_spark_opts)
@@ -159,6 +160,8 @@ def get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/service': paasta_service,
         'spark.kubernetes.executor.label.paasta.yelp.com/instance': paasta_instance,
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
+        'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
+        'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
 
         # User-configurable defaults here
         'spark.app.name': spark_app_name,
