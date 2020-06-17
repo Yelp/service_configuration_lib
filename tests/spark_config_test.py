@@ -30,6 +30,7 @@ def k8s_config_args():
         paasta_cluster='westeros-devc',
         paasta_service='spark-service',
         paasta_instance='batch',
+        paasta_pool='spark-pool',
         docker_img='docker-dev.nowhere.com/spark:latest',
         user_spark_opts={},
         event_log_dir='/var/log',
@@ -161,4 +162,6 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.kubernetes.executor.label.paasta.yelp.com/service': 'spark-service',
         'spark.kubernetes.executor.label.paasta.yelp.com/instance': 'batch',
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': 'westeros-devc',
+        'spark.kubernetes.node.selector.yelp.com/pool': 'spark-pool',
+        'spark.kubernetes.executor.label.yelp.com/pool': 'spark-pool',
     }
