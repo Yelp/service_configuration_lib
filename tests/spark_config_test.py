@@ -138,7 +138,7 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
         'spark.kubernetes.pyspark.pythonVersion': '3',
         'spark.kubernetes.container.image': 'docker-dev.nowhere.com/spark:latest',
-        'spark.kubernetes.namespace': 'spark',
+        'spark.kubernetes.namespace': 'paasta-spark',
         'spark.kubernetes.authenticate.caCertFile': '/etc/spark_k8s_secrets/westeros-devc-ca.crt',
         'spark.kubernetes.authenticate.clientKeyFile': '/etc/spark_k8s_secrets/westeros-devc-client.key',
         'spark.kubernetes.authenticate.clientCertFile': '/etc/spark_k8s_secrets/westeros-devc-client.crt',
