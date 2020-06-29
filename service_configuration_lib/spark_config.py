@@ -149,7 +149,7 @@ def get_k8s_spark_env(
         'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
         'spark.kubernetes.pyspark.pythonVersion': '3',
         'spark.kubernetes.container.image': docker_img,
-        'spark.kubernetes.namespace': 'spark',
+        'spark.kubernetes.namespace': 'paasta-spark',
         'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
         'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
         'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
