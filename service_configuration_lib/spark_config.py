@@ -110,7 +110,7 @@ def get_mesos_spark_env(
         # Use \; for multiple constraints, e.g. 'instance_type:m4.10xlarge\;pool:default'
         'spark.mesos.constraints': f'pool:{paasta_pool}',
         'spark.mesos.executor.docker.forcePullImage': 'true',
-        'spark.eventLog.enabled': 'true',
+        'spark.eventLog.enabled': 'true' if event_log_dir else 'false',
     }
     if needs_docker_cfg:
         spark_env['spark.mesos.uris'] = 'file:///root/.dockercfg'
@@ -168,7 +168,7 @@ def get_k8s_spark_env(
         'spark.cores.max': '4',
         'spark.executor.cores': '2',
         'spark.executor.memory': '4g',
-        'spark.eventLog.enabled': 'true',
+        'spark.eventLog.enabled': 'true' if event_log_dir else 'false',
     }
     for i, volume in enumerate(volumes):
         volume_name = i

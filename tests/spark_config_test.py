@@ -73,12 +73,6 @@ def test_invalid_mem(config_args):
         get_mesos_spark_env(**config_args)
 
 
-def test_no_event_log_dir(config_args):
-    config_args['event_log_dir'] = None
-    with pytest.raises(ValueError):
-        get_mesos_spark_env(**config_args)
-
-
 @pytest.mark.parametrize('shuffle_partitions', [None, 20])
 @pytest.mark.parametrize('needs_docker_cfg', [True, False])
 def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
@@ -110,6 +104,13 @@ def test_get_mesos_spark_env(shuffle_partitions, needs_docker_cfg, config_args):
     if needs_docker_cfg:
         expected['spark.mesos.uris'] = 'file:///root/.dockercfg'
     assert spark_env == expected
+
+
+@pytest.mark.parametrize('log_dir,expected', [('/var/log', True), (None, False)])
+def test_get_mesos_spark_env_event_log_dir(config_args, log_dir, expected):
+    config_args['event_log_dir'] = log_dir
+    spark_env = get_mesos_spark_env(**config_args)
+    assert ('spark.eventLog.dir' in spark_env) == expected
 
 
 def test_get_mesos_spark_env_incorrect_file_mode(config_args):
@@ -165,3 +166,10 @@ def test_get_k8s_spark_env(shuffle_partitions, k8s_config_args):
         'spark.kubernetes.node.selector.yelp.com/pool': 'spark-pool',
         'spark.kubernetes.executor.label.yelp.com/pool': 'spark-pool',
     }
+
+
+@pytest.mark.parametrize('log_dir,expected', [('/var/log', True), (None, False)])
+def test_get_k8s_spark_env_event_log_dir(k8s_config_args, log_dir, expected):
+    k8s_config_args['event_log_dir'] = log_dir
+    spark_env = get_k8s_spark_env(**k8s_config_args)
+    assert ('spark.eventLog.dir' in spark_env) == expected
