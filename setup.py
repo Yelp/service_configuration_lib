@@ -29,6 +29,7 @@ setup(
         'PyYAML >= 5.1',
         'pyinotify',
         'requests>=2.18.4',
+        'boto3',
     ],
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
