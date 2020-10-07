@@ -951,8 +951,8 @@ def mock_clusterman_metrics(tmpdir, monkeypatch):
         'clusters': {'test-cluster': {'aws_region': 'test-region'}},
     }))
     monkeypatch.setattr(spark_config, 'CLUSTERMAN_YAML_FILE_PATH', str(fp))
-    with mock.patch.object(spark_config, 'clusterman_metrics') as m:
-        yield m
+    mock_clusterman_metrics = mock.MagicMock()
+    yield mock_clusterman_metrics
 
 
 @pytest.fixture
@@ -978,7 +978,9 @@ def test_send_and_calculate_resources_cost(
         'spark.app.name': app_name,
     }
     web_url = 'https://spark-monitor-url.com/'
-    cost, resources = spark_config.send_and_calculate_resources_cost(spark_opts, web_url)
+    cost, resources = spark_config.send_and_calculate_resources_cost(
+        mock_clusterman_metrics, spark_opts, web_url,
+    )
 
     expected_dimension = {'framework_name': app_name, 'webui_url': web_url}
 

@@ -30,7 +30,6 @@ setup(
         'pyinotify',
         'requests>=2.18.4',
         'boto3',
-        'clusterman_metrics',
     ],
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
