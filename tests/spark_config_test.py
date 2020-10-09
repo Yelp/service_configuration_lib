@@ -940,8 +940,8 @@ def test_get_signalfx_url():
         ),
     ],
 )
-def test_get_clusterman_resource_requirements(spark_opts, expected_output):
-    assert spark_config.get_clusterman_resource_requirements(spark_opts) == expected_output
+def test_get_resources_requested(spark_opts, expected_output):
+    assert spark_config.get_resources_requested(spark_opts) == expected_output
 
 
 @pytest.fixture
@@ -956,10 +956,10 @@ def mock_clusterman_metrics(tmpdir, monkeypatch):
 
 
 @pytest.fixture
-def mock_get_clusterman_resource_requirements():
+def mock_get_resources_requested():
     with mock.patch.object(
         spark_config,
-        'get_clusterman_resource_requirements',
+        'get_resources_requested',
         return_value={'cpus': 10, 'mem': 2048},
     ) as m:
         yield m
@@ -967,19 +967,18 @@ def mock_get_clusterman_resource_requirements():
 
 def test_send_and_calculate_resources_cost(
     mock_clusterman_metrics,
-    mock_get_clusterman_resource_requirements,
+    mock_get_resources_requested,
     mock_time,
 ):
     mock_clusterman_metrics.generate_key_with_dimensions.side_effect = lambda x, _: x
     app_name = 'test-app'
     spark_opts = {
         'spark.executorEnv.PAASTA_CLUSTER': 'test-cluster',
-        'spark.executorEnv.PAASTA_POOL': 'test-pool',
         'spark.app.name': app_name,
     }
     web_url = 'https://spark-monitor-url.com/'
     cost, resources = spark_config.send_and_calculate_resources_cost(
-        mock_clusterman_metrics, spark_opts, web_url,
+        mock_clusterman_metrics, spark_opts, web_url, 'test-pool',
     )
 
     expected_dimension = {'framework_name': app_name, 'webui_url': web_url}

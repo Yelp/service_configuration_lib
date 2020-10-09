@@ -325,12 +325,12 @@ def _get_mesos_spark_env(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    extra_volumes: List[Mapping[str, str]],
-    extra_docker_params: Optional[Mapping[str, str]] = None,
-    with_secret: bool = True,
-    needs_docker_cfg: bool = False,
-    mesos_leader: Optional[str] = None,
-    load_paasta_default_volumes: bool = False,
+    extra_volumes: Optional[List[Mapping[str, str]]],
+    extra_docker_params: Optional[Mapping[str, str]],
+    with_secret: bool,
+    needs_docker_cfg: bool,
+    mesos_leader: Optional[str],
+    load_paasta_default_volumes: bool,
 ) -> Dict[str, str]:
 
     if mesos_leader is None:
@@ -391,7 +391,7 @@ def _get_k8s_spark_env(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    volumes: List[Mapping[str, str]],
+    volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
 ) -> Dict[str, str]:
     spark_env = {
@@ -417,7 +417,7 @@ def _get_k8s_spark_env(
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
     }
-    for i, volume in enumerate(volumes):
+    for i, volume in enumerate(volumes or []):
         volume_name = i
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
@@ -451,8 +451,8 @@ def get_spark_conf(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    extra_volumes: List[Mapping[str, str]],
     aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
+    extra_volumes: List[Mapping[str, str]] = None,
     # the follow arguments only being used for mesos
     extra_docker_params: Optional[MutableMapping[str, str]] = None,
     with_secret: bool = True,
@@ -481,7 +481,7 @@ def get_spark_conf(
 
     spark_conf.update({
         'spark.app.name': app_name,
-        'spark.ui.port': ui_port,
+        'spark.ui.port': str(ui_port),
     })
 
     # adjusted with spark default resources
@@ -553,7 +553,7 @@ def get_history_url(spark_conf: Mapping[str, str]) -> Optional[str]:
     return None
 
 
-def get_clusterman_resource_requirements(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
+def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
     num_executors = (
         # spark on k8s directly configure num instances
         int(spark_opts.get('spark.executor.instances', 0)) or
@@ -588,6 +588,23 @@ def get_clusterman_resource_requirements(spark_opts: Mapping[str, str]) -> Mappi
     }
 
 
+def generate_clusterman_metrics_entries(
+    clusterman_metrics,
+    resources: Mapping[str, int],
+    app_name: str,
+    spark_web_url: str,
+) -> Dict[str, int]:
+    dimensions = {
+        'framework_name': app_name,
+        'webui_url': spark_web_url,
+    }
+    return {
+        clusterman_metrics.generate_key_with_dimensions(f'requested_{resource_key}', dimensions):
+        required_quantity
+        for resource_key, required_quantity in resources.items()
+    }
+
+
 def _emit_resource_requirements(
     clusterman_metrics,
     resources: Mapping[str, int],
@@ -596,10 +613,7 @@ def _emit_resource_requirements(
     cluster: str,
     pool: str,
 ) -> None:
-    dimensions = {
-        'framework_name': app_name,
-        'webui_url': spark_web_url,
-    }
+
     with open(CLUSTERMAN_YAML_FILE_PATH, 'r') as clusterman_yaml_file:
         clusterman_yaml = yaml.safe_load(clusterman_yaml_file.read())
     aws_region = clusterman_yaml['clusters'][cluster]['aws_region']
@@ -607,14 +621,16 @@ def _emit_resource_requirements(
     client = clusterman_metrics.ClustermanMetricsBotoClient(
         region_name=aws_region, app_identifier=pool,
     )
-
+    metrics_entries = generate_clusterman_metrics_entries(
+        clusterman_metrics,
+        resources,
+        app_name,
+        spark_web_url,
+    )
     with client.get_writer(
         clusterman_metrics.APP_METRICS, aggregate_meteorite_dims=True,
     ) as writer:
-        for resource, required_quantity in resources.items():
-            metric_key = clusterman_metrics.generate_key_with_dimensions(
-                'requested_{resource}'.format(resource=resource), dimensions,
-            )
+        for metric_key, required_quantity in metrics_entries.items():
             writer.send((metric_key, int(time.time()), required_quantity))
 
 
@@ -635,11 +651,11 @@ def send_and_calculate_resources_cost(
     clusterman_metrics,
     spark_conf: Mapping[str, str],
     spark_web_url: str,
+    pool: str,
 ) -> Tuple[float, Mapping[str, int]]:
     cluster = spark_conf['spark.executorEnv.PAASTA_CLUSTER']
-    pool = spark_conf['spark.executorEnv.PAASTA_POOL']
     app_name = spark_conf['spark.app.name']
-    resources = get_clusterman_resource_requirements(spark_conf)
+    resources = get_resources_requested(spark_conf)
     hourly_cost = _get_spark_hourly_cost(clusterman_metrics, resources, cluster, pool)
     _emit_resource_requirements(
         clusterman_metrics, resources, app_name, spark_web_url, cluster, pool,
