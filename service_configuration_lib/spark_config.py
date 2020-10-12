@@ -88,6 +88,7 @@ def get_aws_credentials(
     session: Optional[boto3.Session] = None,
     aws_credentials_json: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """load aws creds using different method/file"""
     if no_aws_credentials:
         return None, None, None
     elif aws_credentials_yaml:
@@ -461,6 +462,37 @@ def get_spark_conf(
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     load_paasta_default_volumes: bool = False,
 ) -> Dict[str, str]:
+    """Build spark config dict to run with spark on paasta
+
+    :param cluster_manager: which manager to use, value supported: [`mesos`, `kubernetes`]
+    :param spark_app_base_name: the base name to create spark app, we will append port
+        and time to make the app name unique for easier to separate the output. Note that
+        this is noop if `spark_opts_from_env` have `spark.app.name` configured.
+    :param user_spark_opts: user specified spark config. We will filter out some configs
+        that is not supposed to be configured by users before adding these changes.
+    :param paasta_cluster: the cluster name to run the spark job
+    :param paasta_pool: the pool name to launch the spark job.
+    :param paasta_service: the service name of the job
+    :param paasta_instance: the instance name of the job
+    :param docker_img: the docker image used to launch container for spark executor.
+    :param aws_creds: the aws creds to be used for this spark job.
+    :param extra_volumes: extra files to mount on the spark executors
+    :param extra_docker_params: extra docker parameters to launch the spark executor
+        cotnainer. This is only being used when `cluster_manager` is set to `mesos`
+    :param with_secret: whether the output spark config should include mesos secrets.
+        This is only being used when `cluster_manager` is set to `mesos`
+    :param needs_docker_cfg: whether we should add docker.cfg file for accessing
+        docker registry. This is only being used when `cluster_manager` is set to `mesos`
+    :param mesos_leader: the mesos leader to be used. leave empty to use the default
+        pnw-devc master. This is only being used when `cluster_manager` is set to `mesos`
+    :param spark_opts_from_env: different from user_spark_opts, configuration in this
+        dict will not be filtered. This options is left for people who use `paasta spark-run`
+        to launch the batch, and inside the batch use `spark_tools.paasta` to create
+        spark session.
+    :param load_paasta_default_volumes: whether to include default paasta mounted volumes
+        into the spark executors.
+    :returns: spark opts in a dict.
+    """
     app_base_name = (
         user_spark_opts.get('spark.app.name') or
         spark_app_base_name
@@ -594,6 +626,22 @@ def generate_clusterman_metrics_entries(
     app_name: str,
     spark_web_url: str,
 ) -> Dict[str, int]:
+    """convert the requested resources to clusterman key. Note that the clusterman
+    is not availble externally. You will need to initialize the clusterman_metrics
+    with
+    .. code-block:: python
+
+    import clusterman_metrics
+    import srv_configs
+    srv_configs.use_file(
+        CLUSTERMAN_METRICS_YAML_FILE_PATH, namespace="clusterman_metrics"
+    )
+
+    :param clusterman_metrics: the clusterman_metrics module
+    :param resources: the requested resources dict
+    :param app_name: the spark job app name
+    :param spark_web_url: the monitor url for the spark job.
+    """
     dimensions = {
         'framework_name': app_name,
         'webui_url': spark_web_url,
@@ -653,6 +701,27 @@ def send_and_calculate_resources_cost(
     spark_web_url: str,
     pool: str,
 ) -> Tuple[float, Mapping[str, int]]:
+    """Calculated the cost and send the requested resources to clusterman.
+    return the resources used and the hourly cost for the job.
+
+    Note that the clusterman is not availble externally. You will need to initialize
+    the clusterman_metrics with
+    .. code-block:: python
+
+    import clusterman_metrics
+    import srv_configs
+    srv_configs.use_file(
+        CLUSTERMAN_METRICS_YAML_FILE_PATH, namespace="clusterman_metrics"
+    )
+
+    :param clusterman_metrics: the clusterman_metrics module
+    :param spark_conf: the spark configuration so that we can calculate the
+        requested resources
+    :param spark_web_url: the spark monitor url.
+    :param pool: the pool name to launch the spark job.
+    :returns: Tuple, the first element is the hourly cost and the second element
+        is the requested resources.
+    """
     cluster = spark_conf['spark.executorEnv.PAASTA_CLUSTER']
     app_name = spark_conf['spark.app.name']
     resources = get_resources_requested(spark_conf)
