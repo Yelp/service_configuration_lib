@@ -1,11 +1,38 @@
+import hashlib
+import json
 import logging
+import os
+import time
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Mapping
 from typing import MutableMapping
 from typing import Optional
+from typing import Tuple
+from urllib.parse import urlparse
 
+import boto3
+import ephemeral_port_reserve
+import requests
+import yaml
+from boto3 import Session
+
+AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
+GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
+DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
+DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
+DEFAULT_SPARK_SERVICE = 'spark'
+GPUS_HARD_LIMIT = 15
+CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
+CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
+DEFAULT_MAX_CORES = 4
+DEFAULT_EXECUTOR_CORES = 2
+DEFAULT_EXECUTOR_INSTANCES = 2
+DEFAULT_EXECUTOR_MEMORY = '4g'
+
+
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
     'spark.ui.port',
@@ -37,111 +64,339 @@ K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 log = logging.Logger(__name__)
 
 
-def get_mesos_spark_auth_env() -> Mapping[str, str]:
-    '''Set environment variables needed for spark driver to authenticate to Mesos.
-
-    See https://spark.apache.org/docs/latest/running-on-mesos.html#authenticating-to-mesos for
-    more details.
-    '''
-    return {
-        'SPARK_MESOS_PRINCIPAL': 'spark',
-        # The actual mesos secret will be decrypted and injected on mesos master when assigning
-        # tasks.
-        'SPARK_MESOS_SECRET': 'SHARED_SECRET(SPARK_MESOS_SECRET)',
-    }
-
-
-def _check_non_configurable_spark_opts(user_spark_opts: Mapping[str, Any]) -> None:
-    user_non_config_opts = set(user_spark_opts) & NON_CONFIGURABLE_SPARK_OPTS
-    if (
-        user_non_config_opts or
-        any([
-            spark_opt.startswith('spark.kubernetes.executor.volumes.hostPath')
-            for spark_opt in user_spark_opts.keys()
-        ])
-    ):
-        raise ValueError(f'The following Spark options are not user-configurable: {user_non_config_opts}')
+def _load_aws_credentials_from_yaml(yaml_file_path) -> Tuple[str, str, Optional[str]]:
+    with open(yaml_file_path, 'r') as yaml_file:
+        try:
+            credentials_yaml = yaml.safe_load(yaml_file.read())
+            return (
+                credentials_yaml['aws_access_key_id'],
+                credentials_yaml['aws_secret_access_key'],
+                credentials_yaml.get('aws_session_token', None),
+            )
+        except Exception as e:
+            raise ValueError(
+                f'Encountered {type(e)} when trying to parse AWS credentials yaml {yaml_file_path}'
+                'Suppressing further output to avoid leaking credentials.',
+            )
 
 
-def get_mesos_spark_env(
-    spark_app_name: str,
-    spark_ui_port: str,
-    mesos_leader: str,
+def get_aws_credentials(
+    service: Optional[str] = DEFAULT_SPARK_SERVICE,
+    no_aws_credentials: bool = False,
+    aws_credentials_yaml: Optional[str] = None,
+    profile_name: Optional[str] = None,
+    session: Optional[boto3.Session] = None,
+    aws_credentials_json: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """load aws creds using different method/file"""
+    if no_aws_credentials:
+        return None, None, None
+    elif aws_credentials_yaml:
+        return _load_aws_credentials_from_yaml(aws_credentials_yaml)
+    elif aws_credentials_json:
+        with open(aws_credentials_json, 'r') as f:
+            creds = json.load(f)
+        return (creds.get('accessKeyId'), creds.get('secretAccessKey'), None)
+    elif service != DEFAULT_SPARK_SERVICE:
+        service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
+        if os.path.exists(service_credentials_path):
+            return _load_aws_credentials_from_yaml(service_credentials_path)
+        elif not session:
+            log.warning(
+                f'Did not find service AWS credentials at {service_credentials_path}. '
+                'Falling back to user credentials.',
+            )
+
+    session = session or Session(profile_name=profile_name)
+    creds = session.get_credentials()
+    return (
+        creds.access_key,
+        creds.secret_key,
+        creds.token,
+    )
+
+
+def _pick_random_port(app_name):
+    """Return a random port. """
+    hash_key = f'{app_name}_{time.time()}'.encode('utf-8')
+    hash_number = int(hashlib.sha1(hash_key).hexdigest(), 16)
+    preferred_port = 33000 + (hash_number % 25000)
+    return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
+
+
+def _get_mesos_docker_volumes_conf(
+    spark_opts: Mapping[str, str],
+    extra_volumes: Optional[List[Mapping[str, str]]] = None,
+    load_paasta_default_volumes: bool = False,
+) -> Dict[str, str]:
+    """return volume str to be configured for spark.mesos.executor.docker.volume
+    if no extra_volumes and volumes_from_spark_opts, it will read from
+    DEFAULT_PAASTA_VOLUME_PATH and parse it.
+
+    Also spark required to have `/etc/passwd` and `/etc/group` being mounted as
+    well. This will ensure it does have those files in the list.
+    """
+    volume_str = spark_opts.get('spark.mesos.executor.docker.volumes')
+    volumes = volume_str.split(',') if volume_str else []
+
+    if load_paasta_default_volumes:
+        with open(DEFAULT_PAASTA_VOLUME_PATH) as fp:
+            extra_volumes = (extra_volumes or []) + json.load(fp)['volumes']
+
+    for volume in (extra_volumes or []):
+        if os.path.exists(volume['hostPath']):
+            volumes.append(f"{volume['hostPath']}:{volume['containerPath']}:{volume['mode'].lower()}")
+        else:
+            log.warning(f"Path {volume['hostPath']} does not exist on this host. Skipping this bindings.")
+
+    distinct_volumes = set(volumes)
+
+    # docker.parameters user needs /etc/passwd and /etc/group to be mounted
+    for required in ['/etc/passwd', '/etc/group']:
+        full_mount_str = f'{required}:{required}:ro'
+        if full_mount_str not in distinct_volumes:
+            distinct_volumes.add(full_mount_str)
+
+    volume_str = ','.join(distinct_volumes)  # ensure we don't have duplicated files
+    return {'spark.mesos.executor.docker.volumes': volume_str}
+
+
+def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    if 'spark.sql.shuffle.partitions' in spark_opts:
+        return spark_opts
+
+    num_partitions = 2 * (
+        int(spark_opts.get('spark.cores.max', 0)) or
+        int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0))
+    )
+    log.warning(
+        f'spark.sql.shuffle.partitions has been set to {num_partitions} '
+        'to be equal to twice the number of requested cores, but you should '
+        'consider setting a higher value if necessary.'
+        ' Follow y/spark for help on partition sizing',
+    )
+    spark_opts['spark.sql.shuffle.partitions'] = str(num_partitions)
+    return spark_opts
+
+
+def _append_event_log_conf(
+    spark_opts: Dict[str, str],
+    access_key: Optional[str],
+    secret_key: Optional[str],
+    session_token: Optional[str] = None,
+) -> Dict[str, str]:
+    enabled = spark_opts.setdefault('spark.eventLog.enabled', 'true').lower()
+    if enabled != 'true':
+        # user configured to disable log, not continue
+        return spark_opts
+
+    event_log_dir = spark_opts.get('spark.eventLog.dir')
+    if event_log_dir is not None:
+        # we don't want to overwrite user's settings
+        return spark_opts
+
+    try:
+        with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
+            spark_run_conf = yaml.safe_load(fp.read())
+    except Exception as e:
+        log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}, disable event log')
+        return spark_opts
+
+    try:
+        account_id = (
+            boto3.client(
+                'sts',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                aws_session_token=session_token,
+            )
+            .get_caller_identity()
+            .get('Account')
+        )
+    except Exception as e:
+        log.warning('Failed to identify account ID, error: {}'.format(str(e)))
+        spark_opts['spark.eventLog.enabled'] = 'false'
+        return spark_opts
+
+    for conf in spark_run_conf.get('environments', {}).values():
+        if account_id == conf['account_id']:
+            spark_opts['spark.eventLog.enabled'] = 'true'
+            spark_opts['spark.eventLog.dir'] = conf['default_event_log_dir']
+            return spark_opts
+
+    log.warning(f'Disable event log because No preset event log dir for account: {account_id}')
+    spark_opts['spark.eventLog.enabled'] = 'false'
+    return spark_opts
+
+
+def _adjust_spark_requested_resources(
+    user_spark_opts: Dict[str, str],
+    cluster_manager: str,
+    pool: str,
+) -> Dict[str, str]:
+    executor_memory = user_spark_opts.setdefault('spark.executor.memory', DEFAULT_EXECUTOR_MEMORY)
+    executor_cores = int(user_spark_opts.setdefault('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
+    if cluster_manager == 'mesos':
+        max_cores = int(user_spark_opts.setdefault('spark.cores.max', str(DEFAULT_MAX_CORES)))
+        executor_instances = max_cores / executor_cores
+    elif cluster_manager == 'kubernetes':
+        executor_instances = int(
+            user_spark_opts.setdefault('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)),
+        )
+        max_cores = executor_instances * executor_cores
+
+    if max_cores < executor_cores:
+        raise ValueError(f'Total number of cores {max_cores} is less than per-executor cores {executor_cores}')
+
+    memory = parse_memory_string(executor_memory)
+    if memory > 32 * 1024:
+        log.warning('Executor memory is {memory / 32}g, greater than recommended value: 32g')
+
+    num_gpus = int(user_spark_opts.get('spark.mesos.gpus.max', '0'))
+    task_cpus = int(user_spark_opts.get('spark.task.cpus', '1'))
+    # we can skip this step if user is not using gpu or do not configure
+    # task cpus and executor cores
+    if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
+        return user_spark_opts
+
+    if num_gpus != 0 and cluster_manager != 'mesos':
+        raise ValueError('spark.mesos.gpus.max is only available for mesos')
+
+    if num_gpus > GPUS_HARD_LIMIT:
+        raise ValueError(
+            'Requested {num_gpus} GPUs, which exceeds hard limit of {GPUS_HARD_LIMIT}',
+        )
+    gpus_per_inst = 0
+    cpus_per_inst = 0
+
+    with open(GPU_POOLS_YAML_FILE_PATH) as fp:
+        pool_def = yaml.safe_load(fp).get(pool)
+
+    if pool_def is not None:
+        gpus_per_inst = int(pool_def['gpus_per_instance'])
+        cpus_per_inst = int(pool_def['cpus_per_instance'])
+        if gpus_per_inst == 0 or cpus_per_inst == 0:
+            raise ValueError(
+                'Unable to adjust spark.task.cpus and spark.executor.cores because '
+                f'pool {pool} does not appear to have any GPUs and/or CPUs',
+            )
+    else:
+        raise ValueError(
+            'Unable to adjust spark.task.cpus and spark.executor.cores because '
+            f"pool \"{pool}\" not found in gpu_pools",
+        )
+
+    instances = num_gpus // gpus_per_inst
+    if (instances * gpus_per_inst) != num_gpus:
+        raise ValueError(
+            'Unable to adjust spark.task.cpus and spark.executor.cores because '
+            'spark.mesos.gpus.max=%i is not a multiple of %i'
+            % (num_gpus, gpus_per_inst),
+        )
+
+    cpus_per_gpu = cpus_per_inst // gpus_per_inst
+    total_cpus = cpus_per_gpu * num_gpus
+    num_cpus = (
+        int(max_cores) if cluster_manager == 'mesos'
+        else int(executor_instances) * int(executor_cores)
+    )
+    if num_cpus != total_cpus:
+        log.warning(
+            f'spark.cores.max has been adjusted to {total_cpus}. '
+            'See y/horovod for sizing of GPU pools.',
+        )
+
+    user_spark_opts.update({
+        # Mesos limitation - need this to access GPUs
+        'spark.mesos.containerizer': 'mesos',
+        # For use by horovod.spark.run(...) in place of num_proc
+        'spark.default.parallelism': str(num_gpus),
+        # we need to adjust the requirements to meet the gpus requriements
+        'spark.task.cpus': str(cpus_per_gpu),
+        'spark.executor.cores': str(cpus_per_gpu * gpus_per_inst),
+        'spark.cores.max': str(total_cpus),
+    })
+    return user_spark_opts
+
+
+def _get_mesos_spark_env(
+    user_spark_opts: Mapping[str, Any],
     paasta_cluster: str,
     paasta_pool: str,
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    volumes: List[str],
-    user_spark_opts: Mapping[str, Any],
-    event_log_dir: Optional[str] = None,
-    needs_docker_cfg: bool = False,
-) -> Mapping[str, str]:
-    _check_non_configurable_spark_opts(user_spark_opts)
+    extra_volumes: Optional[List[Mapping[str, str]]],
+    extra_docker_params: Optional[Mapping[str, str]],
+    with_secret: bool,
+    needs_docker_cfg: bool,
+    mesos_leader: Optional[str],
+    load_paasta_default_volumes: bool,
+) -> Dict[str, str]:
 
-    for i, volume in enumerate(volumes):
-        volume_elements = volume.split(':')
-        if len(volume_elements) == 3:
-            volume_elements[-1] = volume_elements[-1].lower()
-            if volume_elements[-1] not in ('rw', 'ro'):
-                raise ValueError(
-                    f'{volume} has incorrect file mode format. Valid formats are rw and ro (lowercased).',
-                )
-            else:
-                volumes[i] = ':'.join(volume_elements)
-    spark_env: MutableMapping[str, str] = {
+    if mesos_leader is None:
+        try:
+            response = requests.get(f'http://paasta-{paasta_cluster}.yelp:5050/redirect')
+        except requests.RequestException:
+            raise ValueError(f'Cannot find spark master for cluster {paasta_cluster}')
+        mesos_leader = f'{urlparse(response.url).hostname}:5050'
+
+    docker_parameters = [
+        # Limit a container's cpu usage
+        f"cpus={user_spark_opts['spark.executor.cores']}",
+        f'label=paasta_service={paasta_service}',
+        f'label=paasta_instance={paasta_instance}',
+    ]
+    if extra_docker_params:
+        docker_parameters.extend(f'{key}={value}' for key, value in extra_docker_params.items())
+
+    auth_configs = {}
+    if with_secret:
+        try:
+            with open(DEFAULT_SPARK_MESOS_SECRET_FILE, 'r') as f:
+                secret = f.read()
+        except IOError as e:
+            log.error(
+                'Cannot load mesos secret from %s' % DEFAULT_SPARK_MESOS_SECRET_FILE,
+            )
+            raise ValueError(str(e))
+        auth_configs = {'spark.mesos.secret': secret}
+
+    spark_env = {
         'spark.master': f'mesos://{mesos_leader}',
-        'spark.ui.port': spark_ui_port,
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
         'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
+        'spark.executorEnv.SPARK_USER': 'root',
         'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
-        'spark.mesos.executor.docker.parameters':
-            f'label=paasta_service={paasta_service},label=paasta_instance={paasta_instance}',
-        'spark.mesos.executor.docker.volumes': ','.join(volumes),
+        'spark.mesos.executor.docker.parameters': ','.join(docker_parameters),
         'spark.mesos.executor.docker.image': docker_img,
-
-        # User-configurable defaults here
-        'spark.app.name': spark_app_name,
-        'spark.cores.max': '4',
-        'spark.executor.cores': '2',
-        'spark.executor.memory': '4g',
-        # Use \; for multiple constraints, e.g. 'instance_type:m4.10xlarge\;pool:default'
         'spark.mesos.constraints': f'pool:{paasta_pool}',
         'spark.mesos.executor.docker.forcePullImage': 'true',
-        'spark.eventLog.enabled': 'true' if event_log_dir else 'false',
+        'spark.mesos.principal': 'spark',
+        **auth_configs,
+        **_get_mesos_docker_volumes_conf(
+            user_spark_opts, extra_volumes,
+            load_paasta_default_volumes,
+        ),
     }
     if needs_docker_cfg:
         spark_env['spark.mesos.uris'] = 'file:///root/.dockercfg'
 
-    spark_env = {**spark_env, **user_spark_opts}
-    spark_env['spark.mesos.executor.docker.parameters'] = 'cpus={},{}'.format(
-        spark_env['spark.executor.cores'],
-        spark_env['spark.mesos.executor.docker.parameters'],
-    )
-    _validate_spark_env(spark_env, event_log_dir)
-
     return spark_env
 
 
-def get_k8s_spark_env(
-    spark_app_name: str,
-    spark_ui_port: str,
+def _get_k8s_spark_env(
     paasta_cluster: str,
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    volumes: List[Mapping[str, str]],
-    user_spark_opts: Mapping[str, Any],
+    volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
-    event_log_dir: Optional[str] = None,
-) -> Mapping[str, str]:
-    _check_non_configurable_spark_opts(user_spark_opts)
-
-    spark_env: MutableMapping[str, str] = {
+) -> Dict[str, str]:
+    spark_env = {
         'spark.master': f'k8s://https://k8s.paasta-{paasta_cluster}.yelp:16443',
-        'spark.ui.port': spark_ui_port,
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
@@ -162,66 +417,316 @@ def get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
-
-        # User-configurable defaults here
-        'spark.app.name': spark_app_name,
-        'spark.cores.max': '4',
-        'spark.executor.cores': '2',
-        'spark.executor.memory': '4g',
-        'spark.eventLog.enabled': 'true' if event_log_dir else 'false',
     }
-    for i, volume in enumerate(volumes):
+    for i, volume in enumerate(volumes or []):
         volume_name = i
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
             'true' if volume['mode'].lower() == 'ro' else 'false'
         )
         spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
-    spark_env = {**spark_env, **user_spark_opts}
-    _validate_spark_env(spark_env, event_log_dir)
-
     return spark_env
-
-
-def _validate_spark_env(spark_env: MutableMapping[str, str], event_log_dir: Optional[str]) -> None:
-    '''Validate, and possibly modify, values of spark_env
-    '''
-    # spark_opts could be a mix of string and numbers.
-    if int(spark_env['spark.executor.cores']) > int(spark_env['spark.cores.max']):
-        raise ValueError(
-            'spark.executor.cores={executor_cores} should be not greater than spark.cores.max={max_cores}'.format(
-                executor_cores=spark_env['spark.executor.cores'],
-                max_cores=spark_env['spark.cores.max'],
-            ),
-        )
-
-    if not spark_env.get('spark.sql.shuffle.partitions'):
-        spark_env['spark.sql.shuffle.partitions'] = str(2 * int(spark_env['spark.cores.max']))
-        log.warning(
-            'spark.sql.shuffle.partitions has been set to {num_partitions} '
-            'to be equal to twice the number of requested cores, but you should '
-            'consider setting a higher value if necessary.'
-            ' Follow y/spark for help on partition sizing'.format(
-                num_partitions=spark_env['spark.sql.shuffle.partitions'],
-            ),
-        )
-
-    if spark_env['spark.eventLog.enabled'] == 'true':
-        if not spark_env.get('spark.eventLog.dir'):
-            if not event_log_dir:
-                raise ValueError('Asked for event logging but spark.eventLog.dir missing')
-            spark_env['spark.eventLog.dir'] = event_log_dir
-        log.info(f'Spark event logs available in {event_log_dir}')
-
-    exec_mem = spark_env['spark.executor.memory']
-    if exec_mem[-1] != 'g' or not exec_mem[:-1].isdigit():
-        raise ValueError('Executor memory {} not in format dg.'.format(spark_env['spark.executor.memory']))
-    if int(exec_mem[:-1]) > 32:
-        log.warning(
-            f'You have specified a large amount of memory ({exec_mem[:-1]} > 32g); '
-            f'please make sure that you actually need this much, or reduce your memory requirements',
-        )
 
 
 def stringify_spark_env(spark_env: Mapping[str, str]) -> str:
     return ' '.join([f'--conf {k}={v}' for k, v in spark_env.items()])
+
+
+def _filter_user_spark_opts(user_spark_opts: Mapping[str, str]) -> MutableMapping[str, str]:
+    non_configurable_opts = set(user_spark_opts.keys()) & set(NON_CONFIGURABLE_SPARK_OPTS)
+    if non_configurable_opts:
+        log.warning(f'The following options are configured by Paasta: {non_configurable_opts} instead')
+    return {
+        key: value
+        for key, value in user_spark_opts.items()
+        if key not in NON_CONFIGURABLE_SPARK_OPTS
+    }
+
+
+def get_spark_conf(
+    cluster_manager: str,
+    spark_app_base_name: str,
+    user_spark_opts: Mapping[str, Any],
+    paasta_cluster: str,
+    paasta_pool: str,
+    paasta_service: str,
+    paasta_instance: str,
+    docker_img: str,
+    aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
+    extra_volumes: List[Mapping[str, str]] = None,
+    # the follow arguments only being used for mesos
+    extra_docker_params: Optional[MutableMapping[str, str]] = None,
+    with_secret: bool = True,
+    needs_docker_cfg: bool = False,
+    mesos_leader: Optional[str] = None,
+    spark_opts_from_env: Optional[Mapping[str, str]] = None,
+    load_paasta_default_volumes: bool = False,
+) -> Dict[str, str]:
+    """Build spark config dict to run with spark on paasta
+
+    :param cluster_manager: which manager to use, value supported: [`mesos`, `kubernetes`]
+    :param spark_app_base_name: the base name to create spark app, we will append port
+        and time to make the app name unique for easier to separate the output. Note that
+        this is noop if `spark_opts_from_env` have `spark.app.name` configured.
+    :param user_spark_opts: user specified spark config. We will filter out some configs
+        that is not supposed to be configured by users before adding these changes.
+    :param paasta_cluster: the cluster name to run the spark job
+    :param paasta_pool: the pool name to launch the spark job.
+    :param paasta_service: the service name of the job
+    :param paasta_instance: the instance name of the job
+    :param docker_img: the docker image used to launch container for spark executor.
+    :param aws_creds: the aws creds to be used for this spark job.
+    :param extra_volumes: extra files to mount on the spark executors
+    :param extra_docker_params: extra docker parameters to launch the spark executor
+        cotnainer. This is only being used when `cluster_manager` is set to `mesos`
+    :param with_secret: whether the output spark config should include mesos secrets.
+        This is only being used when `cluster_manager` is set to `mesos`
+    :param needs_docker_cfg: whether we should add docker.cfg file for accessing
+        docker registry. This is only being used when `cluster_manager` is set to `mesos`
+    :param mesos_leader: the mesos leader to be used. leave empty to use the default
+        pnw-devc master. This is only being used when `cluster_manager` is set to `mesos`
+    :param spark_opts_from_env: different from user_spark_opts, configuration in this
+        dict will not be filtered. This options is left for people who use `paasta spark-run`
+        to launch the batch, and inside the batch use `spark_tools.paasta` to create
+        spark session.
+    :param load_paasta_default_volumes: whether to include default paasta mounted volumes
+        into the spark executors.
+    :returns: spark opts in a dict.
+    """
+    app_base_name = (
+        user_spark_opts.get('spark.app.name') or
+        spark_app_base_name
+    )
+
+    ui_port = (spark_opts_from_env or {}).get('spark.ui.port') or _pick_random_port(
+        app_base_name + str(time.time()),
+    )
+
+    # app_name from env is already appended port and time to make it unique
+    app_name = (spark_opts_from_env or {}).get('spark.app.name')
+    if not app_name:
+        # We want to make the app name more unique so that we can search it
+        # from history server.
+        app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
+
+    spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
+
+    spark_conf.update({
+        'spark.app.name': app_name,
+        'spark.ui.port': str(ui_port),
+    })
+
+    # adjusted with spark default resources
+    spark_conf = _adjust_spark_requested_resources(spark_conf, cluster_manager, paasta_pool)
+
+    if cluster_manager == 'mesos':
+        spark_conf.update(_get_mesos_spark_env(
+            spark_conf,
+            paasta_cluster,
+            paasta_pool,
+            paasta_service,
+            paasta_instance,
+            docker_img,
+            extra_volumes,
+            extra_docker_params,
+            with_secret,
+            needs_docker_cfg,
+            mesos_leader,
+            load_paasta_default_volumes,
+        ))
+    elif cluster_manager == 'kubernetes':
+        spark_conf.update(_get_k8s_spark_env(
+            paasta_cluster,
+            paasta_service,
+            paasta_instance,
+            docker_img,
+            extra_volumes,
+            paasta_pool,
+        ))
+    else:
+        raise ValueError('Unknown resource_manager, should be either [mesos,kubernetes]')
+
+    # configure spark_event_log
+    spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
+
+    # configure sql shuffle partitions
+    spark_conf = _append_sql_shuffle_partitions_conf(spark_conf)
+    return spark_conf
+
+
+def parse_memory_string(memory_string: str) -> int:
+    return (
+        int(memory_string[:-1]) * 1024 if memory_string.endswith('g')
+        else int(memory_string)
+    )
+
+
+def get_signalfx_url(spark_conf: Mapping[str, str]) -> str:
+    return (
+        'https://app.signalfx.com/#/dashboard/DJzYJDkAcAA?density=4'
+        '&variables%5B%5D=Instance%3Dinstance_name:'
+        '&variables%5B%5D=Service%3Dservice_name:%5B%22spark%22%5D'
+        f"&variables%5B%5D=PaaSTA%20Cluster%3Dpaasta_cluster:{spark_conf['spark.executorEnv.PAASTA_CLUSTER']}"
+        f"&variables%5B%5D=PaaSTA%20Service%3Dpaasta_service:{spark_conf['spark.executorEnv.PAASTA_SERVICE']}"
+        f"&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:{spark_conf['spark.executorEnv.PAASTA_INSTANCE']}"
+        '&startTime=-6h&endTime=Now'
+    )
+
+
+def get_history_url(spark_conf: Mapping[str, str]) -> Optional[str]:
+    if spark_conf.get('spark.eventLog.enabled') != 'true':
+        return None
+    event_log_dir = spark_conf.get('spark.eventLog.dir')
+    with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
+        spark_run_conf = yaml.safe_load(fp.read())
+    for env, env_conf in spark_run_conf['environments'].items():
+        if event_log_dir == env_conf['default_event_log_dir']:
+            return env_conf['history_server']
+    return None
+
+
+def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
+    num_executors = (
+        # spark on k8s directly configure num instances
+        int(spark_opts.get('spark.executor.instances', 0)) or
+        # spark on mesos use cores.max and executor.core to calculate number of
+        # executors.
+        int(spark_opts.get('spark.cores.max', 0)) // int(spark_opts.get('spark.executor.cores', 0))
+    )
+    num_cpus = (
+        # spark on k8s
+        int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0)) or
+        # spark on mesos
+        int(spark_opts.get('spark.cores.max', 0))
+    )
+    num_gpus = int(spark_opts.get('spark.mesos.gpus.max', 0))
+
+    executor_memory = parse_memory_string(spark_opts.get('spark.executor.memory', ''))
+    # by default, spark adds an overhead of 10% of the executor memory, with a
+    # minimum of 384mb
+    memory_overhead: int = (
+        parse_memory_string(spark_opts['spark.executor.memoryOverhead'])
+        if spark_opts.get('spark.executor.memoryOverhead')
+        else max(384, int(0.1 * executor_memory))
+    )
+    total_memory = (executor_memory + memory_overhead) * num_executors
+
+    return {
+        'cpus': num_cpus,
+        'mem': total_memory,
+        # rough guess since spark does not collect this information
+        'disk': total_memory,
+        'gpus': num_gpus,
+    }
+
+
+def generate_clusterman_metrics_entries(
+    clusterman_metrics,
+    resources: Mapping[str, int],
+    app_name: str,
+    spark_web_url: str,
+) -> Dict[str, int]:
+    """convert the requested resources to clusterman key. Note that the clusterman
+    is not availble externally. You will need to initialize the clusterman_metrics
+    with
+    .. code-block:: python
+
+    import clusterman_metrics
+    import srv_configs
+    srv_configs.use_file(
+        CLUSTERMAN_METRICS_YAML_FILE_PATH, namespace="clusterman_metrics"
+    )
+
+    :param clusterman_metrics: the clusterman_metrics module
+    :param resources: the requested resources dict
+    :param app_name: the spark job app name
+    :param spark_web_url: the monitor url for the spark job.
+    """
+    dimensions = {
+        'framework_name': app_name,
+        'webui_url': spark_web_url,
+    }
+    return {
+        clusterman_metrics.generate_key_with_dimensions(f'requested_{resource_key}', dimensions):
+        required_quantity
+        for resource_key, required_quantity in resources.items()
+    }
+
+
+def _emit_resource_requirements(
+    clusterman_metrics,
+    resources: Mapping[str, int],
+    app_name: str,
+    spark_web_url: str,
+    cluster: str,
+    pool: str,
+) -> None:
+
+    with open(CLUSTERMAN_YAML_FILE_PATH, 'r') as clusterman_yaml_file:
+        clusterman_yaml = yaml.safe_load(clusterman_yaml_file.read())
+    aws_region = clusterman_yaml['clusters'][cluster]['aws_region']
+
+    client = clusterman_metrics.ClustermanMetricsBotoClient(
+        region_name=aws_region, app_identifier=pool,
+    )
+    metrics_entries = generate_clusterman_metrics_entries(
+        clusterman_metrics,
+        resources,
+        app_name,
+        spark_web_url,
+    )
+    with client.get_writer(
+        clusterman_metrics.APP_METRICS, aggregate_meteorite_dims=True,
+    ) as writer:
+        for metric_key, required_quantity in metrics_entries.items():
+            writer.send((metric_key, int(time.time()), required_quantity))
+
+
+def _get_spark_hourly_cost(
+    clusterman_metrics,
+    resources: Mapping[str, int],
+    cluster: str,
+    pool: str,
+) -> float:
+    cpus = resources['cpus']
+    mem = resources['mem']
+    return clusterman_metrics.util.costs.estimate_cost_per_hour(
+        cluster=cluster, pool=pool, cpus=cpus, mem=mem,
+    )
+
+
+def send_and_calculate_resources_cost(
+    clusterman_metrics,
+    spark_conf: Mapping[str, str],
+    spark_web_url: str,
+    pool: str,
+) -> Tuple[float, Mapping[str, int]]:
+    """Calculated the cost and send the requested resources to clusterman.
+    return the resources used and the hourly cost for the job.
+
+    Note that the clusterman is not availble externally. You will need to initialize
+    the clusterman_metrics with
+    .. code-block:: python
+
+    import clusterman_metrics
+    import srv_configs
+    srv_configs.use_file(
+        CLUSTERMAN_METRICS_YAML_FILE_PATH, namespace="clusterman_metrics"
+    )
+
+    :param clusterman_metrics: the clusterman_metrics module
+    :param spark_conf: the spark configuration so that we can calculate the
+        requested resources
+    :param spark_web_url: the spark monitor url.
+    :param pool: the pool name to launch the spark job.
+    :returns: Tuple, the first element is the hourly cost and the second element
+        is the requested resources.
+    """
+    cluster = spark_conf['spark.executorEnv.PAASTA_CLUSTER']
+    app_name = spark_conf['spark.app.name']
+    resources = get_resources_requested(spark_conf)
+    hourly_cost = _get_spark_hourly_cost(clusterman_metrics, resources, cluster, pool)
+    _emit_resource_requirements(
+        clusterman_metrics, resources, app_name, spark_web_url, cluster, pool,
+    )
+    return hourly_cost, resources
