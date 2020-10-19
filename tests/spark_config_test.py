@@ -3,6 +3,7 @@ import os
 from unittest import mock
 
 import pytest
+import requests
 import yaml
 
 from service_configuration_lib import spark_config
@@ -491,6 +492,14 @@ class TestGetSparkConf:
         with mock.patch.object(spark_config.requests, 'get') as m:
             m.return_value = mock.Mock(url=return_value)
             yield m
+
+    def test_find_spark_master(self, mock_request_mesos_leader):
+        assert spark_config.find_spark_master('test-cluster') == 'mesos://some-url.yelp.com:5050'
+
+    def test_find_spark_master_error(self, mock_request_mesos_leader):
+        mock_request_mesos_leader.side_effect = requests.RequestException()
+        with pytest.raises(ValueError):
+            spark_config.find_spark_master('test-cluster')
 
     @pytest.fixture(params=[None, 'test-mesos:5050'])
     def mesos_leader(self, request):

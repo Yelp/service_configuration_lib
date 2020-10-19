@@ -319,6 +319,19 @@ def _adjust_spark_requested_resources(
     return user_spark_opts
 
 
+def find_spark_master(paasta_cluster):
+    """Finds the Mesos leader of a PaaSTA cluster.
+
+    :param str paasta_cluster: Name of a PaaSTA cluster.
+    :return str: The Mesos cluster manager to connect to. Callers are expected to check result.
+    """
+    try:
+        response = requests.get(f'http://paasta-{paasta_cluster}.yelp:5050/redirect')
+    except requests.RequestException:
+        raise ValueError(f'Cannot find spark master for cluster {paasta_cluster}')
+    return f'mesos://{urlparse(response.url).hostname}:5050'
+
+
 def _get_mesos_spark_env(
     user_spark_opts: Mapping[str, Any],
     paasta_cluster: str,
@@ -335,11 +348,9 @@ def _get_mesos_spark_env(
 ) -> Dict[str, str]:
 
     if mesos_leader is None:
-        try:
-            response = requests.get(f'http://paasta-{paasta_cluster}.yelp:5050/redirect')
-        except requests.RequestException:
-            raise ValueError(f'Cannot find spark master for cluster {paasta_cluster}')
-        mesos_leader = f'{urlparse(response.url).hostname}:5050'
+        mesos_leader = find_spark_master(paasta_cluster)
+    else:
+        mesos_leader = f'mesos://{mesos_leader}'
 
     docker_parameters = [
         # Limit a container's cpu usage
@@ -363,7 +374,7 @@ def _get_mesos_spark_env(
         auth_configs = {'spark.mesos.secret': secret}
 
     spark_env = {
-        'spark.master': f'mesos://{mesos_leader}',
+        'spark.master': mesos_leader,
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
