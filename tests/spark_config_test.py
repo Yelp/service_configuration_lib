@@ -501,6 +501,18 @@ class TestGetSparkConf:
         with pytest.raises(ValueError):
             spark_config.find_spark_master('test-cluster')
 
+    def test_convert_user_spark_opts_value_str(self):
+        spark_conf = {
+            'spark.executor.memory': '4g',
+            'spark.executor.cores': 2,
+            'spark.eventLog.enabled': False,
+        }
+        assert spark_config._convert_user_spark_opts_value_to_str(spark_conf) == {
+            'spark.executor.memory': '4g',
+            'spark.executor.cores': '2',
+            'spark.eventLog.enabled': 'false',
+        }
+
     @pytest.fixture(params=[None, 'test-mesos:5050'])
     def mesos_leader(self, request):
         return request.param

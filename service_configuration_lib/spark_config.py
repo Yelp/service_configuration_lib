@@ -454,6 +454,23 @@ def _filter_user_spark_opts(user_spark_opts: Mapping[str, str]) -> MutableMappin
     }
 
 
+def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) -> Dict[str, str]:
+    output = {}
+    for key, val in user_spark_opts.items():
+        # it's likely the yaml config would convert true/false as bool instead
+        # of str, therefore verify this is configured correctly
+        if isinstance(val, bool):
+            output[key] = str(val).lower()
+        elif not isinstance(val, str):
+            output[key] = str(val)
+            log.warning(
+                f"user_spark_opts[{key}]={val} is not in str type, will convert it to '{str(val)}'",
+            )
+        else:
+            output[key] = val
+    return output
+
+
 def get_spark_conf(
     cluster_manager: str,
     spark_app_base_name: str,
@@ -504,6 +521,10 @@ def get_spark_conf(
         into the spark executors.
     :returns: spark opts in a dict.
     """
+    # for simplicity, all the following computation are assuming spark opts values
+    # is str type.
+    user_spark_opts = _convert_user_spark_opts_value_to_str(user_spark_opts)
+
     app_base_name = (
         user_spark_opts.get('spark.app.name') or
         spark_app_base_name
