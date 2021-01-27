@@ -46,6 +46,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.executorEnv.SPARK_EXECUTOR_DIRS',
     'spark.hadoop.fs.s3a.access.key',
     'spark.hadoop.fs.s3a.secret.key',
+    'spark.hadoop.fs.s3a.session.token'
     'spark.kubernetes.pyspark.pythonVersion',
     'spark.kubernetes.container.image',
     'spark.kubernetes.namespace',
