@@ -15,12 +15,8 @@ UID:=`id -u`
 GID:=`id -g`
 ITERATION=yelp1
 
-.PHONY: all production test tests coverage clean
+.PHONY: test tests coverage clean
 
-all: production
-
-production:
-	@true
 
 test:
 	tox
