@@ -505,10 +505,11 @@ def get_spark_conf(
     :param paasta_service: the service name of the job
     :param paasta_instance: the instance name of the job
     :param docker_img: the docker image used to launch container for spark executor.
-    :param aws_creds: the aws creds to be used for this spark job.
+    :param aws_creds: the aws creds to be used for this spark job. If a key triplet is passed,
+        we configure a different credentials provider to support this workflow.
     :param extra_volumes: extra files to mount on the spark executors
     :param extra_docker_params: extra docker parameters to launch the spark executor
-        cotnainer. This is only being used when `cluster_manager` is set to `mesos`
+        container. This is only being used when `cluster_manager` is set to `mesos`
     :param with_secret: whether the output spark config should include mesos secrets.
         This is only being used when `cluster_manager` is set to `mesos`
     :param needs_docker_cfg: whether we should add docker.cfg file for accessing
@@ -550,7 +551,6 @@ def get_spark_conf(
     # temporary credentials. More details in SEC-13906.
     if aws_creds[2] is not None:
         spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_TEMP_CREDENTIALS_PROVIDER
-    print(spark_conf)
 
     spark_conf.update({
         'spark.app.name': app_name,
