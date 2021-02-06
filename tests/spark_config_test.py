@@ -149,6 +149,7 @@ class TestGetSparkConf:
     spark_app_base_name = 'test_app_base_name'
     extra_volumes = [{'hostPath': '/tmp', 'containerPath': '/tmp', 'mode': 'RO'}]
     default_mesos_leader = 'mesos://some-url.yelp.com:5050'
+    aws_provider_key = 'spark.hadoop.fs.s3a.aws.credentials.provider'
 
     @pytest.fixture
     def mock_paasta_volumes(self, monkeypatch, tmpdir):
@@ -631,6 +632,33 @@ class TestGetSparkConf:
             return list(expected_output.keys())
 
         return verify
+
+    def test_get_spark_conf_aws_session(self):
+        other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
+        not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
+        user_spark_opts = {
+            **({}),
+            **not_allowed_opts,
+            **other_spark_opts,
+        }
+
+        aws_creds = ('key', 'secret', 'token')
+
+        output = spark_config.get_spark_conf(
+            cluster_manager='mesos',  # get an out of bounds error when something other than mesos/kubenetes is passed
+            spark_app_base_name=self.spark_app_base_name,
+            user_spark_opts=user_spark_opts,
+            paasta_cluster=self.cluster,
+            paasta_pool=self.pool,
+            paasta_service=self.service,
+            paasta_instance=self.instance,
+            docker_img=self.docker_image,
+            extra_volumes=self.extra_volumes,
+            aws_creds=aws_creds,
+            mesos_leader=self.default_mesos_leader,
+        )
+        assert self.aws_provider_key in output.keys()
+        assert 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider' == output[self.aws_provider_key]
 
     def test_get_spark_conf_mesos(
         self,
