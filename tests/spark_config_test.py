@@ -645,7 +645,7 @@ class TestGetSparkConf:
         aws_creds = ('key', 'secret', 'token')
 
         output = spark_config.get_spark_conf(
-            cluster_manager='mesos',  # get an out of bounds error when something other than mesos/kubenetes is passed
+            cluster_manager='mesos',
             spark_app_base_name=self.spark_app_base_name,
             user_spark_opts=user_spark_opts,
             paasta_cluster=self.cluster,
