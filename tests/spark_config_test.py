@@ -645,7 +645,7 @@ class TestGetSparkConf:
         aws_creds = ('key', 'secret', 'token')
 
         output = spark_config.get_spark_conf(
-            cluster_manager='mesos',
+            cluster_manager='kubernetes',
             spark_app_base_name=self.spark_app_base_name,
             user_spark_opts=user_spark_opts,
             paasta_cluster=self.cluster,
@@ -655,7 +655,6 @@ class TestGetSparkConf:
             docker_img=self.docker_image,
             extra_volumes=self.extra_volumes,
             aws_creds=aws_creds,
-            mesos_leader=self.default_mesos_leader,
         )
         assert self.aws_provider_key in output.keys()
         assert 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider' == output[self.aws_provider_key]
