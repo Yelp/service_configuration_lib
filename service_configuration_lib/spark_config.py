@@ -19,6 +19,7 @@ import yaml
 from boto3 import Session
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
+AWS_TEMP_CREDENTIALS_PROVIDER = 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider'
 GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
 DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
@@ -46,7 +47,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.executorEnv.SPARK_EXECUTOR_DIRS',
     'spark.hadoop.fs.s3a.access.key',
     'spark.hadoop.fs.s3a.secret.key',
-    'spark.hadoop.fs.s3a.session.token'
+    'spark.hadoop.fs.s3a.session.token',
     'spark.kubernetes.pyspark.pythonVersion',
     'spark.kubernetes.container.image',
     'spark.kubernetes.namespace',
@@ -504,10 +505,11 @@ def get_spark_conf(
     :param paasta_service: the service name of the job
     :param paasta_instance: the instance name of the job
     :param docker_img: the docker image used to launch container for spark executor.
-    :param aws_creds: the aws creds to be used for this spark job.
+    :param aws_creds: the aws creds to be used for this spark job. If a key triplet is passed,
+        we configure a different credentials provider to support this workflow.
     :param extra_volumes: extra files to mount on the spark executors
     :param extra_docker_params: extra docker parameters to launch the spark executor
-        cotnainer. This is only being used when `cluster_manager` is set to `mesos`
+        container. This is only being used when `cluster_manager` is set to `mesos`
     :param with_secret: whether the output spark config should include mesos secrets.
         This is only being used when `cluster_manager` is set to `mesos`
     :param needs_docker_cfg: whether we should add docker.cfg file for accessing
@@ -543,6 +545,12 @@ def get_spark_conf(
         app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
 
     spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
+
+    # We automatically update the credentials provider if the session token is included.
+    # By default the SimpleAWSCredentials provider is used, which is incompatible with
+    # temporary credentials. More details in SEC-13906.
+    if aws_creds[2] is not None:
+        spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_TEMP_CREDENTIALS_PROVIDER
 
     spark_conf.update({
         'spark.app.name': app_name,
