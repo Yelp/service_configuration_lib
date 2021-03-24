@@ -643,11 +643,14 @@ def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
     num_gpus = int(spark_opts.get('spark.mesos.gpus.max', 0))
 
     executor_memory = parse_memory_string(spark_opts.get('spark.executor.memory', ''))
+    requested_memory = spark_opts.get(
+        'spark.executor.memoryOverhead',
+    ) or spark_opts.get('spark.mesos.executor.memoryOverhead')
     # by default, spark adds an overhead of 10% of the executor memory, with a
     # minimum of 384mb
     memory_overhead: int = (
-        parse_memory_string(spark_opts['spark.executor.memoryOverhead'])
-        if spark_opts.get('spark.executor.memoryOverhead')
+        parse_memory_string(requested_memory)
+        if requested_memory
         else max(384, int(0.1 * executor_memory))
     )
     total_memory = (executor_memory + memory_overhead) * num_executors
