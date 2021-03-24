@@ -595,10 +595,21 @@ def get_spark_conf(
     return spark_conf
 
 
-def parse_memory_string(memory_string: str) -> int:
-    return (
-        int(memory_string[:-1]) * 1024 if memory_string.endswith('g')
-        else int(memory_string)
+def parse_memory_string(memory_string: Optional[str]) -> int:
+    if memory_string is None:
+        return 0
+    else:
+        return (
+            int(memory_string[:-1]) * 1024 if memory_string.endswith('g')
+            else int(memory_string)
+        )
+
+
+def compute_requested_memory_overhead(spark_opts: Mapping[str, str], executor_memory):
+    return max(
+        parse_memory_string(spark_opts.get('spark.executor.memoryOverhead')),
+        parse_memory_string(spark_opts.get('spark.mesos.executor.memoryOverhead')),
+        float(spark_opts.get('spark.kubernetes.memoryOverheadFactor', 0)) * executor_memory,
     )
 
 
@@ -643,18 +654,16 @@ def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
     num_gpus = int(spark_opts.get('spark.mesos.gpus.max', 0))
 
     executor_memory = parse_memory_string(spark_opts.get('spark.executor.memory', ''))
-    requested_memory = spark_opts.get(
-        'spark.executor.memoryOverhead',
-    ) or spark_opts.get('spark.mesos.executor.memoryOverhead')
+    requested_memory = compute_requested_memory_overhead(spark_opts, executor_memory)
     # by default, spark adds an overhead of 10% of the executor memory, with a
     # minimum of 384mb
     memory_overhead: int = (
-        parse_memory_string(requested_memory)
-        if requested_memory
+        requested_memory
+        if requested_memory > 0
         else max(384, int(0.1 * executor_memory))
     )
     total_memory = (executor_memory + memory_overhead) * num_executors
-
+    log.info(f'Requested total memory of {total_memory} MiB')
     return {
         'cpus': num_cpus,
         'mem': total_memory,

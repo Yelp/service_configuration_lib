@@ -954,6 +954,37 @@ def test_get_signalfx_url():
                 'gpus': 0,
             },
         ),
+        # mesos ( 2 instances, Duplicate config, choose the higher memory overhead)
+        (
+            {
+                'spark.cores.max': '10',
+                'spark.executor.cores': '5',
+                'spark.executor.memory': '4g',
+                'spark.executor.memoryOverhead': '3072',
+                'spark.mesos.executor.memoryOverhead': '4096',
+            },
+            {
+                'cpus': 10,
+                'mem': (4096 + 4096) * 2,
+                'disk': (4096 + 4096) * 2,
+                'gpus': 0,
+            },
+        ),
+        # mesos ( 2 instances, configure memory overhead)
+        (
+            {
+                'spark.cores.max': '10',
+                'spark.executor.cores': '5',
+                'spark.executor.memory': '4g',
+                'spark.mesos.executor.memoryOverhead': '3072',
+            },
+            {
+                'cpus': 10,
+                'mem': (3072 + 4096) * 2,
+                'disk': (3072 + 4096) * 2,
+                'gpus': 0,
+            },
+        ),
         # k8s
         (
             {
@@ -966,6 +997,21 @@ def test_get_signalfx_url():
                 'cpus': 10,
                 'mem': (3072 + 4096) * 2,
                 'disk': (3072 + 4096) * 2,
+                'gpus': 0,
+            },
+        ),
+        # k8s
+        (
+            {
+                'spark.executor.instances': '2',
+                'spark.executor.cores': '5',
+                'spark.executor.memory': '4g',
+                'spark.kubernetes.memoryOverheadFactor': '0.5',
+            },
+            {
+                'cpus': 10,
+                'mem': (4096 * 0.5 + 4096) * 2,
+                'disk': (4096 * 0.5 + 4096) * 2,
                 'gpus': 0,
             },
         ),
