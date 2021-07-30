@@ -149,6 +149,9 @@ class ConfigsFileWatcher:
         Attempting to watch tmp directories causes pyinotify to log an error,
         so let's just filter them out.
         Also it will exclude all folders which don't match with services_names param.
+
+        'autotuned_defaults' folders will be included so that their values can be used
+        for configuring service timeouts.
         """
         folder_name = Path(path).name
 
@@ -157,6 +160,11 @@ class ConfigsFileWatcher:
                 return True
 
         for service_name in self._services_names:
+            if folder_name == 'autotuned_defaults':
+                service = Path(path).parent.name
+                if fnmatch.fnmatch(service, service_name):
+                    return False
+
             if fnmatch.fnmatch(folder_name, service_name):
                 return False
 
