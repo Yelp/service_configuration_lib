@@ -52,6 +52,7 @@ def test_exclude_filter_service_names_filtering(configs_file_watcher):
     assert configs_file_watcher._exclude_filter('/foo/another_service2')
     assert not configs_file_watcher._exclude_filter('/foo/star_service2')
     assert not configs_file_watcher._exclude_filter('/foo/star_service')
+    assert not configs_file_watcher._exclude_filter('/foo/star_services/autotuned_defaults')
 
 
 def test_stopping_notifier(configs_file_watcher):
