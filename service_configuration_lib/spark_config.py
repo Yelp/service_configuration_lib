@@ -63,6 +63,12 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
 K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
+DEFAULT_SPARK_K8S_SECRET_VOLUME = {
+    "hostPath": "/etc/pki/spark",
+    "containerPath": K8S_AUTH_FOLDER,
+    "mode": "RO",
+}
+
 log = logging.Logger(__name__)
 
 
@@ -161,6 +167,27 @@ def _get_mesos_docker_volumes_conf(
 
     volume_str = ','.join(distinct_volumes)  # ensure we don't have duplicated files
     return {'spark.mesos.executor.docker.volumes': volume_str}
+
+
+def _get_k8s_docker_volumes_conf(
+    volumes: Optional[List[Mapping[str, str]]] = None,
+):
+    env = {}
+    k8s_volumes = volumes or []
+    k8s_volumes.append(DEFAULT_SPARK_K8S_SECRET_VOLUME)
+    for volume_name, volume in enumerate(k8s_volumes):
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
+            'true' if volume['mode'].lower() == 'ro' else 'false'
+        )
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
+    # docker.parameters user needs /etc/passwd and /etc/group to be mounted
+    for i, required in enumerate(['/etc/passwd', '/etc/group']):
+        volume_name = len(k8s_volumes) + i
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = required
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = 'true'
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = required
+    return env
 
 
 def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
@@ -430,14 +457,8 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
+        **_get_k8s_docker_volumes_conf(volumes),
     }
-    for i, volume in enumerate(volumes or []):
-        volume_name = i
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
-            'true' if volume['mode'].lower() == 'ro' else 'false'
-        )
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
     return spark_env
 
 
