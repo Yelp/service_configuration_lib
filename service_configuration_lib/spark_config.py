@@ -64,9 +64,9 @@ NON_CONFIGURABLE_SPARK_OPTS = {
 }
 K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
 DEFAULT_SPARK_K8S_SECRET_VOLUME = {
-    "hostPath": "/etc/pki/spark",
-    "containerPath": K8S_AUTH_FOLDER,
-    "mode": "RO",
+    'hostPath': '/etc/pki/spark',
+    'containerPath': K8S_AUTH_FOLDER,
+    'mode': 'RO',
 }
 
 log = logging.Logger(__name__)
@@ -175,18 +175,14 @@ def _get_k8s_docker_volumes_conf(
     env = {}
     k8s_volumes = volumes or []
     k8s_volumes.append(DEFAULT_SPARK_K8S_SECRET_VOLUME)
+    k8s_volumes.append({'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'})
+    k8s_volumes.append({'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'})
     for volume_name, volume in enumerate(k8s_volumes):
         env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
         env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
             'true' if volume['mode'].lower() == 'ro' else 'false'
         )
         env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
-    # docker.parameters user needs /etc/passwd and /etc/group to be mounted
-    for i, required in enumerate(['/etc/passwd', '/etc/group']):
-        volume_name = len(k8s_volumes) + i
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = required
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = 'true'
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = required
     return env
 
 
@@ -436,7 +432,7 @@ def _get_k8s_spark_env(
     paasta_pool: str,
 ) -> Dict[str, str]:
     spark_env = {
-        'spark.master': f'k8s://https://k8s.paasta-{paasta_cluster}.yelp:16443',
+        'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
