@@ -62,9 +62,9 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/instance',
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
-K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
+K8S_AUTH_FOLDER = '/etc/pki/spark'
 DEFAULT_SPARK_K8S_SECRET_VOLUME = {
-    'hostPath': '/etc/pki/spark',
+    'hostPath': K8S_AUTH_FOLDER,
     'containerPath': K8S_AUTH_FOLDER,
     'mode': 'RO',
 }
