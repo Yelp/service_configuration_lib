@@ -62,7 +62,13 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/instance',
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
-K8S_AUTH_FOLDER = '/etc/spark_k8s_secrets'
+K8S_AUTH_FOLDER = '/etc/pki/spark'
+DEFAULT_SPARK_K8S_SECRET_VOLUME = {
+    'hostPath': K8S_AUTH_FOLDER,
+    'containerPath': K8S_AUTH_FOLDER,
+    'mode': 'RO',
+}
+
 log = logging.Logger(__name__)
 
 
@@ -161,6 +167,23 @@ def _get_mesos_docker_volumes_conf(
 
     volume_str = ','.join(distinct_volumes)  # ensure we don't have duplicated files
     return {'spark.mesos.executor.docker.volumes': volume_str}
+
+
+def _get_k8s_docker_volumes_conf(
+    volumes: Optional[List[Mapping[str, str]]] = None,
+):
+    env = {}
+    k8s_volumes = volumes or []
+    k8s_volumes.append(DEFAULT_SPARK_K8S_SECRET_VOLUME)
+    k8s_volumes.append({'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'})
+    k8s_volumes.append({'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'})
+    for volume_name, volume in enumerate(k8s_volumes):
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
+            'true' if volume['mode'].lower() == 'ro' else 'false'
+        )
+        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
+    return env
 
 
 def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
@@ -409,7 +432,7 @@ def _get_k8s_spark_env(
     paasta_pool: str,
 ) -> Dict[str, str]:
     spark_env = {
-        'spark.master': f'k8s://https://k8s.paasta-{paasta_cluster}.yelp:16443',
+        'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
@@ -430,14 +453,8 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
+        **_get_k8s_docker_volumes_conf(volumes),
     }
-    for i, volume in enumerate(volumes or []):
-        volume_name = i
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
-            'true' if volume['mode'].lower() == 'ro' else 'false'
-        )
-        spark_env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
     return spark_env
 
 
