@@ -409,7 +409,7 @@ def _get_k8s_spark_env(
     paasta_pool: str,
 ) -> Dict[str, str]:
     spark_env = {
-        'spark.master': f'k8s://https://k8s.paasta-{paasta_cluster}.yelp:16443',
+        'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
