@@ -22,6 +22,8 @@ import os
 import socket
 import sys
 from typing import Mapping
+from mypy_extensions import TypedDict
+from typing import Dict
 
 import ephemeral_port_reserve
 import yaml
@@ -35,6 +37,19 @@ DEFAULT_SOA_DIR = '/nail/etc/services'
 log = logging.getLogger(__name__)
 _yaml_cache: Mapping[str, Mapping] = {}
 _use_yaml_cache = True
+
+
+class ServiceInfoDict(TypedDict, total=False):
+    port: int
+    monitoring: Dict
+    deploy: Dict
+    data: Dict
+    smartstack: Dict
+    dependencies: Dict
+    description: str
+    external_link: str
+    encryption_key: str
+    git_url: str
 
 
 def enable_yaml_cache():
@@ -115,7 +130,7 @@ def read_yaml_file(file_name, deepcopy=True):
 def generate_service_info(service_information, **kwargs):
     service_info = kwargs
     service_info.update(service_information)
-    return service_info
+    return ServiceInfoDict(service_info)
 
 
 def read_extra_service_information(service_name, extra_info, soa_dir=DEFAULT_SOA_DIR, deepcopy=True):
