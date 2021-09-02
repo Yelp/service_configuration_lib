@@ -1,3 +1,5 @@
+import functools
+import itertools
 import json
 import os
 from unittest import mock
@@ -165,7 +167,9 @@ class TestGetSparkConf:
 
     @pytest.fixture
     def mock_existed_files(self, mock_paasta_volumes):
-        existed_files = [v.split(':')[0] for v in mock_paasta_volumes] + ['/host/file1', '/host/file2', '/host/file3']
+        existed_files = [v.split(':')[0] for v in mock_paasta_volumes] + [
+            '/host/file1', '/host/file2', '/host/file3', '/etc/pki/spark', '/etc/group', '/etc/passwd',
+        ]
         with mock.patch('os.path.exists', side_effect=lambda f: f in existed_files):
             yield existed_files
 
@@ -219,6 +223,45 @@ class TestGetSparkConf:
             spark_conf, extra_volumes, load_paasta_volumes,
         )
         assert sorted(output[validate_key].split(',')) == sorted(set(expected_volumes))
+
+    def test_get_k8s_volume_hostpath_dict(self):
+        assert spark_config._get_k8s_volume_hostpath_dict(
+            '/host/file1', '/container/file1', 'RO', itertools.count(),
+        ) == {
+            'spark.kubernetes.executor.volumes.hostPath.0.mount.path': '/container/file1',
+            'spark.kubernetes.executor.volumes.hostPath.0.options.path': '/host/file1',
+            'spark.kubernetes.executor.volumes.hostPath.0.mount.readOnly': 'true',
+        }
+
+    @pytest.mark.parametrize(
+        'volumes', [
+            None,
+            [
+                {'hostPath': '/host/file1', 'containerPath': '/containter/file1', 'mode': 'RO'},
+                {'hostPath': '/host/file2', 'containerPath': '/containter/file2', 'mode': 'RO'},
+                {'hostPath': '/host/paasta1', 'containerPath': '/container/paasta1', 'mode': 'RO'},
+            ],
+        ],
+    )
+    @pytest.mark.usefixtures('mock_existed_files')
+    def test_get_k8s_docker_volumes_conf(self, volumes):
+        expected_volumes = {}
+
+        _get_k8s_volume = functools.partial(spark_config._get_k8s_volume_hostpath_dict, count=itertools.count())
+        if volumes:
+            for volume in volumes:
+                expected_volumes.update(
+                    _get_k8s_volume(volume['hostPath'], volume['containerPath'], volume['mode']),
+                )
+
+        expected_volumes.update({
+            **_get_k8s_volume('/etc/pki/spark', '/etc/pki/spark', 'ro'),
+            **_get_k8s_volume('/etc/passwd', '/etc/passwd', 'ro'),
+            **_get_k8s_volume('/etc/group', '/etc/group', 'ro'),
+        })
+
+        output = spark_config._get_k8s_docker_volumes_conf(volumes)
+        assert output == expected_volumes
 
     @pytest.fixture
     def mock_account_id(self, tmpdir, monkeypatch):
@@ -744,7 +787,7 @@ class TestGetSparkConf:
     @pytest.fixture
     def assert_kubernetes_conf(self):
         expected_output = {
-            'spark.master': f'k8s://https://k8s.paasta-{self.cluster}.yelp:16443',
+            'spark.master': f'k8s://https://k8s.{self.cluster}.paasta:6443',
             'spark.executorEnv.PAASTA_SERVICE': self.service,
             'spark.executorEnv.PAASTA_INSTANCE': self.instance,
             'spark.executorEnv.PAASTA_CLUSTER': self.cluster,

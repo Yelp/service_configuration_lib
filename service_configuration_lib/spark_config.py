@@ -1,4 +1,6 @@
+import functools
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -63,11 +65,6 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
 K8S_AUTH_FOLDER = '/etc/pki/spark'
-DEFAULT_SPARK_K8S_SECRET_VOLUME = {
-    'hostPath': K8S_AUTH_FOLDER,
-    'containerPath': K8S_AUTH_FOLDER,
-    'mode': 'RO',
-}
 
 log = logging.Logger(__name__)
 
@@ -173,17 +170,35 @@ def _get_k8s_docker_volumes_conf(
     volumes: Optional[List[Mapping[str, str]]] = None,
 ):
     env = {}
+    mounted_volumes = set()
     k8s_volumes = volumes or []
-    k8s_volumes.append(DEFAULT_SPARK_K8S_SECRET_VOLUME)
+    k8s_volumes.append({'containerPath': K8S_AUTH_FOLDER, 'hostPath': K8S_AUTH_FOLDER, 'mode': 'RO'})
     k8s_volumes.append({'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'})
     k8s_volumes.append({'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'})
-    for volume_name, volume in enumerate(k8s_volumes):
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path'] = volume['containerPath']
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly'] = (
-            'true' if volume['mode'].lower() == 'ro' else 'false'
-        )
-        env[f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path'] = volume['hostPath']
+    _get_k8s_volume = functools.partial(_get_k8s_volume_hostpath_dict, count=itertools.count())
+
+    for volume in k8s_volumes:
+        host_path, container_path, mode = volume['hostPath'], volume['containerPath'], volume['mode']
+        if os.path.exists(host_path) and host_path not in mounted_volumes:
+            env.update(_get_k8s_volume(host_path, container_path, mode))
+            mounted_volumes.add(host_path)
+        else:
+            log.warning(
+                f'Path {host_path} does not exist on this host or it has already been mounted.'
+                ' Skipping this bindings.',
+            )
     return env
+
+
+def _get_k8s_volume_hostpath_dict(host_path: str, container_path: str, mode: str, count: itertools.count):
+    volume_name = next(count)
+    return {
+        f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path': container_path,
+        f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path': host_path,
+        f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly': (
+            'true' if mode.lower() == 'ro' else 'false'
+        ),
+    }
 
 
 def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
