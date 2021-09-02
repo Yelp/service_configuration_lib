@@ -1,3 +1,4 @@
+import functools
 import itertools
 import json
 import os
@@ -223,6 +224,15 @@ class TestGetSparkConf:
         )
         assert sorted(output[validate_key].split(',')) == sorted(set(expected_volumes))
 
+    def test_get_k8s_volume_hostpath_dict(self):
+        assert spark_config._get_k8s_volume_hostpath_dict(
+            '/host/file1', '/container/file1', 'RO', itertools.count(),
+        ) == {
+            'spark.kubernetes.executor.volumes.hostPath.0.mount.path': '/container/file1',
+            'spark.kubernetes.executor.volumes.hostPath.0.options.path': '/host/file1',
+            'spark.kubernetes.executor.volumes.hostPath.0.mount.readOnly': 'true',
+        }
+
     @pytest.mark.parametrize(
         'volumes', [
             None,
@@ -237,16 +247,7 @@ class TestGetSparkConf:
     def test_get_k8s_docker_volumes_conf(self, volumes):
         expected_volumes = {}
 
-        def _get_k8s_volume(host_path, container_path, mode, count=itertools.count()):
-            volume_name = next(count)
-            return {
-                f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.path': container_path,
-                f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.options.path': host_path,
-                f'spark.kubernetes.executor.volumes.hostPath.{volume_name}.mount.readOnly': (
-                    'true' if mode.lower() == 'ro' else 'false'
-                ),
-            }
-
+        _get_k8s_volume = functools.partial(spark_config._get_k8s_volume_hostpath_dict, count=itertools.count())
         if volumes:
             for volume in volumes:
                 expected_volumes.update(
