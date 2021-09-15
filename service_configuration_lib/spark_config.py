@@ -4,6 +4,7 @@ import itertools
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 from typing import Dict
@@ -34,6 +35,7 @@ DEFAULT_MAX_CORES = 4
 DEFAULT_EXECUTOR_CORES = 2
 DEFAULT_EXECUTOR_INSTANCES = 2
 DEFAULT_EXECUTOR_MEMORY = '4g'
+DEFAULT_K8S_LABEL_LENGTH = 63
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -446,6 +448,11 @@ def _get_k8s_spark_env(
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
 ) -> Dict[str, str]:
+    # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+    # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
+    _paasta_cluster = _get_k8s_resource_name_prefix(paasta_cluster)[:DEFAULT_K8S_LABEL_LENGTH]
+    _paasta_service = _get_k8s_resource_name_prefix(paasta_service)[:DEFAULT_K8S_LABEL_LENGTH]
+    _paasta_instance = _get_k8s_resource_name_prefix(paasta_instance)[:DEFAULT_K8S_LABEL_LENGTH]
     spark_env = {
         'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
@@ -460,17 +467,21 @@ def _get_k8s_spark_env(
         'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
         'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
         'spark.kubernetes.container.image.pullPolicy': 'Always',
-        'spark.kubernetes.executor.label.yelp.com/paasta_service': paasta_service,
-        'spark.kubernetes.executor.label.yelp.com/paasta_instance': paasta_instance,
-        'spark.kubernetes.executor.label.yelp.com/paasta_cluster': paasta_cluster,
-        'spark.kubernetes.executor.label.paasta.yelp.com/service': paasta_service,
-        'spark.kubernetes.executor.label.paasta.yelp.com/instance': paasta_instance,
-        'spark.kubernetes.executor.label.paasta.yelp.com/cluster': paasta_cluster,
+        'spark.kubernetes.executor.label.yelp.com/paasta_service': _paasta_service,
+        'spark.kubernetes.executor.label.yelp.com/paasta_instance': _paasta_instance,
+        'spark.kubernetes.executor.label.yelp.com/paasta_cluster': _paasta_cluster,
+        'spark.kubernetes.executor.label.paasta.yelp.com/service': _paasta_service,
+        'spark.kubernetes.executor.label.paasta.yelp.com/instance': _paasta_instance,
+        'spark.kubernetes.executor.label.paasta.yelp.com/cluster': _paasta_cluster,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
         **_get_k8s_docker_volumes_conf(volumes),
     }
     return spark_env
+
+
+def _get_k8s_resource_name_prefix(resource_name: str):
+    return re.sub('-+', '-', re.sub('[^a-z0-9\\-]', '-', resource_name.strip().lower()))
 
 
 def stringify_spark_env(spark_env: Mapping[str, str]) -> str:
