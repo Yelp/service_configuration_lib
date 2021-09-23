@@ -1,10 +1,10 @@
+import base64
 import functools
 import hashlib
 import itertools
 import json
 import logging
 import os
-import re
 import time
 from typing import Any
 from typing import Dict
@@ -450,9 +450,10 @@ def _get_k8s_spark_env(
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
-    _paasta_cluster = _get_k8s_resource_name_prefix(paasta_cluster)[:DEFAULT_K8S_LABEL_LENGTH]
-    _paasta_service = _get_k8s_resource_name_prefix(paasta_service)[:DEFAULT_K8S_LABEL_LENGTH]
-    _paasta_instance = _get_k8s_resource_name_prefix(paasta_instance)[:DEFAULT_K8S_LABEL_LENGTH]
+    # NOTE: this affects only k8s labels, not the pod names.
+    _paasta_cluster = _get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
+    _paasta_service = _get_k8s_resource_name_limit_size_with_hash(paasta_service)
+    _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
     spark_env = {
         'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
@@ -480,8 +481,22 @@ def _get_k8s_spark_env(
     return spark_env
 
 
-def _get_k8s_resource_name_prefix(resource_name: str):
-    return re.sub('-+', '-', re.sub('[^a-z0-9\\-]', '-', resource_name.strip().lower()))
+def _get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffix: int = 4) -> str:
+    """ Returns `name` unchanged if it's length does not exceed the `limit`.
+        Otherwise, returns truncated `name` with it's hash of size `suffix`
+        appended.
+
+        base32 encoding is chosen as it satisfies the common requirement in
+        various k8s names to be alphanumeric.
+
+        NOTE: This function is the same as paasta/paasta_tools/kubernetes_tools.py
+    """
+    if len(name) > limit:
+        digest = hashlib.md5(name.encode()).digest()
+        hash = base64.b32encode(digest).decode().replace('=', '').lower()
+        return f'{name[:(limit-suffix-1)]}-{hash[:suffix]}'
+    else:
+        return name
 
 
 def stringify_spark_env(spark_env: Mapping[str, str]) -> str:
