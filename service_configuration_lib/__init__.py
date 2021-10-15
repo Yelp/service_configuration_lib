@@ -127,7 +127,7 @@ def read_yaml_file(file_name, deepcopy=True):
     return data
 
 
-def generate_service_info(service_information, **kwargs):
+def generate_service_info(service_information, **kwargs) -> ServiceInfoDict:
     service_info = kwargs
     service_info.update(service_information)
     return ServiceInfoDict(service_info)
