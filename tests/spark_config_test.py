@@ -300,7 +300,28 @@ class TestGetSparkConf:
             (
                 'kubernetes',
                 {},
-                {'spark.executor.memory': '4g', 'spark.executor.cores': '2', 'spark.executor.instances': '2'},
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '2',
+                    'spark.executor.instances': '2',
+                    'spark.kubernetes.executor.limit.cores': '2',
+                    'spark.kubernetes.allocation.batch.size': '2',
+                },
+            ),
+            # user defined resources with k8s
+            (
+                'kubernetes',
+                {
+                    'spark.executor.cores': '2',
+                    'spark.executor.instances': '600',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '2',
+                    'spark.executor.instances': '600',
+                    'spark.kubernetes.executor.limit.cores': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
+                },
             ),
             # use default mesos settings
             (
@@ -372,8 +393,8 @@ class TestGetSparkConf:
         output = spark_config._adjust_spark_requested_resources(
             user_spark_opts, cluster_manager, pool,
         )
-        for key in expected_output:
-            assert output[key] == expected_output[key]
+        for key in expected_output.keys():
+            assert output[key] == expected_output[key], f'wrong value for {key}'
 
     @pytest.mark.parametrize(
         'cluster_manager,spark_opts,pool', [
