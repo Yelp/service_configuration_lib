@@ -37,6 +37,7 @@ DEFAULT_EXECUTOR_INSTANCES = 2
 DEFAULT_EXECUTOR_MEMORY = '4g'
 DEFAULT_K8S_LABEL_LENGTH = 63
 DEFAULT_K8S_BATCH_SIZE = 512
+DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -292,6 +293,10 @@ def _adjust_spark_requested_resources(
             str(min(executor_instances, DEFAULT_K8S_BATCH_SIZE)),
         )
         user_spark_opts.setdefault('spark.kubernetes.executor.limit.cores', str(executor_cores))
+        user_spark_opts.setdefault(
+            'spark.scheduler.maxRegisteredResourcesWaitingTime',
+            str(10 + executor_instances * DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR // 60) + 'min',
+        )
 
     if max_cores < executor_cores:
         raise ValueError(f'Total number of cores {max_cores} is less than per-executor cores {executor_cores}')
