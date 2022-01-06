@@ -306,6 +306,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
             ),
             # user defined resources with k8s
@@ -321,6 +322,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '600',
                     'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '512',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
                 },
             ),
             # use default mesos settings
