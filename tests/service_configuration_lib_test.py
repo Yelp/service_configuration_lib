@@ -214,6 +214,18 @@ class TestServiceConfigurationLib:
         listdir_patch.assert_called_once_with('nodir')
         assert expected == actual
 
+    def test_read_soa_metadata(self, tmpdir):
+        soa_dir = tmpdir.mkdir('test_read_soa_metadata')
+        metadata_file = soa_dir.join('.metadata.json')
+        metadata_file.write('{"hello":"world"}')
+        actual_metadata = service_configuration_lib.read_soa_metadata(soa_dir=str(soa_dir))
+        assert actual_metadata == {'hello': 'world'}
+
+    def test_read_soa_metadata_dne(self, tmpdir):
+        soa_dir = tmpdir.mkdir('test_read_soa_metadata_dne')
+        actual_metadata = service_configuration_lib.read_soa_metadata(soa_dir=str(soa_dir))
+        assert actual_metadata == {}
+
     @mock.patch('service_configuration_lib.read_service_configuration_from_dir', return_value='bye')
     @mock.patch('os.path.abspath', return_value='cafe')
     def test_read_service_configuration(self, abs_patch, read_patch):
