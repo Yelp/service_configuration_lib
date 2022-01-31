@@ -176,6 +176,11 @@ def list_services(soa_dir=DEFAULT_SOA_DIR):
     return os.listdir(rootdir)
 
 
+def read_soa_metadata(soa_dir=DEFAULT_SOA_DIR):
+    """Reads the metadata file in the SOA directory"""
+    return read_yaml_file(os.path.join(os.path.abspath(soa_dir), '.metadata.json'))
+
+
 def get_service_from_port(port, all_services=None):
     """Gets the name of the service from the port
     all_services allows you to feed in the services to look through, pass
