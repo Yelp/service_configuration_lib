@@ -286,7 +286,7 @@ def _adjust_spark_requested_resources(
         executor_instances = max_cores / executor_cores
     elif cluster_manager == 'kubernetes':
         # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
-        # once we mesos is not longer around at Yelp.
+        # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
             executor_instances = int(user_spark_opts.get('spark.cores.max', str(DEFAULT_MAX_CORES))) // executor_cores
             user_spark_opts['spark.executor.instances'] = str(executor_instances)
