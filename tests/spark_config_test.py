@@ -325,6 +325,27 @@ class TestGetSparkConf:
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
                 },
             ),
+            # kubernetes migration
+            (
+                'kubernetes',
+                {
+                    'spark.executor.memory': '2g',
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '12',
+                    'spark.mesos.executor.memoryOverhead': '4096',
+                },
+                {
+                    'spark.executor.memory': '2g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '3',
+                    'spark.cores.max': '12',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '3',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
+                    'spark.executor.memoryOverhead': '4096',
+                    'spark.mesos.executor.memoryOverhead': '4096',
+                },
+            ),
             # use default mesos settings
             (
                 'mesos',
