@@ -285,6 +285,17 @@ def _adjust_spark_requested_resources(
         max_cores = int(user_spark_opts.setdefault('spark.cores.max', str(DEFAULT_MAX_CORES)))
         executor_instances = max_cores / executor_cores
     elif cluster_manager == 'kubernetes':
+        # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
+        # once mesos is not longer around at Yelp.
+        if 'spark.executor.instances' not in user_spark_opts:
+            executor_instances = int(user_spark_opts.get('spark.cores.max', str(DEFAULT_MAX_CORES))) // executor_cores
+            user_spark_opts['spark.executor.instances'] = str(executor_instances)
+        if (
+            'spark.mesos.executor.memoryOverhead' in user_spark_opts and
+            'spark.executor.memoryOverhead' not in user_spark_opts
+        ):
+            user_spark_opts['spark.executor.memoryOverhead'] = user_spark_opts['spark.mesos.executor.memoryOverhead']
+
         executor_instances = int(
             user_spark_opts.setdefault('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)),
         )
