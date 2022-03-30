@@ -507,6 +507,36 @@ class TestGetSparkConf:
         key = 'spark.sql.shuffle.partitions'
         assert output[key] == expected_output
 
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
+            # not configured by user
+            ({}, 'true'),
+            # configured by user
+            ({'spark.logConf': 'false'}, 'false'),
+        ],
+    )
+    def test_append_spark_conf_log(
+            self, user_spark_opts, expected_output,
+    ):
+        output = spark_config._append_spark_conf_log(user_spark_opts)
+        key = 'spark.logConf'
+        assert output[key] == expected_output
+
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
+            # not configured by user
+            ({}, 'true'),
+            # configured by user
+            ({'spark.ui.showConsoleProgress': 'false'}, 'false'),
+        ],
+    )
+    def test_append_console_progress_conf(
+            self, user_spark_opts, expected_output,
+    ):
+        output = spark_config._append_console_progress_conf(user_spark_opts)
+        key = 'spark.ui.showConsoleProgress'
+        assert output[key] == expected_output
+
     @pytest.fixture
     def mock_get_mesos_docker_volumes_conf(self):
         return_value = {'spark.mesos.executor.docker.volumes': '/tmp:/tmp:ro'}
