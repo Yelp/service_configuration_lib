@@ -205,6 +205,21 @@ def _get_k8s_volume_hostpath_dict(host_path: str, container_path: str, mode: str
         ),
     }
 
+def _append_spark_conf_log(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    # user configured spark.logConf, don't modify
+    if 'spark.logConf' in spark_opts:
+        return spark_opts
+
+    spark_opts['spark.logConf'] = 'true'
+    return spark_opts
+
+def _append_console_progress_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    # user configured spark.ui.showConsoleProgress config, don't modify
+    if 'spark.ui.showConsoleProgress' in spark_opts:
+        return spark_opts
+
+    spark_opts['spark.ui.showConsoleProgress'] = 'true'
+    return spark_opts
 
 def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
     if 'spark.sql.shuffle.partitions' in spark_opts:
@@ -677,6 +692,12 @@ def get_spark_conf(
 
     # configure sql shuffle partitions
     spark_conf = _append_sql_shuffle_partitions_conf(spark_conf)
+
+    # configure spark conf log
+    spark_conf = _append_spark_conf_log(spark_conf)
+
+    # configure spark Console Progress
+    spark_conf = _append_console_progress_conf(spark_conf)
     return spark_conf
 
 
