@@ -206,6 +206,16 @@ def _get_k8s_volume_hostpath_dict(host_path: str, container_path: str, mode: str
     }
 
 
+def _append_spark_config(spark_opts: Dict[str, str], config_name: str, config_value: str) -> Dict[str, str]:
+    # config already defined by the user, don't modify
+    if config_name in spark_opts:
+        return spark_opts
+
+    # append the config
+    spark_opts[config_name] = config_value
+    return spark_opts
+
+
 def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
     if 'spark.sql.shuffle.partitions' in spark_opts:
         return spark_opts
@@ -677,6 +687,12 @@ def get_spark_conf(
 
     # configure sql shuffle partitions
     spark_conf = _append_sql_shuffle_partitions_conf(spark_conf)
+
+    # configure spark conf log
+    spark_conf = _append_spark_config(spark_conf, 'spark.logConf', 'true')
+
+    # configure spark Console Progress
+    spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
     return spark_conf
 
 

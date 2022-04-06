@@ -507,6 +507,54 @@ class TestGetSparkConf:
         key = 'spark.sql.shuffle.partitions'
         assert output[key] == expected_output
 
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
+            # not configured by user
+            ({}, 'true'),
+            # configured by user
+            ({'spark.logConf': 'false'}, 'false'),
+        ],
+    )
+    def test_append_spark_conf_log(
+            self, user_spark_opts, expected_output,
+    ):
+        key = 'spark.logConf'
+        output = spark_config._append_spark_config(user_spark_opts, key, 'true')
+
+        assert output[key] == expected_output
+
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
+            # not configured by user
+            ({}, 'true'),
+            # configured by user
+            ({'spark.ui.showConsoleProgress': 'false'}, 'false'),
+        ],
+    )
+    def test_append_console_progress_conf(
+            self, user_spark_opts, expected_output,
+    ):
+        key = 'spark.ui.showConsoleProgress'
+        output = spark_config._append_spark_config(user_spark_opts, key, 'true')
+
+        assert output[key] == expected_output
+
+    @pytest.fixture
+    def mock_append_spark_conf_log(self):
+        return_value = {'spark.logConf': 'true'}
+        with MockConfigFunction(
+                '_append_spark_config', return_value,
+        ) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_append_console_progress_conf(self):
+        return_value = {'spark.ui.showConsoleProgress': 'true'}
+        with MockConfigFunction(
+                '_append_spark_config', return_value,
+        ) as m:
+            yield m
+
     @pytest.fixture
     def mock_get_mesos_docker_volumes_conf(self):
         return_value = {'spark.mesos.executor.docker.volumes': '/tmp:/tmp:ro'}
@@ -768,6 +816,8 @@ class TestGetSparkConf:
         assert_ui_port,
         assert_app_name,
         mock_log,
+        mock_append_spark_conf_log,
+        mock_append_console_progress_conf,
     ):
         other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
         not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
@@ -810,7 +860,9 @@ class TestGetSparkConf:
             list(mock_get_mesos_docker_volumes_conf.return_value.keys()) +
             list(mock_adjust_spark_requested_resources_mesos.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
-            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
+            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()) +
+            list(mock_append_spark_conf_log.return_value.keys()) +
+            list(mock_append_console_progress_conf.return_value.keys()),
         )
         assert len(set(output.keys()) - verified_keys) == 0
         mock_get_mesos_docker_volumes_conf.mocker.assert_called_once_with(
