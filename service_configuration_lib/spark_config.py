@@ -297,7 +297,10 @@ def _adjust_spark_requested_resources(
     elif cluster_manager == 'kubernetes':
         # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
         # once mesos is not longer around at Yelp.
-        if 'spark.executor.instances' not in user_spark_opts:
+        if (
+                'spark.executor.instances' not in user_spark_opts and
+                ('spark.dynamicAllocation.enabled' not in user_spark_opts or str(user_spark_opts['spark.dynamicAllocation.enabled']) != 'true')
+        ):
             executor_instances = int(user_spark_opts.get('spark.cores.max', str(DEFAULT_MAX_CORES))) // executor_cores
             user_spark_opts['spark.executor.instances'] = str(executor_instances)
         if (
