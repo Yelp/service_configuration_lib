@@ -221,9 +221,9 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
         return spark_opts
 
     num_partitions = 2 * (
-        int(spark_opts.get('spark.cores.max', 0)) or
-        int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0)) or
         int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) * int(spark_opts.get('spark.executor.cores', 0))
+        or int(spark_opts.get('spark.cores.max', 0))
+        or int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0))
     )
     log.warning(
         f'spark.sql.shuffle.partitions has been set to {num_partitions} '

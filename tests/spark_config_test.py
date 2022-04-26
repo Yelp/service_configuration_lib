@@ -547,6 +547,14 @@ class TestGetSparkConf:
             ({'spark.executor.instances': '10', 'spark.executor.cores': '3'}, '60'),
             # user defined
             ({'spark.sql.shuffle.partitions': '300'}, '300'),
+            # dynamic resource allocation enabled
+            (
+                    {
+                        'spark.dynamicAllocation.maxExecutors': '128', 'spark.executor.cores': '3',
+                        'spark.cores.max': '10'
+                    },
+                    '768'
+            ),
         ],
     )
     def test_append_sql_shuffle_partitions_conf(
