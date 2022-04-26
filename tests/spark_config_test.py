@@ -549,11 +549,11 @@ class TestGetSparkConf:
             ({'spark.sql.shuffle.partitions': '300'}, '300'),
             # dynamic resource allocation enabled
             (
-                    {
-                        'spark.dynamicAllocation.maxExecutors': '128', 'spark.executor.cores': '3',
-                        'spark.cores.max': '10'
-                    },
-                    '768'
+                {
+                    'spark.dynamicAllocation.maxExecutors': '128', 'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '768',
             ),
         ],
     )
