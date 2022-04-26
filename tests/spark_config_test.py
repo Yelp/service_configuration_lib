@@ -296,6 +296,55 @@ class TestGetSparkConf:
 
     @pytest.mark.parametrize(
         'cluster_manager,user_spark_opts,expected_output', [
+            # dynamic resource allocation enabled
+            (
+                'kubernetes',
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '2',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
+                },
+            ),
+            # dynamic resource allocation disabled with instances specified
+            (
+                'kubernetes',
+                {
+                    'spark.dynamicAllocation.enabled': 'false',
+                    'spark.executor.instances': '600',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '2',
+                    'spark.executor.instances': '600',
+                    'spark.kubernetes.executor.limit.cores': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
+                },
+            ),
+            # dynamic resource allocation disabled with instances not specified
+            (
+                'kubernetes',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '32',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '32',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '16min',
+                },
+            ),
             # use default k8s settings
             (
                 'kubernetes',
