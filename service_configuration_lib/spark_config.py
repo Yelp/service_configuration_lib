@@ -226,12 +226,17 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
         int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0))
     )
 
-    if ('spark.dynamicAllocation.enabled' in user_spark_opts and
-            str(user_spark_opts['spark.dynamicAllocation.enabled']) == 'true' and
-            'spark.dynamicAllocation.maxExecutors' in user_spark_opts and
-            str(user_spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'):
-        num_partitions_dra = (int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
-                              int(spark_opts.get('spark.executor.cores', 0)))
+    if (
+        'spark.dynamicAllocation.enabled' in spark_opts and
+        str(spark_opts['spark.dynamicAllocation.enabled']) == 'true' and
+        'spark.dynamicAllocation.maxExecutors' in spark_opts and
+        str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
+    ):
+
+        num_partitions_dra = 2 * (
+            int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
+            int(spark_opts.get('spark.executor.cores', 0))
+        )
         num_partitions = max(num_partitions, num_partitions_dra)
 
     num_partitions = num_partitions or DEFAULT_SQL_SHUFFLE_PARTITIONS
@@ -316,7 +321,10 @@ def _adjust_spark_requested_resources(
                     'spark.dynamicAllocation.enabled' not in user_spark_opts or
                     str(user_spark_opts['spark.dynamicAllocation.enabled']) != 'true'
             ):
-                executor_instances = int(user_spark_opts.get('spark.cores.max', str(DEFAULT_MAX_CORES))) // executor_cores
+                executor_instances = int(user_spark_opts.get(
+                    'spark.cores.max',
+                    str(DEFAULT_MAX_CORES),
+                )) // executor_cores
                 user_spark_opts['spark.executor.instances'] = str(executor_instances)
         else:
             if (

@@ -568,39 +568,39 @@ class TestGetSparkConf:
             # dynamic resource allocation enabled, both maxExecutors and max cores defined
             (
                 {
-                    'spark.dynamicAllocation.enabled':'true',
+                    'spark.dynamicAllocation.enabled': 'true',
                     'spark.dynamicAllocation.maxExecutors': '128',
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '768', # max (2 * (max cores), 2 * (maxExecutors * executor cores))
+                '768',  # max (2 * (max cores), 2 * (maxExecutors * executor cores))
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores defined
             (
-                    {
-                        'spark.dynamicAllocation.enabled': 'true',
-                        'spark.executor.cores': '3',
-                        'spark.cores.max': '10',
-                    },
-                    '20', # 2 * max cores
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '20',  # 2 * max cores
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores not defined
             (
-                    {
-                        'spark.dynamicAllocation.enabled': 'true',
-                        'spark.executor.cores': '3',
-                    },
-                    '128', # DEFAULT_SQL_SHUFFLE_PARTITIONS
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '3',
+                },
+                '128',  # DEFAULT_SQL_SHUFFLE_PARTITIONS
             ),
             # dynamic resource allocation enabled maxExecutors infinity
             (
-                    {
-                        'spark.dynamicAllocation.enabled': 'true',
-                        'spark.dynamicAllocation.maxExecutors': 'infinity',
-                        'spark.executor.cores': '3',
-                        'spark.cores.max': '10',
-                    },
-                    '20', # 2 * max cores
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': 'infinity',
+                    'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '20',  # 2 * max cores
             ),
         ],
     )
