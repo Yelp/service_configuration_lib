@@ -39,6 +39,7 @@ DEFAULT_K8S_LABEL_LENGTH = 63
 DEFAULT_K8S_BATCH_SIZE = 512
 DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
 DEFAULT_CLUSTERMAN_OBSERVED_SCALING_TIME = 15  # minutes
+DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -222,14 +223,32 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
 
     num_partitions = 2 * (
         int(spark_opts.get('spark.cores.max', 0)) or
-        int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0))
+        int(spark_opts.get('spark.executor.instances', 0)) *
+        int(spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
     )
+
+    if (
+        'spark.dynamicAllocation.enabled' in spark_opts and
+        str(spark_opts['spark.dynamicAllocation.enabled']) == 'true' and
+        'spark.dynamicAllocation.maxExecutors' in spark_opts and
+        str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
+    ):
+
+        num_partitions_dra = 2 * (
+            int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
+            int(spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
+        )
+        num_partitions = max(num_partitions, num_partitions_dra)
+
+    num_partitions = num_partitions or DEFAULT_SQL_SHUFFLE_PARTITIONS
+
     log.warning(
         f'spark.sql.shuffle.partitions has been set to {num_partitions} '
         'to be equal to twice the number of requested cores, but you should '
         'consider setting a higher value if necessary.'
         ' Follow y/spark for help on partition sizing',
     )
+
     spark_opts['spark.sql.shuffle.partitions'] = str(num_partitions)
     return spark_opts
 
@@ -298,8 +317,23 @@ def _adjust_spark_requested_resources(
         # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
         # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
-            executor_instances = int(user_spark_opts.get('spark.cores.max', str(DEFAULT_MAX_CORES))) // executor_cores
-            user_spark_opts['spark.executor.instances'] = str(executor_instances)
+
+            if (
+                    'spark.dynamicAllocation.enabled' not in user_spark_opts or
+                    str(user_spark_opts['spark.dynamicAllocation.enabled']) != 'true'
+            ):
+                executor_instances = int(user_spark_opts.get(
+                    'spark.cores.max',
+                    str(DEFAULT_MAX_CORES),
+                )) // executor_cores
+                user_spark_opts['spark.executor.instances'] = str(executor_instances)
+
+        elif (
+            'spark.dynamicAllocation.enabled' in user_spark_opts and
+            str(user_spark_opts['spark.dynamicAllocation.enabled']) == 'true'
+        ):
+            user_spark_opts['spark.executor.instances'] = str(DEFAULT_EXECUTOR_INSTANCES)
+
         if (
             'spark.mesos.executor.memoryOverhead' in user_spark_opts and
             'spark.executor.memoryOverhead' not in user_spark_opts

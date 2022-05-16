@@ -296,6 +296,73 @@ class TestGetSparkConf:
 
     @pytest.mark.parametrize(
         'cluster_manager,user_spark_opts,expected_output', [
+            # dynamic resource allocation enabled
+            (
+                'kubernetes',
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '2',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
+                },
+            ),
+            (
+                'kubernetes',
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': '512',
+                    'spark.dynamicAllocation.minExecutors': '128',
+                    'spark.dynamicAllocation.initialExecutors': '128',
+                    'spark.executor.cores': '4',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '2',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
+                },
+            ),
+            # dynamic resource allocation disabled with instances specified
+            (
+                'kubernetes',
+                {
+                    'spark.dynamicAllocation.enabled': 'false',
+                    'spark.executor.instances': '600',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '2',
+                    'spark.executor.instances': '600',
+                    'spark.kubernetes.executor.limit.cores': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
+                },
+            ),
+            # dynamic resource allocation disabled with instances not specified
+            (
+                'kubernetes',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                },
+                {
+                    'spark.executor.memory': '4g',
+                    'spark.executor.cores': '4',
+                    'spark.executor.instances': '32',
+                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.kubernetes.allocation.batch.size': '32',
+                    'spark.scheduler.maxRegisteredResourcesWaitingTime': '16min',
+                },
+            ),
             # use default k8s settings
             (
                 'kubernetes',
@@ -498,6 +565,43 @@ class TestGetSparkConf:
             ({'spark.executor.instances': '10', 'spark.executor.cores': '3'}, '60'),
             # user defined
             ({'spark.sql.shuffle.partitions': '300'}, '300'),
+            # dynamic resource allocation enabled, both maxExecutors and max cores defined
+            (
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': '128',
+                    'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '768',  # max (2 * (max cores), 2 * (maxExecutors * executor cores))
+            ),
+            # dynamic resource allocation enabled maxExecutors not defined, max cores defined
+            (
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '20',  # 2 * max cores
+            ),
+            # dynamic resource allocation enabled maxExecutors not defined, max cores not defined
+            (
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.cores': '3',
+                },
+                '128',  # DEFAULT_SQL_SHUFFLE_PARTITIONS
+            ),
+            # dynamic resource allocation enabled maxExecutors infinity
+            (
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': 'infinity',
+                    'spark.executor.cores': '3',
+                    'spark.cores.max': '10',
+                },
+                '20',  # 2 * max cores
+            ),
         ],
     )
     def test_append_sql_shuffle_partitions_conf(
