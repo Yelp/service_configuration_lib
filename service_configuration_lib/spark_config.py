@@ -870,7 +870,7 @@ def _emit_resource_requirements(
             writer.send((metric_key, int(time.time()), required_quantity))
 
 
-def _get_spark_hourly_cost(
+def get_spark_hourly_cost(
     clusterman_metrics,
     resources: Mapping[str, int],
     cluster: str,
@@ -913,7 +913,7 @@ def send_and_calculate_resources_cost(
     cluster = spark_conf['spark.executorEnv.PAASTA_CLUSTER']
     app_name = spark_conf['spark.app.name']
     resources = get_resources_requested(spark_conf)
-    hourly_cost = _get_spark_hourly_cost(clusterman_metrics, resources, cluster, pool)
+    hourly_cost = get_spark_hourly_cost(clusterman_metrics, resources, cluster, pool)
     _emit_resource_requirements(
         clusterman_metrics, resources, app_name, spark_web_url, cluster, pool,
     )
