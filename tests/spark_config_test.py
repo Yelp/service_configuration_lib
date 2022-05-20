@@ -643,6 +643,17 @@ class TestGetSparkConf:
 
         assert output[key] == expected_output
 
+    def test_append_aws_credentials_conf(self):
+        output = spark_config._append_aws_credentials_conf(
+            {},
+            mock.sentinel.access,
+            mock.sentinel.secret,
+            mock.sentinel.token,
+        )
+        assert output['spark.hadoop.fs.s3a.access.key'] == mock.sentinel.access
+        assert output['spark.hadoop.fs.s3a.secret.key'] == mock.sentinel.secret
+        assert output['spark.hadoop.fs.s3a.session.token'] == mock.sentinel.token
+
     @pytest.fixture
     def mock_append_spark_conf_log(self):
         return_value = {'spark.logConf': 'true'}
@@ -680,6 +691,19 @@ class TestGetSparkConf:
             'spark.eventLog.dir': 's3a://test/bucket/',
         }
         with MockConfigFunction('_append_event_log_conf', return_value) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_append_aws_credentials_conf(self):
+        return_value = {
+            'spark.hadoop.fs.s3a.access.key': 'my_key',
+            'spark.hadoop.fs.s3.access.key': 'my_key',
+            'spark.hadoop.fs.s3a.secret.key': 'your_key',
+            'spark.hadoop.fs.s3.secret.key': 'your_key',
+            'spark.hadoop.fs.s3a.session.token': 'ice_cream',
+            'spark.hadoop.fs.s3.session.token': 'ice_cream',
+        }
+        with MockConfigFunction('_append_aws_credentials_conf', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -909,6 +933,7 @@ class TestGetSparkConf:
         extra_docker_params,
         mock_get_mesos_docker_volumes_conf,
         mock_append_event_log_conf,
+        mock_append_aws_credentials_conf,
         mock_append_sql_shuffle_partitions_conf,
         mock_adjust_spark_requested_resources_mesos,
         mock_time,
@@ -964,6 +989,7 @@ class TestGetSparkConf:
             list(mock_get_mesos_docker_volumes_conf.return_value.keys()) +
             list(mock_adjust_spark_requested_resources_mesos.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
+            list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_shuffle_partitions_conf.return_value.keys()) +
             list(mock_append_spark_conf_log.return_value.keys()) +
             list(mock_append_console_progress_conf.return_value.keys()),
@@ -978,6 +1004,7 @@ class TestGetSparkConf:
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
         )
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
@@ -1030,6 +1057,7 @@ class TestGetSparkConf:
         spark_opts_from_env,
         ui_port,
         mock_append_event_log_conf,
+        mock_append_aws_credentials_conf,
         mock_append_sql_shuffle_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_time,
@@ -1067,6 +1095,7 @@ class TestGetSparkConf:
             list(other_spark_opts.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
+            list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
         )
         assert len(set(output.keys()) - verified_keys) == 0
@@ -1076,6 +1105,7 @@ class TestGetSparkConf:
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
         )
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )

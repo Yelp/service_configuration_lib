@@ -300,6 +300,31 @@ def _append_event_log_conf(
     return spark_opts
 
 
+def _append_aws_credentials_conf(
+    spark_opts: Dict[str, str],
+    access_key: Optional[str],
+    secret_key: Optional[str],
+    session_token: Optional[str] = None,
+) -> Dict[str, str]:
+    """It is important that we set the aws creds via the spark configs and not via the AWS
+    environment variables.  See HADOOP-18233 for details
+
+    We set both s3a and s3 credentials because s3a is the actual hadoop-aws driver, but our
+    glue-metatore integration will attempt to use s3 path drivers which are monkeypatched
+    to use the the s3a driver.
+    """
+    if access_key:
+        spark_opts['spark.hadoop.fs.s3a.access.key'] = access_key
+        spark_opts['spark.hadoop.fs.s3.access.key'] = access_key
+    if secret_key:
+        spark_opts['spark.hadoop.fs.s3a.secret.key'] = secret_key
+        spark_opts['spark.hadoop.fs.s3.secret.key'] = secret_key
+    if session_token:
+        spark_opts['spark.hadoop.fs.s3a.session.token'] = session_token
+        spark_opts['spark.hadoop.fs.s3.session.token'] = session_token
+    return spark_opts
+
+
 def _adjust_spark_requested_resources(
     user_spark_opts: Dict[str, str],
     cluster_manager: str,
@@ -724,6 +749,8 @@ def get_spark_conf(
 
     # configure spark Console Progress
     spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
+
+    spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds)
     return spark_conf
 
 
