@@ -363,6 +363,29 @@ class TestGetSparkConf:
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '16min',
                 },
             ),
+            # k8s allocation batch size not specified
+            (
+                    'kubernetes',
+                    {
+                        'spark.executor.cores': '4',
+                        'spark.cores.max': '128',
+                    },
+                    {
+                        'spark.kubernetes.allocation.batch.size': '512',
+                    },
+            ),
+            # k8s allocation batch size specified
+            (
+                    'kubernetes',
+                    {
+                        'spark.executor.cores': '4',
+                        'spark.cores.max': '128',
+                        'spark.kubernetes.allocation.batch.size': '151',
+                    },
+                    {
+                        'spark.kubernetes.allocation.batch.size': '151',
+                    },
+            ),
             # use default k8s settings
             (
                 'kubernetes',
