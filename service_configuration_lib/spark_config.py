@@ -368,7 +368,7 @@ def _adjust_spark_requested_resources(
         max_cores = executor_instances * executor_cores
         user_spark_opts.setdefault(
             'spark.kubernetes.allocation.batch.size',
-            str(min(executor_instances, DEFAULT_K8S_BATCH_SIZE)),
+            str(DEFAULT_K8S_BATCH_SIZE),
         )
         user_spark_opts.setdefault('spark.kubernetes.executor.limit.cores', str(executor_cores))
         waiting_time = (

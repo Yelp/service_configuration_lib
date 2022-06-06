@@ -309,7 +309,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
             ),
@@ -327,7 +327,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
             ),
@@ -359,8 +359,31 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.executor.instances': '32',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.kubernetes.allocation.batch.size': '32',
+                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '16min',
+                },
+            ),
+            # k8s allocation batch size not specified
+            (
+                'kubernetes',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                },
+                {
+                    'spark.kubernetes.allocation.batch.size': '512',
+                },
+            ),
+            # k8s allocation batch size specified
+            (
+                'kubernetes',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.cores.max': '128',
+                    'spark.kubernetes.allocation.batch.size': '151',
+                },
+                {
+                    'spark.kubernetes.allocation.batch.size': '151',
                 },
             ),
             # use default k8s settings
@@ -372,7 +395,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '2',
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '2',
-                    'spark.kubernetes.allocation.batch.size': '2',
+                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
             ),
@@ -407,7 +430,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '3',
                     'spark.cores.max': '12',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.kubernetes.allocation.batch.size': '3',
+                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                     'spark.executor.memoryOverhead': '4096',
                     'spark.mesos.executor.memoryOverhead': '4096',
