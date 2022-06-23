@@ -642,6 +642,7 @@ def get_spark_conf(
     mesos_leader: Optional[str] = None,
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     load_paasta_default_volumes: bool = False,
+    auto_set_temporary_credentials_provider: bool = True,
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
@@ -673,6 +674,10 @@ def get_spark_conf(
         spark session.
     :param load_paasta_default_volumes: whether to include default paasta mounted volumes
         into the spark executors.
+    :param auto_set_temporary_credentials_provider: whether to set the temporary credentials
+        provider if the session token exists.  In hadoop-aws 3.2.1 this is needed, but
+        in hadoop-aws 3.3.1 the temporary credentials provider is the new default and
+        causes errors if explicitly set for unknown reasons.
     :returns: spark opts in a dict.
     """
     # for simplicity, all the following computation are assuming spark opts values
@@ -697,10 +702,7 @@ def get_spark_conf(
 
     spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
 
-    # We automatically update the credentials provider if the session token is included.
-    # By default the SimpleAWSCredentials provider is used, which is incompatible with
-    # temporary credentials. More details in SEC-13906.
-    if aws_creds[2] is not None:
+    if aws_creds[2] is not None and auto_set_temporary_credentials_provider:
         spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_TEMP_CREDENTIALS_PROVIDER
 
     spark_conf.update({

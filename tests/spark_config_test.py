@@ -919,7 +919,8 @@ class TestGetSparkConf:
 
         return verify
 
-    def test_get_spark_conf_aws_session(self):
+    @pytest.mark.parametrize('use_temp_provider', [True, False])
+    def test_get_spark_conf_aws_session(self, use_temp_provider):
         other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
         not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
         user_spark_opts = {
@@ -941,9 +942,13 @@ class TestGetSparkConf:
             docker_img=self.docker_image,
             extra_volumes=self.extra_volumes,
             aws_creds=aws_creds,
+            auto_set_temporary_credentials_provider=use_temp_provider,
         )
-        assert self.aws_provider_key in output.keys()
-        assert 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider' == output[self.aws_provider_key]
+        if use_temp_provider:
+            assert self.aws_provider_key in output.keys()
+            assert 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider' == output[self.aws_provider_key]
+        else:
+            assert self.aws_provider_key not in output
 
     def test_get_spark_conf_mesos(
         self,
