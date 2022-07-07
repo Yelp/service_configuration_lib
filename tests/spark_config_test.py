@@ -542,7 +542,6 @@ class TestGetSparkConf:
             expected_output,
     ):
         output = spark_config._get_dra_configs(user_spark_opts)
-        print(output)
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
 
