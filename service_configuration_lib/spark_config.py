@@ -40,6 +40,9 @@ DEFAULT_K8S_BATCH_SIZE = 512
 DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
 DEFAULT_CLUSTERMAN_OBSERVED_SCALING_TIME = 15  # minutes
 DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
+DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
+DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '420s'
+DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -256,22 +259,33 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         return spark_opts
 
     spark_opts['spark.dynamicAllocation.shuffleTracking.enabled'] = "true"
-    spark_opts['spark.dynamicAllocation.executorAllocationRatio'] = "0.8"
+    spark_opts['spark.dynamicAllocation.executorAllocationRatio'] = str(DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO)
+    spark_opts['spark.dynamicAllocation.cachedExecutorIdleTimeout'] = str(DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT)
 
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
 
-        min_executors = int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES)) // 4
+        min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', DEFAULT_DRA_MIN_EXECUTOR_RATIO)
+        min_executors = int(int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES)) *
+                            float(min_executor_ratio))
         if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
             min_executors = min(min_executors, int(spark_opts.get('spark.dynamicAllocation.initialExecutors')))
-
         spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
+
+        if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+            log.info(
+                f'spark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
+                f'to be used as minimum executors for Dynamic Resource Allocation. Using default ratio '
+                f'{DEFAULT_DRA_MIN_EXECUTOR_RATIO}, setting spark.dynamicAllocation.minExecutors as '
+                f'{min_executors}. If you wish to change the value of minimum executors, '
+                f'please provide desired spark.yelp.dra.minExecutorRatio or provide the exact value of '
+                f'spark.dynamicAllocation.minExecutors in --spark-args',
+            )
 
     if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
 
         max_executors = int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES))
         if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
-            min_executors = max(max_executors, int(spark_opts.get('spark.dynamicAllocation.initialExecutors')))
-
+            max_executors = max(max_executors, int(spark_opts.get('spark.dynamicAllocation.initialExecutors')))
         spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
 
     spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
