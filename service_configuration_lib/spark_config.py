@@ -272,7 +272,6 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     )
 
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
-
         # the ratio of total executors to be used as minExecutors
         min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', DEFAULT_DRA_MIN_EXECUTOR_RATIO)
         # set minExecutors default as a ratio of spark.executor.instances
@@ -289,19 +288,21 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             )
 
         spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
+        log.info(
+            f'Setting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
+            f'change the value of minimum executors, please provide the exact value of '
+            f'spark.dynamicAllocation.minExecutors in --spark-args',
+        )
 
         if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
-            log.info(
+            log.debug(
                 f'spark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
-                f'default ratio {DEFAULT_DRA_MIN_EXECUTOR_RATIO}, setting spark.dynamicAllocation.minExecutors '
-                f'as {min_executors}. If you wish to change the value of minimum executors, please provide '
-                f'the desired spark.yelp.dra.minExecutorRatio or provide the exact value of '
-                f'spark.dynamicAllocation.minExecutors in --spark-args',
+                f'default ratio: {DEFAULT_DRA_MIN_EXECUTOR_RATIO}. If you wish to change this value, please provide '
+                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args',
             )
 
     if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
-
         # set maxExecutors default equal to spark.executor.instances
         max_executors = int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES))
         # maxExecutors should not be less than initialExecutors
@@ -309,7 +310,6 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             max_executors = max(max_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
 
         spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
-
         log.info(
             f'Setting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
             f'change the value of maximum executors, please provide the exact value of '
@@ -317,7 +317,6 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         )
 
     spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
-
     return spark_opts
 
 
@@ -416,6 +415,13 @@ def _adjust_spark_requested_resources(
                 str(DEFAULT_MAX_CORES),
             )) // executor_cores
             user_spark_opts['spark.executor.instances'] = str(executor_instances)
+
+            if user_spark_opts['spark.executor.instances'] == str(DEFAULT_EXECUTOR_INSTANCES):
+                log.warning(
+                    f'spark.executor.instances not provided. Setting spark.executor.instances as '
+                    f'{executor_instances}. If you wish to change the number of executors, please '
+                    f'provide the exact value of spark.executor.instances in --spark-args',
+                )
 
         if (
             'spark.mesos.executor.memoryOverhead' in user_spark_opts and
