@@ -73,6 +73,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
 K8S_AUTH_FOLDER = '/etc/pki/spark'
 
 log = logging.Logger(__name__)
+log.setLevel(logging.INFO)
 
 
 def _load_aws_credentials_from_yaml(yaml_file_path) -> Tuple[str, str, Optional[str]]:
@@ -288,18 +289,18 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             )
 
         spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
-        log.info(
-            f'Setting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
             f'change the value of minimum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.minExecutors in --spark-args',
+            f'spark.dynamicAllocation.minExecutors in --spark-args\n',
         )
 
         if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
             log.debug(
-                f'spark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
+                f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
                 f'default ratio: {DEFAULT_DRA_MIN_EXECUTOR_RATIO}. If you wish to change this value, please provide '
-                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args',
+                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args\n',
             )
 
     if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
@@ -310,10 +311,10 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             max_executors = max(max_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
 
         spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
-        log.info(
-            f'Setting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
             f'change the value of maximum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.maxExecutors in --spark-args',
+            f'spark.dynamicAllocation.maxExecutors in --spark-args\n',
         )
 
     spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
