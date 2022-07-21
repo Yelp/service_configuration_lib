@@ -40,6 +40,9 @@ DEFAULT_K8S_BATCH_SIZE = 512
 DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
 DEFAULT_CLUSTERMAN_OBSERVED_SCALING_TIME = 15  # minutes
 DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
+DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
+DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '420s'
+DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -70,6 +73,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
 K8S_AUTH_FOLDER = '/etc/pki/spark'
 
 log = logging.Logger(__name__)
+log.setLevel(logging.INFO)
 
 
 def _load_aws_credentials_from_yaml(yaml_file_path) -> Tuple[str, str, Optional[str]]:
@@ -250,6 +254,73 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
     return spark_opts
 
 
+def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    if (
+        'spark.dynamicAllocation.enabled' not in spark_opts or
+        str(spark_opts['spark.dynamicAllocation.enabled']) != 'true'
+    ):
+        return spark_opts
+
+    # set defaults if not provided already
+    _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
+    _append_spark_config(
+        spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
+        str(DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO),
+    )
+    _append_spark_config(
+        spark_opts, 'spark.dynamicAllocation.cachedExecutorIdleTimeout',
+        str(DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT),
+    )
+
+    if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
+        # the ratio of total executors to be used as minExecutors
+        min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', DEFAULT_DRA_MIN_EXECUTOR_RATIO)
+        # set minExecutors default as a ratio of spark.executor.instances
+        min_executors = int(int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES)) *
+                            float(min_executor_ratio))
+        # minExecutors should not be more than initialExecutors
+        if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
+            min_executors = min(min_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
+        # minExecutors should not be more than maxExecutors
+        if 'spark.dynamicAllocation.maxExecutors' in spark_opts:
+            min_executors = min(
+                min_executors, int(int(spark_opts['spark.dynamicAllocation.maxExecutors']) *
+                                   float(min_executor_ratio)),
+            )
+
+        spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
+            f'change the value of minimum executors, please provide the exact value of '
+            f'spark.dynamicAllocation.minExecutors in --spark-args\n',
+        )
+
+        if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+            log.debug(
+                f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
+                f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
+                f'default ratio: {DEFAULT_DRA_MIN_EXECUTOR_RATIO}. If you wish to change this value, please provide '
+                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args\n',
+            )
+
+    if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
+        # set maxExecutors default equal to spark.executor.instances
+        max_executors = int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES))
+        # maxExecutors should not be less than initialExecutors
+        if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
+            max_executors = max(max_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
+
+        spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
+            f'change the value of maximum executors, please provide the exact value of '
+            f'spark.dynamicAllocation.maxExecutors in --spark-args\n',
+        )
+
+    spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
+    return spark_opts
+
+
 def _append_event_log_conf(
     spark_opts: Dict[str, str],
     access_key: Optional[str],
@@ -340,21 +411,18 @@ def _adjust_spark_requested_resources(
         # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
 
-            if (
-                    'spark.dynamicAllocation.enabled' not in user_spark_opts or
-                    str(user_spark_opts['spark.dynamicAllocation.enabled']) != 'true'
-            ):
-                executor_instances = int(user_spark_opts.get(
-                    'spark.cores.max',
-                    str(DEFAULT_MAX_CORES),
-                )) // executor_cores
-                user_spark_opts['spark.executor.instances'] = str(executor_instances)
+            executor_instances = int(user_spark_opts.get(
+                'spark.cores.max',
+                str(DEFAULT_MAX_CORES),
+            )) // executor_cores
+            user_spark_opts['spark.executor.instances'] = str(executor_instances)
 
-        elif (
-            'spark.dynamicAllocation.enabled' in user_spark_opts and
-            str(user_spark_opts['spark.dynamicAllocation.enabled']) == 'true'
-        ):
-            user_spark_opts['spark.executor.instances'] = str(DEFAULT_EXECUTOR_INSTANCES)
+            if user_spark_opts['spark.executor.instances'] == str(DEFAULT_EXECUTOR_INSTANCES):
+                log.warning(
+                    f'spark.executor.instances not provided. Setting spark.executor.instances as '
+                    f'{executor_instances}. If you wish to change the number of executors, please '
+                    f'provide the exact value of spark.executor.instances in --spark-args',
+                )
 
         if (
             'spark.mesos.executor.memoryOverhead' in user_spark_opts and
@@ -739,6 +807,9 @@ def get_spark_conf(
         ))
     else:
         raise ValueError('Unknown resource_manager, should be either [mesos,kubernetes]')
+
+    # configure dynamic resource allocation configs
+    spark_conf = _get_dra_configs(spark_conf)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
