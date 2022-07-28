@@ -41,7 +41,7 @@ DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
 DEFAULT_CLUSTERMAN_OBSERVED_SCALING_TIME = 15  # minutes
 DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
 DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
-DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '420s'
+DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '900s'
 DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
 
 
@@ -254,7 +254,7 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
     return spark_opts
 
 
-def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
+def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     if (
         'spark.dynamicAllocation.enabled' not in spark_opts or
         str(spark_opts['spark.dynamicAllocation.enabled']) != 'true'
@@ -270,6 +270,12 @@ def _get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     _append_spark_config(
         spark_opts, 'spark.dynamicAllocation.cachedExecutorIdleTimeout',
         str(DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT),
+    )
+    log.warning(
+        f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as {DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. '
+        f'Executor with cached data block will be released if it has been idle for this duration. '
+        f'If you wish to change the value of cachedExecutorIdleTimeout, please provide the exact value of '
+        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in --spark-args\n',
     )
 
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
@@ -809,7 +815,7 @@ def get_spark_conf(
         raise ValueError('Unknown resource_manager, should be either [mesos,kubernetes]')
 
     # configure dynamic resource allocation configs
-    spark_conf = _get_dra_configs(spark_conf)
+    spark_conf = get_dra_configs(spark_conf)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
