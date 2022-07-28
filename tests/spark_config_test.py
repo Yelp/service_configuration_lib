@@ -475,7 +475,7 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.enabled': 'true',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '420s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
                     'spark.dynamicAllocation.minExecutors': '0',
                     'spark.dynamicAllocation.maxExecutors': '2',
                     'spark.executor.instances': '0',
@@ -495,7 +495,7 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.initialExecutors': '128',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '420s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
                     'spark.executor.instances': '128',
                 },
             ),
@@ -510,7 +510,7 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.minExecutors': '205',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '420s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
                     'spark.executor.instances': '205',
                 },
             ),
@@ -541,7 +541,7 @@ class TestGetSparkConf:
             user_spark_opts,
             expected_output,
     ):
-        output = spark_config._get_dra_configs(user_spark_opts)
+        output = spark_config.get_dra_configs(user_spark_opts)
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
 
