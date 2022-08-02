@@ -1057,6 +1057,13 @@ class TestGetSparkConf:
         (warning_msg,), _ = mock_log.warning.call_args
         assert next(iter(not_allowed_opts.keys())) in warning_msg
 
+    def _get_k8s_base_volumes(self):
+        """Helper needed to allow tests to pass in github CI checks."""
+        return [
+            volume for volume in spark_config.K8S_BASE_VOLUMES
+            if os.path.exists(volume['containerPath'])
+        ]
+
     @pytest.fixture
     def assert_kubernetes_conf(self, base_volumes):
         expected_output = {
@@ -1086,7 +1093,7 @@ class TestGetSparkConf:
             'spark.logConf': 'true',
             'spark.ui.showConsoleProgress': 'true',
         }
-        for i, volume in enumerate(base_volumes + spark_config.K8S_BASE_VOLUMES):
+        for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.readOnly'] = str(
                 volume['mode'] == 'RO',
@@ -1171,7 +1178,7 @@ class TestGetSparkConf:
             'spark.logConf': 'true',
             'spark.ui.showConsoleProgress': 'true',
         }
-        for i, volume in enumerate(base_volumes + spark_config.K8S_BASE_VOLUMES):
+        for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.readOnly'] = str(
                 volume['mode'] == 'RO',
