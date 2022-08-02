@@ -762,7 +762,7 @@ def get_spark_conf(
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
-    :param cluster_manager: which manager to use, value supported: [`mesos`, `kubernetes`]
+    :param cluster_manager: which manager to use, must be in SUPPORTED_CLUSTER_MANAGERS
     :param spark_app_base_name: the base name to create spark app, we will append port
         and time to make the app name unique for easier to separate the output. Note that
         this is noop if `spark_opts_from_env` have `spark.app.name` configured.
