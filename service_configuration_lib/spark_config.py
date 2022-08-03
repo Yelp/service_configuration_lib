@@ -71,9 +71,24 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
 }
 K8S_AUTH_FOLDER = '/etc/pki/spark'
+K8S_BASE_VOLUMES: List[Dict[str, str]] = [
+    {'containerPath': K8S_AUTH_FOLDER, 'hostPath': K8S_AUTH_FOLDER, 'mode': 'RO'},
+    {'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'},
+    {'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'},
+]
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
+
+
+SUPPORTED_CLUSTER_MANAGERS = ['mesos', 'kubernetes', 'local']
+
+
+class UnsupportedClusterManagerException(Exception):
+
+    def __init__(self, manager: str):
+        msg = f'Unsupported cluster manager {manager}, must be one of {SUPPORTED_CLUSTER_MANAGERS}'
+        super().__init__(msg)
 
 
 def _load_aws_credentials_from_yaml(yaml_file_path) -> Tuple[str, str, Optional[str]]:
@@ -179,9 +194,7 @@ def _get_k8s_docker_volumes_conf(
     env = {}
     mounted_volumes = set()
     k8s_volumes = volumes or []
-    k8s_volumes.append({'containerPath': K8S_AUTH_FOLDER, 'hostPath': K8S_AUTH_FOLDER, 'mode': 'RO'})
-    k8s_volumes.append({'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'})
-    k8s_volumes.append({'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'})
+    k8s_volumes.extend(K8S_BASE_VOLUMES)
     _get_k8s_volume = functools.partial(_get_k8s_volume_hostpath_dict, count=itertools.count())
 
     for volume in k8s_volumes:
@@ -454,6 +467,13 @@ def _adjust_spark_requested_resources(
             'spark.scheduler.maxRegisteredResourcesWaitingTime',
             str(waiting_time) + 'min',
         )
+    elif cluster_manager == 'local':
+        executor_instances = int(
+            user_spark_opts.setdefault('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)),
+        )
+        max_cores = executor_instances * executor_cores
+    else:
+        raise UnsupportedClusterManagerException(cluster_manager)
 
     if max_cores < executor_cores:
         raise ValueError(f'Total number of cores {max_cores} is less than per-executor cores {executor_cores}')
@@ -649,6 +669,27 @@ def _get_k8s_spark_env(
     return spark_env
 
 
+def _get_local_spark_env(
+    paasta_cluster: str,
+    paasta_service: str,
+    paasta_instance: str,
+    volumes: Optional[List[Mapping[str, str]]],
+    num_threads: int = 4,
+) -> Dict[str, str]:
+    return {
+        'spark.master': f'local[{num_threads}]',
+        'spark.executorEnv.PAASTA_SERVICE': paasta_service,
+        'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
+        'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
+        'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
+        'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
+        # Adding k8s docker volume params is a bit of a hack.  PaasSTA
+        # looks at the spark config to find the volumes it needs to mount
+        # and so we are borrowing the spark k8s configs.
+        **_get_k8s_docker_volumes_conf(volumes),
+    }
+
+
 def _get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffix: int = 4) -> str:
     """ Returns `name` unchanged if it's length does not exceed the `limit`.
         Otherwise, returns truncated `name` with it's hash of size `suffix`
@@ -721,7 +762,7 @@ def get_spark_conf(
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
-    :param cluster_manager: which manager to use, value supported: [`mesos`, `kubernetes`]
+    :param cluster_manager: which manager to use, must be in SUPPORTED_CLUSTER_MANAGERS
     :param spark_app_base_name: the base name to create spark app, we will append port
         and time to make the app name unique for easier to separate the output. Note that
         this is noop if `spark_opts_from_env` have `spark.app.name` configured.
@@ -812,8 +853,15 @@ def get_spark_conf(
             extra_volumes,
             paasta_pool,
         ))
+    elif cluster_manager == 'local':
+        spark_conf.update(_get_local_spark_env(
+            paasta_cluster,
+            paasta_service,
+            paasta_instance,
+            extra_volumes,
+        ))
     else:
-        raise ValueError('Unknown resource_manager, should be either [mesos,kubernetes]')
+        raise UnsupportedClusterManagerException(cluster_manager)
 
     # configure dynamic resource allocation configs
     spark_conf = get_dra_configs(spark_conf)

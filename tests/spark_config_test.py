@@ -149,9 +149,12 @@ class TestGetSparkConf:
     docker_image = 'docker-dev.yelp.com/test-image'
     executor_cores = '10'
     spark_app_base_name = 'test_app_base_name'
-    extra_volumes = [{'hostPath': '/tmp', 'containerPath': '/tmp', 'mode': 'RO'}]
     default_mesos_leader = 'mesos://some-url.yelp.com:5050'
     aws_provider_key = 'spark.hadoop.fs.s3a.aws.credentials.provider'
+
+    @pytest.fixture
+    def base_volumes(self):
+        return [{'hostPath': '/tmp', 'containerPath': '/tmp', 'mode': 'RO'}]
 
     @pytest.fixture
     def mock_paasta_volumes(self, monkeypatch, tmpdir):
@@ -934,7 +937,7 @@ class TestGetSparkConf:
         return verify
 
     @pytest.mark.parametrize('use_temp_provider', [True, False])
-    def test_get_spark_conf_aws_session(self, use_temp_provider):
+    def test_get_spark_conf_aws_session(self, use_temp_provider, base_volumes):
         other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
         not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
         user_spark_opts = {
@@ -954,7 +957,7 @@ class TestGetSparkConf:
             paasta_service=self.service,
             paasta_instance=self.instance,
             docker_img=self.docker_image,
-            extra_volumes=self.extra_volumes,
+            extra_volumes=base_volumes,
             aws_creds=aws_creds,
             auto_set_temporary_credentials_provider=use_temp_provider,
         )
@@ -968,6 +971,7 @@ class TestGetSparkConf:
         self,
         user_spark_opts,
         spark_opts_from_env,
+        base_volumes,
         ui_port,
         with_secret,
         mesos_leader,
@@ -1009,7 +1013,7 @@ class TestGetSparkConf:
             paasta_service=self.service,
             paasta_instance=self.instance,
             docker_img=self.docker_image,
-            extra_volumes=self.extra_volumes,
+            extra_volumes=base_volumes,
             aws_creds=aws_creds,
             extra_docker_params=extra_docker_params,
             with_secret=with_secret,
@@ -1038,7 +1042,7 @@ class TestGetSparkConf:
         )
         assert len(set(output.keys()) - verified_keys) == 0
         mock_get_mesos_docker_volumes_conf.mocker.assert_called_once_with(
-            mock.ANY, self.extra_volumes, True,
+            mock.ANY, base_volumes, True,
         )
         mock_adjust_spark_requested_resources_mesos.mocker.assert_called_once_with(
             mock.ANY, 'mesos', self.pool,
@@ -1053,8 +1057,15 @@ class TestGetSparkConf:
         (warning_msg,), _ = mock_log.warning.call_args
         assert next(iter(not_allowed_opts.keys())) in warning_msg
 
+    def _get_k8s_base_volumes(self):
+        """Helper needed to allow tests to pass in github CI checks."""
+        return [
+            volume for volume in spark_config.K8S_BASE_VOLUMES
+            if os.path.exists(volume['containerPath'])
+        ]
+
     @pytest.fixture
-    def assert_kubernetes_conf(self):
+    def assert_kubernetes_conf(self, base_volumes):
         expected_output = {
             'spark.master': f'k8s://https://k8s.{self.cluster}.paasta:6443',
             'spark.executorEnv.PAASTA_SERVICE': self.service,
@@ -1079,8 +1090,10 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.paasta.yelp.com/cluster': self.cluster,
             'spark.kubernetes.node.selector.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
+            'spark.logConf': 'true',
+            'spark.ui.showConsoleProgress': 'true',
         }
-        for i, volume in enumerate(self.extra_volumes):
+        for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.readOnly'] = str(
                 volume['mode'] == 'RO',
@@ -1093,11 +1106,12 @@ class TestGetSparkConf:
             return list(expected_output.keys())
         return verify
 
-    def tes_leaderst_get_spark_conf_kubernetes(
+    def test_leaders_get_spark_conf_kubernetes(
         self,
         user_spark_opts,
         spark_opts_from_env,
         ui_port,
+        base_volumes,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
         mock_append_sql_shuffle_partitions_conf,
@@ -1125,7 +1139,7 @@ class TestGetSparkConf:
             paasta_service=self.service,
             paasta_instance=self.instance,
             docker_img=self.docker_image,
-            extra_volumes=self.extra_volumes,
+            extra_volumes=base_volumes,
             aws_creds=aws_creds,
             spark_opts_from_env=spark_opts_from_env,
         )
@@ -1140,12 +1154,88 @@ class TestGetSparkConf:
             list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
         )
-        assert len(set(output.keys()) - verified_keys) == 0
+        assert set(output.keys()) == verified_keys
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
             mock.ANY, 'kubernetes', self.pool,
         )
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
+        )
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
+        mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
+            mock.ANY,
+        )
+
+    @pytest.fixture
+    def assert_local_conf(self, base_volumes):
+        expected_output = {
+            'spark.master': 'local[4]',
+            'spark.executorEnv.PAASTA_SERVICE': self.service,
+            'spark.executorEnv.PAASTA_INSTANCE': self.instance,
+            'spark.executorEnv.PAASTA_CLUSTER': self.cluster,
+            'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
+            'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
+            'spark.logConf': 'true',
+            'spark.ui.showConsoleProgress': 'true',
+        }
+        for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
+            expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
+            expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.readOnly'] = str(
+                volume['mode'] == 'RO',
+            ).lower()
+            expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.options.path'] = volume['hostPath']
+
+        def verify(output):
+            for key, value in expected_output.items():
+                assert output[key] == value
+            return list(expected_output.keys())
+        return verify
+
+    def test_local_spark(
+        self,
+        user_spark_opts,
+        spark_opts_from_env,
+        ui_port,
+        base_volumes,
+        mock_append_event_log_conf,
+        mock_append_aws_credentials_conf,
+        mock_append_sql_shuffle_partitions_conf,
+        mock_adjust_spark_requested_resources_kubernetes,
+        mock_time,
+        assert_ui_port,
+        assert_app_name,
+        assert_local_conf,
+        mock_log,
+    ):
+        aws_creds = (None, None, None)
+        output = spark_config.get_spark_conf(
+            cluster_manager='local',
+            spark_app_base_name=self.spark_app_base_name,
+            user_spark_opts=user_spark_opts or {},
+            paasta_cluster=self.cluster,
+            paasta_pool=self.pool,
+            paasta_service=self.service,
+            paasta_instance=self.instance,
+            docker_img=self.docker_image,
+            extra_volumes=base_volumes,
+            aws_creds=aws_creds,
+            spark_opts_from_env=spark_opts_from_env,
+        )
+        verified_keys = set(
+            assert_ui_port(output) +
+            assert_app_name(output) +
+            assert_local_conf(output) +
+            list(mock_append_event_log_conf.return_value.keys()) +
+            list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
+            list(mock_append_aws_credentials_conf.return_value.keys()) +
+            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
+        )
+        assert set(output.keys()) == verified_keys
+        mock_append_event_log_conf.mocker.assert_called_once_with(
+            mock.ANY, *aws_creds,
+        )
+        mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
+            mock.ANY, 'local', self.pool,
         )
         mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
