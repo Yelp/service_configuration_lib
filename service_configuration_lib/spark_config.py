@@ -431,13 +431,13 @@ def _adjust_spark_requested_resources(
         # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
 
-            executor_instances = int(user_spark_opts.get(
-                'spark.cores.max',
-                str(DEFAULT_MAX_CORES),
-            )) // executor_cores
+            if 'spark.cores.max' in user_spark_opts:
+                executor_instances = int(user_spark_opts['spark.cores.max']) // executor_cores
+            else:
+                executor_instances = max(DEFAULT_MAX_CORES // executor_cores, DEFAULT_EXECUTOR_INSTANCES)
             user_spark_opts['spark.executor.instances'] = str(executor_instances)
 
-            if user_spark_opts['spark.executor.instances'] == str(DEFAULT_EXECUTOR_INSTANCES):
+            if user_spark_opts['spark.executor.instances'] <= str(DEFAULT_EXECUTOR_INSTANCES):
                 log.warning(
                     f'spark.executor.instances not provided. Setting spark.executor.instances as '
                     f'{executor_instances}. If you wish to change the number of executors, please '
