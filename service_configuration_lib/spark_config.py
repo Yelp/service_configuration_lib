@@ -430,9 +430,11 @@ def _adjust_spark_requested_resources(
         # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
         # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
-
+            # spark.cores.max provided, calculate based on (max cores // per-executor cores)
             if 'spark.cores.max' in user_spark_opts:
                 executor_instances = int(user_spark_opts['spark.cores.max']) // executor_cores
+            # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
+            # be equal to DEFAULT_EXECUTOR_INSTANCES.
             else:
                 executor_instances = max(DEFAULT_MAX_CORES // executor_cores, DEFAULT_EXECUTOR_INSTANCES)
             user_spark_opts['spark.executor.instances'] = str(executor_instances)
