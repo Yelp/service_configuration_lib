@@ -929,6 +929,7 @@ class TestGetSparkConf:
                 'spark.mesos.executor.docker.forcePullImage': 'true',
                 'spark.mesos.constraints': f'pool:{self.pool}',
                 'spark.mesos.principal': 'spark',
+                'spark.shuffle.useOldFetchProtocol': 'true',
             }
             for key, value in expected_output.items():
                 assert output[key] == value
