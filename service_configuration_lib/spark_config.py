@@ -416,6 +416,23 @@ def _append_aws_credentials_conf(
     return spark_opts
 
 
+def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
+    executor_cores = int(user_spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
+    if 'spark.cores.max' in user_spark_opts:
+        # spark.cores.max provided, calculate based on (max cores // per-executor cores)
+        executor_instances = (int(user_spark_opts['spark.cores.max']) // executor_cores)
+        log.warning(
+            f'spark.cores.max should no longer be provided and should be replaced '
+            f'by the exact value of spark.executor.instances in --spark-args',
+        )
+    else:
+        # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
+        # be equal to DEFAULT_EXECUTOR_INSTANCES.
+        executor_instances = max(DEFAULT_MAX_CORES // executor_cores, DEFAULT_EXECUTOR_INSTANCES)
+
+    return executor_instances
+
+
 def _adjust_spark_requested_resources(
     user_spark_opts: Dict[str, str],
     cluster_manager: str,
@@ -427,39 +444,16 @@ def _adjust_spark_requested_resources(
         max_cores = int(user_spark_opts.setdefault('spark.cores.max', str(DEFAULT_MAX_CORES)))
         executor_instances = max_cores / executor_cores
     elif cluster_manager == 'kubernetes':
-        # TODO(gcoll|COREML-2697): Consider cleaning this part of the code up
-        # once mesos is not longer around at Yelp.
         if 'spark.executor.instances' not in user_spark_opts:
-            # spark.cores.max provided, calculate based on (max cores // per-executor cores)
-            if 'spark.cores.max' in user_spark_opts:
-                executor_instances = int(user_spark_opts['spark.cores.max']) // executor_cores
-                log.warning(
-                    f'spark.cores.max should be replaced and the exact value of spark.executor.instances '
-                    f'should be provided in --spark-args',
-                )
-            else:
-                # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
-                # be equal to DEFAULT_EXECUTOR_INSTANCES.
-                executor_instances = max(DEFAULT_MAX_CORES // executor_cores, DEFAULT_EXECUTOR_INSTANCES)
-            user_spark_opts['spark.executor.instances'] = str(executor_instances)
+            user_spark_opts['spark.executor.instances'] = str(compute_executor_instances_k8s(user_spark_opts))
 
-            if user_spark_opts['spark.executor.instances'] <= str(DEFAULT_EXECUTOR_INSTANCES):
-                log.warning(
-                    f'spark.executor.instances not provided. Setting spark.executor.instances as '
-                    f'{executor_instances}. If you wish to change the number of executors, please '
-                    f'provide the exact value of spark.executor.instances in --spark-args',
-                )
-
+        executor_instances = int(user_spark_opts['spark.executor.instances'])
+        max_cores = executor_instances * executor_cores
         if (
             'spark.mesos.executor.memoryOverhead' in user_spark_opts and
             'spark.executor.memoryOverhead' not in user_spark_opts
         ):
             user_spark_opts['spark.executor.memoryOverhead'] = user_spark_opts['spark.mesos.executor.memoryOverhead']
-
-        executor_instances = int(
-            user_spark_opts.setdefault('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)),
-        )
-        max_cores = executor_instances * executor_cores
         user_spark_opts.setdefault(
             'spark.kubernetes.allocation.batch.size',
             str(DEFAULT_K8S_BATCH_SIZE),
