@@ -616,6 +616,7 @@ def _get_mesos_spark_env(
         'spark.mesos.constraints': f'pool:{paasta_pool}',
         'spark.mesos.executor.docker.forcePullImage': 'true',
         'spark.mesos.principal': 'spark',
+        'spark.shuffle.useOldFetchProtocol': 'true',
         **auth_configs,
         **_get_mesos_docker_volumes_conf(
             user_spark_opts, extra_volumes,
