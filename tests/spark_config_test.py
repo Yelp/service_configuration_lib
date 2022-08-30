@@ -1305,13 +1305,13 @@ def test_get_signalfx_url():
         'spark.executorEnv.PAASTA_INSTANCE': 'test-instance',
     }
     assert spark_config.get_signalfx_url(spark_conf) == (
-        'https://app.signalfx.com/#/dashboard/DJzYJDkAcAA?density=4'
+        'https://app.signalfx.com/#/dashboard/FOjL2yRAcAA?density=4'
         '&variables%5B%5D=Instance%3Dinstance_name:'
         '&variables%5B%5D=Service%3Dservice_name:%5B%22spark%22%5D'
         '&variables%5B%5D=PaaSTA%20Cluster%3Dpaasta_cluster:test-cluster'
         '&variables%5B%5D=PaaSTA%20Service%3Dpaasta_service:test-service'
         '&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:test-instance'
-        '&startTime=-6h&endTime=Now'
+        '&startTime=-1h&endTime=Now'
     )
 
 
