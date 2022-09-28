@@ -22,7 +22,7 @@ import yaml
 from boto3 import Session
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
-AWS_TEMP_CREDENTIALS_PROVIDER = 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider'
+AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
 GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
 DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
@@ -56,6 +56,10 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.executorEnv.PAASTA_INSTANCE',
     'spark.executorEnv.PAASTA_CLUSTER',
     'spark.executorEnv.SPARK_EXECUTOR_DIRS',
+    'spark.executorEnv.AWS_ACCESS_KEY_ID',
+    'spark.executorEnv.AWS_SECRET_ACCESS_KEY',
+    'spark.executorEnv.AWS_SESSION_TOKEN',
+    'spark.executorEnv.AWS_DEFAULT_REGION',
     'spark.kubernetes.pyspark.pythonVersion',
     'spark.kubernetes.container.image',
     'spark.kubernetes.namespace',
@@ -396,23 +400,16 @@ def _append_aws_credentials_conf(
     access_key: Optional[str],
     secret_key: Optional[str],
     session_token: Optional[str] = None,
+    aws_region: Optional[str] = None,
 ) -> Dict[str, str]:
-    """It is important that we set the aws creds via the spark configs and not via the AWS
-    environment variables.  See HADOOP-18233 for details
-
-    We set both s3a and s3 credentials because s3a is the actual hadoop-aws driver, but our
-    glue-metatore integration will attempt to use s3 path drivers which are monkeypatched
-    to use the the s3a driver.
-    """
     if access_key:
-        spark_opts['spark.hadoop.fs.s3a.access.key'] = access_key
-        spark_opts['spark.hadoop.fs.s3.access.key'] = access_key
+        spark_opts['spark.executorEnv.AWS_ACCESS_KEY_ID'] = access_key
     if secret_key:
-        spark_opts['spark.hadoop.fs.s3a.secret.key'] = secret_key
-        spark_opts['spark.hadoop.fs.s3.secret.key'] = secret_key
+        spark_opts['spark.executorEnv.AWS_SECRET_ACCESS_KEY'] = secret_key
     if session_token:
-        spark_opts['spark.hadoop.fs.s3a.session.token'] = session_token
-        spark_opts['spark.hadoop.fs.s3.session.token'] = session_token
+        spark_opts['spark.executorEnv.AWS_SESSION_TOKEN'] = session_token
+    if aws_region:
+        spark_opts['spark.executorEnv.AWS_DEFAULT_REGION'] = aws_region
     return spark_opts
 
 
@@ -759,7 +756,7 @@ def get_spark_conf(
     mesos_leader: Optional[str] = None,
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     load_paasta_default_volumes: bool = False,
-    auto_set_temporary_credentials_provider: bool = True,
+    aws_region: Optional[str] = None,
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
@@ -791,10 +788,7 @@ def get_spark_conf(
         spark session.
     :param load_paasta_default_volumes: whether to include default paasta mounted volumes
         into the spark executors.
-    :param auto_set_temporary_credentials_provider: whether to set the temporary credentials
-        provider if the session token exists.  In hadoop-aws 3.2.1 this is needed, but
-        in hadoop-aws 3.3.1 the temporary credentials provider is the new default and
-        causes errors if explicitly set for unknown reasons.
+    :param aws_region: The default aws region to use
     :returns: spark opts in a dict.
     """
     # for simplicity, all the following computation are assuming spark opts values
@@ -819,8 +813,8 @@ def get_spark_conf(
 
     spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
 
-    if aws_creds[2] is not None and auto_set_temporary_credentials_provider:
-        spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_TEMP_CREDENTIALS_PROVIDER
+    if aws_creds[2] is not None:
+        spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
 
     spark_conf.update({
         'spark.app.name': app_name,
@@ -879,7 +873,7 @@ def get_spark_conf(
     # configure spark Console Progress
     spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
 
-    spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds)
+    spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
     return spark_conf
 
 
