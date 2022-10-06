@@ -690,9 +690,9 @@ class TestGetSparkConf:
             mock.sentinel.secret,
             mock.sentinel.token,
         )
-        assert output['spark.hadoop.fs.s3a.access.key'] == mock.sentinel.access
-        assert output['spark.hadoop.fs.s3a.secret.key'] == mock.sentinel.secret
-        assert output['spark.hadoop.fs.s3a.session.token'] == mock.sentinel.token
+        assert output['spark.executorEnv.AWS_ACCESS_KEY_ID'] == mock.sentinel.access
+        assert output['spark.executorEnv.AWS_SECRET_ACCESS_KEY'] == mock.sentinel.secret
+        assert output['spark.executorEnv.AWS_SESSION_TOKEN'] == mock.sentinel.token
 
     @pytest.fixture
     def mock_append_spark_conf_log(self):
@@ -736,12 +736,10 @@ class TestGetSparkConf:
     @pytest.fixture
     def mock_append_aws_credentials_conf(self):
         return_value = {
-            'spark.hadoop.fs.s3a.access.key': 'my_key',
-            'spark.hadoop.fs.s3.access.key': 'my_key',
-            'spark.hadoop.fs.s3a.secret.key': 'your_key',
-            'spark.hadoop.fs.s3.secret.key': 'your_key',
-            'spark.hadoop.fs.s3a.session.token': 'ice_cream',
-            'spark.hadoop.fs.s3.session.token': 'ice_cream',
+            'spark.executorEnv.AWS_ACCESS_KEY_ID': 'my_key',
+            'spark.executorEnv.AWS_SECRET_ACCESS_KEY': 'your_key',
+            'spark.executorEnv.AWS_SESSION_TOKEN': 'we_all_key',
+            'spark.executorEnv.AWS_DEFAULT_REGION': 'ice_cream',
         }
         with MockConfigFunction('_append_aws_credentials_conf', return_value) as m:
             yield m
@@ -929,43 +927,13 @@ class TestGetSparkConf:
                 'spark.mesos.executor.docker.forcePullImage': 'true',
                 'spark.mesos.constraints': f'pool:{self.pool}',
                 'spark.mesos.principal': 'spark',
+                'spark.shuffle.useOldFetchProtocol': 'true',
             }
             for key, value in expected_output.items():
                 assert output[key] == value
             return list(expected_output.keys())
 
         return verify
-
-    @pytest.mark.parametrize('use_temp_provider', [True, False])
-    def test_get_spark_conf_aws_session(self, use_temp_provider, base_volumes):
-        other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
-        not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
-        user_spark_opts = {
-            **({}),
-            **not_allowed_opts,
-            **other_spark_opts,
-        }
-
-        aws_creds = ('key', 'secret', 'token')
-
-        output = spark_config.get_spark_conf(
-            cluster_manager='kubernetes',
-            spark_app_base_name=self.spark_app_base_name,
-            user_spark_opts=user_spark_opts,
-            paasta_cluster=self.cluster,
-            paasta_pool=self.pool,
-            paasta_service=self.service,
-            paasta_instance=self.instance,
-            docker_img=self.docker_image,
-            extra_volumes=base_volumes,
-            aws_creds=aws_creds,
-            auto_set_temporary_credentials_provider=use_temp_provider,
-        )
-        if use_temp_provider:
-            assert self.aws_provider_key in output.keys()
-            assert 'org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider' == output[self.aws_provider_key]
-        else:
-            assert self.aws_provider_key not in output
 
     def test_get_spark_conf_mesos(
         self,
@@ -1003,6 +971,7 @@ class TestGetSparkConf:
         }
 
         aws_creds = (None, None, None)
+        aws_region = 'ice_cream'
 
         output = spark_config.get_spark_conf(
             cluster_manager='mesos',
@@ -1021,6 +990,7 @@ class TestGetSparkConf:
             mesos_leader=mesos_leader,
             spark_opts_from_env=spark_opts_from_env,
             load_paasta_default_volumes=True,
+            aws_region=aws_region,
         )
 
         verified_keys = set(
@@ -1050,7 +1020,7 @@ class TestGetSparkConf:
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
         )
-        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
@@ -1129,6 +1099,7 @@ class TestGetSparkConf:
         }
 
         aws_creds = (None, None, None)
+        aws_region = 'ice_cream'
 
         output = spark_config.get_spark_conf(
             cluster_manager='kubernetes',
@@ -1142,6 +1113,7 @@ class TestGetSparkConf:
             extra_volumes=base_volumes,
             aws_creds=aws_creds,
             spark_opts_from_env=spark_opts_from_env,
+            aws_region=aws_region,
         )
 
         verified_keys = set(
@@ -1161,7 +1133,7 @@ class TestGetSparkConf:
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
         )
-        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
@@ -1208,6 +1180,7 @@ class TestGetSparkConf:
         mock_log,
     ):
         aws_creds = (None, None, None)
+        aws_region = 'ice_cream'
         output = spark_config.get_spark_conf(
             cluster_manager='local',
             spark_app_base_name=self.spark_app_base_name,
@@ -1220,6 +1193,7 @@ class TestGetSparkConf:
             extra_volumes=base_volumes,
             aws_creds=aws_creds,
             spark_opts_from_env=spark_opts_from_env,
+            aws_region=aws_region,
         )
         verified_keys = set(
             assert_ui_port(output) +
@@ -1237,7 +1211,7 @@ class TestGetSparkConf:
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
             mock.ANY, 'local', self.pool,
         )
-        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds)
+        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
         mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
@@ -1304,13 +1278,13 @@ def test_get_signalfx_url():
         'spark.executorEnv.PAASTA_INSTANCE': 'test-instance',
     }
     assert spark_config.get_signalfx_url(spark_conf) == (
-        'https://app.signalfx.com/#/dashboard/DJzYJDkAcAA?density=4'
+        'https://app.signalfx.com/#/dashboard/FOjL2yRAcAA?density=4'
         '&variables%5B%5D=Instance%3Dinstance_name:'
         '&variables%5B%5D=Service%3Dservice_name:%5B%22spark%22%5D'
         '&variables%5B%5D=PaaSTA%20Cluster%3Dpaasta_cluster:test-cluster'
         '&variables%5B%5D=PaaSTA%20Service%3Dpaasta_service:test-service'
         '&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:test-instance'
-        '&startTime=-6h&endTime=Now'
+        '&startTime=-1h&endTime=Now'
     )
 
 
