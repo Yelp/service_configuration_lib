@@ -1061,6 +1061,7 @@ class TestGetSparkConf:
             'spark.kubernetes.node.selector.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
+            'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
             'spark.logConf': 'true',
             'spark.ui.showConsoleProgress': 'true',
         }
