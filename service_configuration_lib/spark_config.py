@@ -662,6 +662,8 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': _paasta_cluster,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
+        'spark.kubernetes.executor.label.paasta.yelp.com/pool': paasta_pool,
+        'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
         **_get_k8s_docker_volumes_conf(volumes),
     }
     return spark_env
