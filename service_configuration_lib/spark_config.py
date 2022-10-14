@@ -633,6 +633,7 @@ def _get_k8s_spark_env(
     docker_img: str,
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
+    service_account_name: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -650,9 +651,6 @@ def _get_k8s_spark_env(
         'spark.kubernetes.pyspark.pythonVersion': '3',
         'spark.kubernetes.container.image': docker_img,
         'spark.kubernetes.namespace': 'paasta-spark',
-        'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
-        'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
-        'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
         'spark.kubernetes.container.image.pullPolicy': 'Always',
         'spark.kubernetes.executor.label.yelp.com/paasta_service': _paasta_service,
         'spark.kubernetes.executor.label.yelp.com/paasta_instance': _paasta_instance,
@@ -666,6 +664,20 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
         **_get_k8s_docker_volumes_conf(volumes),
     }
+    if service_account_name:
+        spark_env.update(
+            {
+                'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
+            }
+        )
+    else:
+        spark_env.update(
+            {
+                'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
+                'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
+                'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
+            }
+        )
     return spark_env
 
 
