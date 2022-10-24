@@ -771,6 +771,7 @@ def get_spark_conf(
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     load_paasta_default_volumes: bool = False,
     aws_region: Optional[str] = None,
+    service_account_name: Optional[str] = None,
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
@@ -803,6 +804,8 @@ def get_spark_conf(
     :param load_paasta_default_volumes: whether to include default paasta mounted volumes
         into the spark executors.
     :param aws_region: The default aws region to use
+    :param service_account_name: The k8s service account to use for spark k8s authentication.
+        If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
     :returns: spark opts in a dict.
     """
     # for simplicity, all the following computation are assuming spark opts values
@@ -861,6 +864,7 @@ def get_spark_conf(
             docker_img,
             extra_volumes,
             paasta_pool,
+            service_account_name=service_account_name,
         ))
     elif cluster_manager == 'local':
         spark_conf.update(_get_local_spark_env(
