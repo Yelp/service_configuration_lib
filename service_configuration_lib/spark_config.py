@@ -668,7 +668,7 @@ def _get_k8s_spark_env(
         spark_env.update(
             {
                 'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
-            }
+            },
         )
     else:
         spark_env.update(
@@ -676,7 +676,7 @@ def _get_k8s_spark_env(
                 'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
                 'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
                 'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
-            }
+            },
         )
     return spark_env
 
