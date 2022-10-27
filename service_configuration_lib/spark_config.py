@@ -633,6 +633,7 @@ def _get_k8s_spark_env(
     docker_img: str,
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
+    service_account_name: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -650,9 +651,6 @@ def _get_k8s_spark_env(
         'spark.kubernetes.pyspark.pythonVersion': '3',
         'spark.kubernetes.container.image': docker_img,
         'spark.kubernetes.namespace': 'paasta-spark',
-        'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
-        'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
-        'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
         'spark.kubernetes.container.image.pullPolicy': 'Always',
         'spark.kubernetes.executor.label.yelp.com/paasta_service': _paasta_service,
         'spark.kubernetes.executor.label.yelp.com/paasta_instance': _paasta_instance,
@@ -666,6 +664,20 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
         **_get_k8s_docker_volumes_conf(volumes),
     }
+    if service_account_name is not None:
+        spark_env.update(
+            {
+                'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
+            },
+        )
+    else:
+        spark_env.update(
+            {
+                'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
+                'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
+                'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
+            },
+        )
     return spark_env
 
 
@@ -759,6 +771,7 @@ def get_spark_conf(
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     load_paasta_default_volumes: bool = False,
     aws_region: Optional[str] = None,
+    service_account_name: Optional[str] = None,
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
@@ -791,6 +804,8 @@ def get_spark_conf(
     :param load_paasta_default_volumes: whether to include default paasta mounted volumes
         into the spark executors.
     :param aws_region: The default aws region to use
+    :param service_account_name: The k8s service account to use for spark k8s authentication.
+        If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
     :returns: spark opts in a dict.
     """
     # for simplicity, all the following computation are assuming spark opts values
@@ -849,6 +864,7 @@ def get_spark_conf(
             docker_img,
             extra_volumes,
             paasta_pool,
+            service_account_name=service_account_name,
         ))
     elif cluster_manager == 'local':
         spark_conf.update(_get_local_spark_env(
