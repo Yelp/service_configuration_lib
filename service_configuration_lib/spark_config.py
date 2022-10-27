@@ -664,7 +664,7 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
         **_get_k8s_docker_volumes_conf(volumes),
     }
-    if service_account_name:
+    if service_account_name is not None:
         spark_env.update(
             {
                 'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
