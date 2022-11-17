@@ -936,7 +936,6 @@ class TestGetSparkConf:
         assert_app_name,
         mock_log,
         mock_append_spark_conf_log,
-        mock_append_console_progress_conf,
     ):
         other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
         not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
@@ -983,8 +982,7 @@ class TestGetSparkConf:
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_shuffle_partitions_conf.return_value.keys()) +
-            list(mock_append_spark_conf_log.return_value.keys()) +
-            list(mock_append_console_progress_conf.return_value.keys()),
+            list(mock_append_spark_conf_log.return_value.keys()),
         )
         assert len(set(output.keys()) - verified_keys) == 0
         mock_get_mesos_docker_volumes_conf.mocker.assert_called_once_with(
