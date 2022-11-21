@@ -600,11 +600,11 @@ class TestGetSparkConf:
     @pytest.mark.parametrize(
         'user_spark_opts,expected_output', [
             # mesos
-            ({'spark.cores.max': '10'}, '20'),
+            ({'spark.cores.max': '10'}, '30'),
             # k8s
-            ({'spark.executor.instances': '10', 'spark.executor.cores': '3'}, '60'),
+            ({'spark.executor.instances': '10', 'spark.executor.cores': '3'}, '90'),
             # user defined
-            ({'spark.sql.shuffle.partitions': '300'}, '300'),
+            ({'spark.sql.shuffle.partitions': '300'}, ['300', '128', '128']),
             # dynamic resource allocation enabled, both maxExecutors and max cores defined
             (
                 {
@@ -613,7 +613,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '768',  # max (2 * (max cores), 2 * (maxExecutors * executor cores))
+                '1152',  # max (3 * (max cores), 3 * (maxExecutors * executor cores))
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores defined
             (
@@ -622,7 +622,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '20',  # 2 * max cores
+                '30',  # 2 * max cores
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores not defined
             (
@@ -640,16 +640,23 @@ class TestGetSparkConf:
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '20',  # 2 * max cores
+                '30',  # 2 * max cores
             ),
         ],
     )
-    def test_append_sql_shuffle_partitions_conf(
+    def test_append_sql_partitions_conf(
         self, user_spark_opts, expected_output,
     ):
-        output = spark_config._append_sql_shuffle_partitions_conf(user_spark_opts)
-        key = 'spark.sql.shuffle.partitions'
-        assert output[key] == expected_output
+        output = spark_config._append_sql_partitions_conf(user_spark_opts)
+        keys = [
+            'spark.sql.shuffle.partitions',
+            'spark.sql.files.minPartitionNum',
+            'spark.default.parallelism',
+        ]
+        if isinstance(expected_output, str):
+            expected_output = [expected_output] * 3
+        for key, expected in zip(keys, expected_output):
+            assert output[key] == expected
 
     @pytest.mark.parametrize(
         'user_spark_opts,expected_output', [
@@ -717,10 +724,15 @@ class TestGetSparkConf:
             yield m
 
     @pytest.fixture
-    def mock_append_sql_shuffle_partitions_conf(self):
-        return_value = {'spark.sql.shuffle.partitions': '10'}
+    def mock_append_sql_partitions_conf(self):
+        keys = [
+            'spark.sql.shuffle.partitions',
+            'spark.sql.files.minPartitionNum',
+            'spark.default.parallelism',
+        ]
+        return_value = {k: '10' for k in keys}
         with MockConfigFunction(
-            '_append_sql_shuffle_partitions_conf', return_value,
+            '_append_sql_partitions_conf', return_value,
         ) as m:
             yield m
 
@@ -948,7 +960,7 @@ class TestGetSparkConf:
         mock_get_mesos_docker_volumes_conf,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
-        mock_append_sql_shuffle_partitions_conf,
+        mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_mesos,
         mock_time,
         assert_mesos_leader,
@@ -1006,7 +1018,7 @@ class TestGetSparkConf:
             list(mock_adjust_spark_requested_resources_mesos.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()) +
+            list(mock_append_sql_partitions_conf.return_value.keys()) +
             list(mock_append_spark_conf_log.return_value.keys()) +
             list(mock_append_console_progress_conf.return_value.keys()),
         )
@@ -1021,7 +1033,7 @@ class TestGetSparkConf:
             mock.ANY, *aws_creds,
         )
         mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
-        mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
+        mock_append_sql_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
         (warning_msg,), _ = mock_log.warning.call_args
@@ -1086,7 +1098,7 @@ class TestGetSparkConf:
         base_volumes,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
-        mock_append_sql_shuffle_partitions_conf,
+        mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_time,
         assert_ui_port,
@@ -1126,7 +1138,7 @@ class TestGetSparkConf:
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
+            list(mock_append_sql_partitions_conf.return_value.keys()),
         )
         assert set(output.keys()) == verified_keys
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
@@ -1136,7 +1148,7 @@ class TestGetSparkConf:
             mock.ANY, *aws_creds,
         )
         mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
-        mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
+        mock_append_sql_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
 
@@ -1173,7 +1185,7 @@ class TestGetSparkConf:
         base_volumes,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
-        mock_append_sql_shuffle_partitions_conf,
+        mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_time,
         assert_ui_port,
@@ -1204,7 +1216,7 @@ class TestGetSparkConf:
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_shuffle_partitions_conf.return_value.keys()),
+            list(mock_append_sql_partitions_conf.return_value.keys()),
         )
         assert set(output.keys()) == verified_keys
         mock_append_event_log_conf.mocker.assert_called_once_with(
@@ -1214,7 +1226,7 @@ class TestGetSparkConf:
             mock.ANY, 'local', self.pool,
         )
         mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
-        mock_append_sql_shuffle_partitions_conf.mocker.assert_called_once_with(
+        mock_append_sql_partitions_conf.mocker.assert_called_once_with(
             mock.ANY,
         )
 
