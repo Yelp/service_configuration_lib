@@ -72,7 +72,7 @@ class TestGetAWSCredentials:
     def test_use_service_credentials(self, tmpdir, monkeypatch):
         test_service = 'test_service'
         creds_dir = tmpdir.mkdir('creds')
-        creds_file = creds_dir.join(f'test_service.yaml')
+        creds_file = creds_dir.join('test_service.yaml')
         creds_file.write(yaml.dump(self.creds))
         monkeypatch.setattr(spark_config, 'AWS_CREDENTIALS_DIR', str(creds_dir))
         assert spark_config.get_aws_credentials(service=test_service) == self.expected_creds

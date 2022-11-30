@@ -414,8 +414,8 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
         # spark.cores.max provided, calculate based on (max cores // per-executor cores)
         executor_instances = (int(user_spark_opts['spark.cores.max']) // executor_cores)
         log.warning(
-            f'spark.cores.max should no longer be provided and should be replaced '
-            f'by the exact value of spark.executor.instances in --spark-args',
+            'spark.cores.max should no longer be provided and should be replaced '
+            'by the exact value of spark.executor.instances in --spark-args',
         )
     else:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
