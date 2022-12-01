@@ -249,7 +249,7 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
         str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
     ):
 
-        num_partitions_dra = 3 * (
+        num_partitions_dra = (
             int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
             int(spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
         )

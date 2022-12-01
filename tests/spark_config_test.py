@@ -613,7 +613,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '1152',  # max (3 * (max cores), 3 * (maxExecutors * executor cores))
+                '384',  # max (3 * (max cores), (maxExecutors * executor cores))
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores defined
             (
