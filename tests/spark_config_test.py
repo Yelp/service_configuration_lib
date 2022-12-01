@@ -298,7 +298,7 @@ class TestGetSparkConf:
         return pools_def
 
     @pytest.mark.parametrize(
-        'cluster_manager,user_spark_opts,expected_output', [
+        'cluster_manager,user_spark_opts,expected_output,force_spark_resource_configs', [
             # k8s allocation batch size not specified
             (
                 'kubernetes',
@@ -309,6 +309,7 @@ class TestGetSparkConf:
                 {
                     'spark.kubernetes.allocation.batch.size': '512',
                 },
+                False,
             ),
             # k8s allocation batch size specified
             (
@@ -321,6 +322,7 @@ class TestGetSparkConf:
                 {
                     'spark.kubernetes.allocation.batch.size': '151',
                 },
+                False,
             ),
             # use default k8s settings
             (
@@ -334,6 +336,7 @@ class TestGetSparkConf:
                     'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
+                False,
             ),
             # user defined resources with k8s
             (
@@ -350,6 +353,7 @@ class TestGetSparkConf:
                     'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
                 },
+                False,
             ),
             # kubernetes migration
             (
@@ -371,6 +375,7 @@ class TestGetSparkConf:
                     'spark.executor.memoryOverhead': '4096',
                     'spark.mesos.executor.memoryOverhead': '4096',
                 },
+                False,
             ),
             # use default mesos settings
             (
@@ -381,6 +386,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '2',
                     'spark.cores.max': '4',
                 },
+                False,
             ),
             # user defined resources
             (
@@ -395,20 +401,115 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.cores.max': '12',
                 },
+                False,
             ),
-            # user defined resources - capped
+            # user defined resources - recalculated
             (
                 'mesos',
                 {
-                    'spark.executor.memory': '128g',
                     'spark.executor.cores': '13',
-                    'spark.cores.max': '24',
+                    'spark.executor.memory': '112g',
+                    'spark.executor.instances': '2',
+                    'spark.cores.max': '32',
+
                 },
                 {
-                    'spark.executor.memory': '110g',
-                    'spark.executor.cores': '12',
-                    'spark.cores.max': '24',
+                    'spark.executor.cores': '8',
+                    'spark.executor.memory': '56g',
+                    'spark.executor.instances': '4',
+                    'spark.cores.max': '32',
                 },
+                False,
+            ),
+            # user defined resources - recalculated
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '10',
+                    'spark.executor.memory': '60g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '8',
+                    'spark.executor.memory': '56g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+                },
+                False,
+            ),
+            # user defined resources - recalculated
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '6',
+                    'spark.executor.memory': '60g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '8',
+                    'spark.executor.memory': '56g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+                },
+                False,
+            ),
+            # user defined resources - not recalculated
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.executor.memory': '32g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '4',
+                    'spark.executor.memory': '32g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+                },
+                False,
+            ),
+            # user defined resources - force-spark-resource-configs - capped
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '13',
+                    'spark.executor.memory': '112g',
+                    'spark.executor.instances': '2',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '12',
+                    'spark.executor.memory': '110g',
+                    'spark.executor.instances': '2',
+                    'spark.cores.max': '32',
+                },
+                True,
+            ),
+            # user defined resources - force-spark-resource-configs - not capped
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '10',
+                    'spark.executor.memory': '100g',
+                    'spark.executor.instances': '2',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '10',
+                    'spark.executor.memory': '100g',
+                    'spark.executor.instances': '2',
+                    'spark.cores.max': '32',
+                },
+                True,
             ),
             # gpu with default settings
             (
@@ -423,6 +524,7 @@ class TestGetSparkConf:
                     'spark.executor.memory': '4g',
                     'spark.cores.max': '16',
                 },
+                False,
             ),
             # Gpu with user defined resources
             (
@@ -438,6 +540,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.cores.max': '4',
                 },
+                False,
             ),
         ],
     )
@@ -446,6 +549,7 @@ class TestGetSparkConf:
         cluster_manager,
         user_spark_opts,
         expected_output,
+        force_spark_resource_configs,
         gpu_pool,
     ):
         pool = (
@@ -454,7 +558,7 @@ class TestGetSparkConf:
             else next(iter(gpu_pool.keys()))
         )
         output = spark_config._adjust_spark_requested_resources(
-            user_spark_opts, cluster_manager, pool,
+            user_spark_opts, cluster_manager, pool, force_spark_resource_configs,
         )
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
@@ -1031,6 +1135,7 @@ class TestGetSparkConf:
             spark_opts_from_env=spark_opts_from_env,
             load_paasta_default_volumes=True,
             aws_region=aws_region,
+            force_spark_resource_configs=False,
         )
 
         verified_keys = set(
@@ -1055,7 +1160,7 @@ class TestGetSparkConf:
             mock.ANY, base_volumes, True,
         )
         mock_adjust_spark_requested_resources_mesos.mocker.assert_called_once_with(
-            mock.ANY, 'mesos', self.pool,
+            mock.ANY, 'mesos', self.pool, False,
         )
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
@@ -1157,6 +1262,7 @@ class TestGetSparkConf:
             aws_creds=aws_creds,
             spark_opts_from_env=spark_opts_from_env,
             aws_region=aws_region,
+            force_spark_resource_configs=False,
         )
 
         verified_keys = set(
@@ -1172,7 +1278,7 @@ class TestGetSparkConf:
         )
         assert set(output.keys()) == verified_keys
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
-            mock.ANY, 'kubernetes', self.pool,
+            mock.ANY, 'kubernetes', self.pool, False,
         )
         mock_append_event_log_conf.mocker.assert_called_once_with(
             mock.ANY, *aws_creds,
@@ -1239,6 +1345,7 @@ class TestGetSparkConf:
             aws_creds=aws_creds,
             spark_opts_from_env=spark_opts_from_env,
             aws_region=aws_region,
+            force_spark_resource_configs=False,
         )
         verified_keys = set(
             assert_ui_port(output) +
@@ -1255,7 +1362,7 @@ class TestGetSparkConf:
             mock.ANY, *aws_creds,
         )
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
-            mock.ANY, 'local', self.pool,
+            mock.ANY, 'local', self.pool, False,
         )
         mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
         mock_append_sql_partitions_conf.mocker.assert_called_once_with(
@@ -1280,6 +1387,7 @@ class TestGetSparkConf:
                 docker_img=self.docker_image,
                 aws_creds=(None, None, None),
                 extra_volumes=[],
+                force_spark_resource_configs=False,
             )
 
 
