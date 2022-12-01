@@ -44,7 +44,7 @@ DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
 DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '900s'
 DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
 
-EXECUTOR_MEMORY_WARN_GB = 32
+EXECUTOR_MEMORY_WARN_GB = 28
 EXECUTOR_MEMORY_CAP_GB = 120
 EXECUTOR_CORES_CAP = 12
 
@@ -443,15 +443,18 @@ def _cap_executor_resources(user_spark_opts: Dict[str, str]) -> Dict[str, str]:
     memory_mb = parse_memory_string(executor_memory)
     if memory_mb > EXECUTOR_MEMORY_CAP_GB * 1024:
         executor_memory = f'{EXECUTOR_MEMORY_CAP_GB}g'
-        log.warning(f'Executor memory is {memory_mb / 1024}g, capped to {executor_memory}')
-    elif memory_mb > EXECUTOR_MEMORY_WARN_GB * 1024:
         log.warning(
-            f'Executor memory is {memory_mb / 1024}g, '
-            f'greater than recommended value: {EXECUTOR_MEMORY_WARN_GB}g',
+            f'Given executor memory is {memory_mb / 1024}g, '
+            f'capped to {executor_memory} to better fit on available aws nodes.',
         )
+    elif memory_mb > EXECUTOR_MEMORY_WARN_GB * 1024:
+        log.warning('We recommend using setting memory as 28g and executor cores as 4')
 
     if executor_cores > EXECUTOR_CORES_CAP:
-        log.warning(f'Executor cores is {executor_cores}, capped to {EXECUTOR_CORES_CAP}')
+        log.warning(
+            f'Given executor cores is {executor_cores}, '
+            f'capped to {EXECUTOR_CORES_CAP} to better fit on available aws nodes.',
+        )
         executor_cores = EXECUTOR_CORES_CAP
 
     user_spark_opts.update({
