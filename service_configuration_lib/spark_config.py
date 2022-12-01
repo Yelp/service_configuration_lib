@@ -44,6 +44,10 @@ DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
 DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '900s'
 DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
 
+EXECUTOR_MEMORY_WARN_GB = 28
+EXECUTOR_MEMORY_CAP_GB = 120
+EXECUTOR_CORES_CAP = 12
+
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
@@ -432,12 +436,39 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
     return executor_instances
 
 
+def _cap_executor_resources(user_spark_opts: Dict[str, str]) -> Dict[str, str]:
+    executor_memory = user_spark_opts.get('spark.executor.memory', DEFAULT_EXECUTOR_MEMORY)
+    executor_cores = int(user_spark_opts.get('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
+
+    memory_mb = parse_memory_string(executor_memory)
+    if memory_mb > EXECUTOR_MEMORY_CAP_GB * 1024:
+        executor_memory = f'{EXECUTOR_MEMORY_CAP_GB}g'
+        log.warning(
+            f'Given executor memory is {memory_mb / 1024}g, '
+            f'capped to {executor_memory} to better fit on available aws nodes.',
+        )
+    elif memory_mb > EXECUTOR_MEMORY_WARN_GB * 1024:
+        log.warning('We recommend using setting memory as 28g and executor cores as 4')
+
+    if executor_cores > EXECUTOR_CORES_CAP:
+        log.warning(
+            f'Given executor cores is {executor_cores}, '
+            f'capped to {EXECUTOR_CORES_CAP} to better fit on available aws nodes.',
+        )
+        executor_cores = EXECUTOR_CORES_CAP
+
+    user_spark_opts.update({
+        'spark.executor.memory': str(executor_memory),
+        'spark.executor.cores': str(executor_cores),
+    })
+    return user_spark_opts
+
+
 def _adjust_spark_requested_resources(
     user_spark_opts: Dict[str, str],
     cluster_manager: str,
     pool: str,
 ) -> Dict[str, str]:
-    executor_memory = user_spark_opts.setdefault('spark.executor.memory', DEFAULT_EXECUTOR_MEMORY)
     executor_cores = int(user_spark_opts.setdefault('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
     if cluster_manager == 'mesos':
         max_cores = int(user_spark_opts.setdefault('spark.cores.max', str(DEFAULT_MAX_CORES)))
@@ -475,16 +506,12 @@ def _adjust_spark_requested_resources(
     if max_cores < executor_cores:
         raise ValueError(f'Total number of cores {max_cores} is less than per-executor cores {executor_cores}')
 
-    memory = parse_memory_string(executor_memory)
-    if memory > 32 * 1024:
-        log.warning('Executor memory is {memory / 32}g, greater than recommended value: 32g')
-
     num_gpus = int(user_spark_opts.get('spark.mesos.gpus.max', '0'))
     task_cpus = int(user_spark_opts.get('spark.task.cpus', '1'))
     # we can skip this step if user is not using gpu or do not configure
     # task cpus and executor cores
     if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
-        return user_spark_opts
+        return _cap_executor_resources(user_spark_opts)
 
     if num_gpus != 0 and cluster_manager != 'mesos':
         raise ValueError('spark.mesos.gpus.max is only available for mesos')
@@ -543,7 +570,7 @@ def _adjust_spark_requested_resources(
         'spark.executor.cores': str(cpus_per_gpu * gpus_per_inst),
         'spark.cores.max': str(total_cpus),
     })
-    return user_spark_opts
+    return _cap_executor_resources(user_spark_opts)
 
 
 def find_spark_master(paasta_cluster):
@@ -762,7 +789,7 @@ def get_spark_conf(
     paasta_instance: str,
     docker_img: str,
     aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
-    extra_volumes: List[Mapping[str, str]] = None,
+    extra_volumes: Optional[List[Mapping[str, str]]] = None,
     # the follow arguments only being used for mesos
     extra_docker_params: Optional[MutableMapping[str, str]] = None,
     with_secret: bool = True,
@@ -896,6 +923,7 @@ def get_spark_conf(
 
 
 def parse_memory_string(memory_string: Optional[str]) -> int:
+    """Return memory size in MB."""
     if memory_string is None:
         return 0
     else:
