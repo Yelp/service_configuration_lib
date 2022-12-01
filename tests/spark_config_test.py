@@ -396,6 +396,20 @@ class TestGetSparkConf:
                     'spark.cores.max': '12',
                 },
             ),
+            # user defined resources - capped
+            (
+                'mesos',
+                {
+                    'spark.executor.memory': '128g',
+                    'spark.executor.cores': '13',
+                    'spark.cores.max': '24',
+                },
+                {
+                    'spark.executor.memory': '120g',
+                    'spark.executor.cores': '12',
+                    'spark.cores.max': '24',
+                },
+            ),
             # gpu with default settings
             (
                 'mesos',
