@@ -239,11 +239,8 @@ def _append_spark_config(spark_opts: Dict[str, str], config_name: str, config_va
     return spark_opts
 
 
-def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
-    if 'spark.sql.shuffle.partitions' in spark_opts:
-        return spark_opts
-
-    num_partitions = 2 * (
+def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    num_partitions = 3 * (
         int(spark_opts.get('spark.cores.max', 0)) or
         int(spark_opts.get('spark.executor.instances', 0)) *
         int(spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
@@ -256,22 +253,17 @@ def _append_sql_shuffle_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str,
         str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
     ):
 
-        num_partitions_dra = 2 * (
+        num_partitions_dra = (
             int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
             int(spark_opts.get('spark.executor.cores', DEFAULT_EXECUTOR_CORES))
         )
         num_partitions = max(num_partitions, num_partitions_dra)
 
     num_partitions = num_partitions or DEFAULT_SQL_SHUFFLE_PARTITIONS
+    _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
+    _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
+    _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
-    log.warning(
-        f'spark.sql.shuffle.partitions has been set to {num_partitions} '
-        'to be equal to twice the number of requested cores, but you should '
-        'consider setting a higher value if necessary.'
-        ' Follow y/spark for help on partition sizing',
-    )
-
-    spark_opts['spark.sql.shuffle.partitions'] = str(num_partitions)
     return spark_opts
 
 
@@ -426,8 +418,8 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
         # spark.cores.max provided, calculate based on (max cores // per-executor cores)
         executor_instances = (int(user_spark_opts['spark.cores.max']) // executor_cores)
         log.warning(
-            f'spark.cores.max should no longer be provided and should be replaced '
-            f'by the exact value of spark.executor.instances in --spark-args',
+            'spark.cores.max should no longer be provided and should be replaced '
+            'by the exact value of spark.executor.instances in --spark-args',
         )
     else:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
@@ -910,7 +902,7 @@ def get_spark_conf(
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
 
     # configure sql shuffle partitions
-    spark_conf = _append_sql_shuffle_partitions_conf(spark_conf)
+    spark_conf = _append_sql_partitions_conf(spark_conf)
 
     # configure spark conf log
     spark_conf = _append_spark_config(spark_conf, 'spark.logConf', 'true')
