@@ -329,7 +329,7 @@ class TestGetSparkConf:
                 'kubernetes',
                 {},
                 {
-                    'spark.executor.memory': '4g',
+                    'spark.executor.memory': '28g',
                     'spark.executor.cores': '2',
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '2',
@@ -346,7 +346,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '600',
                 },
                 {
-                    'spark.executor.memory': '4g',
+                    'spark.executor.memory': '28g',
                     'spark.executor.cores': '2',
                     'spark.executor.instances': '600',
                     'spark.kubernetes.executor.limit.cores': '2',
@@ -382,7 +382,7 @@ class TestGetSparkConf:
                 'mesos',
                 {},
                 {
-                    'spark.executor.memory': '4g',
+                    'spark.executor.memory': '28g',
                     'spark.executor.cores': '2',
                     'spark.cores.max': '4',
                 },
@@ -421,7 +421,7 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated
+            # user defined resources - recalculated - medium memory
             (
                 'mesos',
                 {
@@ -439,7 +439,7 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated
+            # user defined resources - recalculated - medium memory
             (
                 'mesos',
                 {
@@ -457,7 +457,7 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - not recalculated
+            # user defined resources - recalculated - recommended memory
             (
                 'mesos',
                 {
@@ -469,7 +469,25 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '4',
-                    'spark.executor.memory': '32g',
+                    'spark.executor.memory': '28g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+                },
+                False,
+            ),
+            # user defined resources - not recalculated
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '4',
+                    'spark.executor.memory': '8g',
+                    'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+
+                },
+                {
+                    'spark.executor.cores': '4',
+                    'spark.executor.memory': '8g',
                     'spark.executor.instances': '1',
                     'spark.cores.max': '32',
                 },
@@ -521,7 +539,7 @@ class TestGetSparkConf:
                     'spark.default.parallelism': '2',
                     'spark.task.cpus': '8',
                     'spark.executor.cores': '8',
-                    'spark.executor.memory': '4g',
+                    'spark.executor.memory': '28g',
                     'spark.cores.max': '16',
                 },
                 False,
