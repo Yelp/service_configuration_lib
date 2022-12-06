@@ -405,7 +405,7 @@ class TestGetSparkConf:
                     'spark.cores.max': '24',
                 },
                 {
-                    'spark.executor.memory': '120g',
+                    'spark.executor.memory': '110g',
                     'spark.executor.cores': '12',
                     'spark.cores.max': '24',
                 },
