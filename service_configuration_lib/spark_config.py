@@ -490,7 +490,7 @@ def _cap_executor_resources(
     elif memory_mb > RECOMMENDED_EXECUTOR_MEMORY * 1024:
         log.warning(
             f'We recommend using setting memory as {RECOMMENDED_EXECUTOR_MEMORY}g '
-            f'and executor cores as 4',
+            f'and executor cores as {DEFAULT_MAX_CORES}',
         )
 
     if executor_cores > MAX_EXECUTOR_CORES_ALLOWED:
@@ -515,9 +515,7 @@ def _recalculate_executor_resources(
     memory_mb = parse_memory_string(executor_memory)
     memory_gb = math.ceil(memory_mb / 1024)
 
-    def _calculate_resources(
-        cpu, memory, instances, task_cpus, target_memory,
-    ) -> Tuple[int, str, int, int]:
+    def _calculate_resources(cpu, memory, instances, task_cpus, target_memory) -> Tuple[int, str, int, int]:
         """
         Calculate resource needed based on memory size and recommended mem:core ratio (7:1).
 
@@ -540,14 +538,15 @@ def _recalculate_executor_resources(
         log.warning(
             f'Given executor resources: {cpu}cores, {memory}g {instances} instances '
             f'=> adjusted to {new_cpu}cores {new_memory} {new_instances} instances, '
-            f'based on standard Mem:Core category (28g, 4cores) and Mem:core ratio: 7:1 '
+            f'based on recommended Mem:Core category {target_memory}g, {target_memory/TARGET_MEM_CPU_RATIO} '
+            f'and Mem:core ratio: {TARGET_MEM_CPU_RATIO}:1. \n '
             f'to better fit on available aws nodes.',
         )
 
         if new_cpu < task_cpus:
             log.warning(
                 f'Given spark.task.cpus is {task_cpus}, '
-                f'=> adjusted to {new_cpu} to better fit on available aws nodes.',
+                f'=> adjusted to {new_cpu} to keep it within the limits of adjust spark.executor.cores.',
             )
             task_cpus = new_cpu
         return new_cpu, f'{new_memory}g', new_instances, task_cpus
@@ -557,7 +556,8 @@ def _recalculate_executor_resources(
             'force_spark_resource_configs is set to true: '
             'this can result in non-optimal bin-packing of executors on aws nodes or '
             'can lead to wastage the resources. '
-            'Please make sure there is a reason that this flag needs to be used.',
+            "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n",
+            'Let us know at #spark if you think, your use-case needs to be standardized.',
         )
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
     elif (
