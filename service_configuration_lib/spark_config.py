@@ -4,6 +4,7 @@ import hashlib
 import itertools
 import json
 import logging
+import math
 import os
 import time
 from typing import Any
@@ -37,11 +38,13 @@ MAX_EXECUTOR_CORES_ALLOWED = 12
 RECOMMENDED_EXECUTOR_MEMORY = 28
 MEDIUM_EXECUTOR_MEMORY = 56
 MAX_EXECUTOR_MEMORY_ALLOWED = 110
+TARGET_MEM_CPU_RATIO = 7
 
 DEFAULT_MAX_CORES = 4
 DEFAULT_EXECUTOR_CORES = 2
 DEFAULT_EXECUTOR_INSTANCES = 2
 DEFAULT_EXECUTOR_MEMORY = RECOMMENDED_EXECUTOR_MEMORY
+DEFAULT_TASK_CPUS = 1
 DEFAULT_K8S_LABEL_LENGTH = 63
 DEFAULT_K8S_BATCH_SIZE = 512
 DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
@@ -482,7 +485,7 @@ def _cap_executor_resources(
         executor_memory = f'{MAX_EXECUTOR_MEMORY_ALLOWED}g'
         log.warning(
             f'Given executor memory is {memory_mb / 1024}g, '
-            f'capped to {executor_memory} to better fit on available aws nodes.',
+            f'=> capped to {executor_memory} to better fit on available aws nodes.',
         )
     elif memory_mb > RECOMMENDED_EXECUTOR_MEMORY * 1024:
         log.warning(
@@ -493,7 +496,7 @@ def _cap_executor_resources(
     if executor_cores > MAX_EXECUTOR_CORES_ALLOWED:
         log.warning(
             f'Given executor cores is {executor_cores}, '
-            f'capped to {MAX_EXECUTOR_CORES_ALLOWED} to better fit on available aws nodes.',
+            f'=> capped to {MAX_EXECUTOR_CORES_ALLOWED} to better fit on available aws nodes.',
         )
         executor_cores = MAX_EXECUTOR_CORES_ALLOWED
 
@@ -507,8 +510,47 @@ def _recalculate_executor_resources(
     executor_cores = int(user_spark_opts.get('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
     executor_memory = user_spark_opts.get('spark.executor.memory', f'{DEFAULT_EXECUTOR_MEMORY}g')
     executor_instances = int(user_spark_opts.get('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)))
+    task_cpus = int(user_spark_opts.get('spark.task.cpus', str(DEFAULT_TASK_CPUS)))
 
     memory_mb = parse_memory_string(executor_memory)
+    memory_gb = math.ceil(memory_mb / 1024)
+
+    def _calculate_resources(
+        cpu, memory, instances, task_cpus, target_memory,
+    ) -> Tuple[int, str, int, int]:
+        """
+        Calculate resource needed based on memory size and recommended mem:core ratio (7:1).
+
+        Parameters:
+        memory: integer values in GB.
+
+        Returns:
+        A tuple of (new_cpu, new_memory, new_instances, task_cpus).
+        """
+        new_cpu: int
+        new_memory: int
+        new_instances = (instances * memory) // target_memory
+        if new_instances > 0:
+            new_cpu = int(target_memory / TARGET_MEM_CPU_RATIO)
+            new_memory = target_memory
+        else:
+            new_instances = 1
+            new_cpu = max(memory // TARGET_MEM_CPU_RATIO, 1)
+            new_memory = new_cpu * TARGET_MEM_CPU_RATIO
+        log.warning(
+            f'Given executor resources: {cpu}cores, {memory}g {instances} instances '
+            f'=> adjusted to {new_cpu}cores {new_memory} {new_instances} instances, '
+            f'based on standard Mem:Core category (28g, 4cores) and Mem:core ratio: 7:1 '
+            f'to better fit on available aws nodes.',
+        )
+
+        if new_cpu < task_cpus:
+            log.warning(
+                f'Given spark.task.cpus is {task_cpus}, '
+                f'=> adjusted to {new_cpu} to better fit on available aws nodes.',
+            )
+            task_cpus = new_cpu
+        return new_cpu, f'{new_memory}g', new_instances, task_cpus
 
     if force_spark_resource_configs:
         log.warning(
@@ -519,35 +561,19 @@ def _recalculate_executor_resources(
         )
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
     elif (
-        memory_mb > MEDIUM_EXECUTOR_MEMORY * 1024 or
-        executor_cores > MEDIUM_EXECUTOR_CORES
+        memory_gb > MEDIUM_EXECUTOR_MEMORY or executor_cores > MEDIUM_EXECUTOR_CORES
     ):
-        capped_executor_memory = f'{MEDIUM_EXECUTOR_MEMORY}g'
-        capped_executor_cores = MEDIUM_EXECUTOR_CORES
-        capped_executor_instances = max(
-            executor_instances * memory_mb // (1024 * MEDIUM_EXECUTOR_MEMORY),
-            executor_instances * executor_cores // MEDIUM_EXECUTOR_CORES,
-        )
-        log.warning(
-            f'Given executor {executor_cores}C {int(memory_mb / 1024)}g x{executor_instances} instances '
-            f'=> adjusted to {capped_executor_cores}C {capped_executor_memory} x{capped_executor_instances} instances '
-            f'to better fit on available aws nodes.',
-        )
-        (executor_cores, executor_memory, executor_instances) = (
-            capped_executor_cores, capped_executor_memory, capped_executor_instances,
-        )
-    elif memory_mb > RECOMMENDED_EXECUTOR_MEMORY * 1024:
-        capped_executor_memory = f'{RECOMMENDED_EXECUTOR_MEMORY}g'
-        log.warning(
-            f'Given executor memory is {executor_memory}, '
-            f'capped to {capped_executor_memory} to better fit on available aws nodes.',
-        )
-        executor_memory = capped_executor_memory
+        (executor_cores, executor_memory, executor_instances, task_cpus) = \
+            _calculate_resources(executor_cores, memory_gb, executor_instances, task_cpus, MEDIUM_EXECUTOR_MEMORY)
+    else:
+        (executor_cores, executor_memory, executor_instances, task_cpus) = \
+            _calculate_resources(executor_cores, memory_gb, executor_instances, task_cpus, RECOMMENDED_EXECUTOR_MEMORY)
 
     user_spark_opts.update({
         'spark.executor.cores': str(executor_cores),
         'spark.executor.memory': str(executor_memory),
         'spark.executor.instances': str(executor_instances),
+        'spark.task.cpus': str(task_cpus),
     })
     return user_spark_opts
 

@@ -330,7 +330,7 @@ class TestGetSparkConf:
                 {},
                 {
                     'spark.executor.memory': '28g',
-                    'spark.executor.cores': '2',
+                    'spark.executor.cores': '4',
                     'spark.executor.instances': '2',
                     'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '512',
@@ -347,7 +347,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.memory': '28g',
-                    'spark.executor.cores': '2',
+                    'spark.executor.cores': '4',
                     'spark.executor.instances': '600',
                     'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '512',
@@ -365,9 +365,9 @@ class TestGetSparkConf:
                     'spark.mesos.executor.memoryOverhead': '4096',
                 },
                 {
-                    'spark.executor.memory': '2g',
-                    'spark.executor.cores': '4',
-                    'spark.executor.instances': '3',
+                    'spark.executor.memory': '7g',
+                    'spark.executor.cores': '1',
+                    'spark.executor.instances': '1',
                     'spark.cores.max': '12',
                     'spark.kubernetes.executor.limit.cores': '4',
                     'spark.kubernetes.allocation.batch.size': '512',
@@ -383,7 +383,7 @@ class TestGetSparkConf:
                 {},
                 {
                     'spark.executor.memory': '28g',
-                    'spark.executor.cores': '2',
+                    'spark.executor.cores': '4',
                     'spark.cores.max': '4',
                 },
                 False,
@@ -397,13 +397,13 @@ class TestGetSparkConf:
                     'spark.cores.max': '12',
                 },
                 {
-                    'spark.executor.memory': '2g',
-                    'spark.executor.cores': '4',
+                    'spark.executor.memory': '7g',
+                    'spark.executor.cores': '1',
                     'spark.cores.max': '12',
                 },
                 False,
             ),
-            # user defined resources - recalculated
+            # user defined resources - recalculated - medium memory
             (
                 'mesos',
                 {
@@ -463,32 +463,51 @@ class TestGetSparkConf:
                 {
                     'spark.executor.cores': '4',
                     'spark.executor.memory': '32g',
-                    'spark.executor.instances': '1',
+                    'spark.executor.instances': '2',
                     'spark.cores.max': '32',
 
                 },
                 {
                     'spark.executor.cores': '4',
                     'spark.executor.memory': '28g',
-                    'spark.executor.instances': '1',
+                    'spark.executor.instances': '2',
                     'spark.cores.max': '32',
                 },
                 False,
             ),
-            # user defined resources - not recalculated
+            # user defined resources - recalculated - non standard memory
             (
                 'mesos',
                 {
-                    'spark.executor.cores': '4',
-                    'spark.executor.memory': '8g',
+                    'spark.executor.cores': '6',
+                    'spark.executor.memory': '13g',
                     'spark.executor.instances': '1',
                     'spark.cores.max': '32',
 
                 },
                 {
-                    'spark.executor.cores': '4',
-                    'spark.executor.memory': '8g',
+                    'spark.executor.cores': '1',
+                    'spark.executor.memory': '7g',
                     'spark.executor.instances': '1',
+                    'spark.cores.max': '32',
+                },
+                False,
+            ),
+            # user defined resources - recalculated - non standard memory - task cpus capped
+            (
+                'mesos',
+                {
+                    'spark.executor.cores': '6',
+                    'spark.executor.memory': '13g',
+                    'spark.executor.instances': '1',
+                    'spark.task.cpus': '4',
+                    'spark.cores.max': '32',
+                },
+                {
+                    'spark.executor.cores': '1',
+                    'spark.executor.memory': '7g',
+                    'spark.executor.instances': '1',
+                    'spark.task.cpus': '1',
                     'spark.cores.max': '32',
                 },
                 False,
@@ -537,8 +556,8 @@ class TestGetSparkConf:
                     'spark.mesos.gpus.max': '2',
                     'spark.mesos.containerizer': 'mesos',
                     'spark.default.parallelism': '2',
-                    'spark.task.cpus': '8',
-                    'spark.executor.cores': '8',
+                    'spark.task.cpus': '4',
+                    'spark.executor.cores': '4',
                     'spark.executor.memory': '28g',
                     'spark.cores.max': '16',
                 },
