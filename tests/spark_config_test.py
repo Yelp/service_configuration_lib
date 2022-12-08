@@ -403,7 +403,7 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated - medium memory
+            # user defined resources - capped cpu & memory
             (
                 'mesos',
                 {
@@ -414,9 +414,9 @@ class TestGetSparkConf:
 
                 },
                 {
-                    'spark.executor.cores': '8',
-                    'spark.executor.memory': '56g',
-                    'spark.executor.instances': '4',
+                    'spark.executor.cores': '12',
+                    'spark.executor.memory': '110g',
+                    'spark.executor.instances': '2',
                     'spark.cores.max': '32',
                 },
                 False,

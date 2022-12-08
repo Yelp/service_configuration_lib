@@ -484,7 +484,7 @@ def _cap_executor_resources(
     if memory_mb > MAX_EXECUTOR_MEMORY_ALLOWED * 1024:
         executor_memory = f'{MAX_EXECUTOR_MEMORY_ALLOWED}g'
         log.warning(
-            f'Given executor memory is {memory_mb / 1024}g, '
+            f'Given executor memory is {int(memory_mb / 1024)}g, '
             f'=> capped to {executor_memory} to better fit on available aws nodes.',
         )
     elif memory_mb > RECOMMENDED_EXECUTOR_MEMORY * 1024:
@@ -551,7 +551,9 @@ def _recalculate_executor_resources(
             task_cpus = new_cpu
         return new_cpu, f'{new_memory}g', new_instances, task_cpus
 
-    if force_spark_resource_configs:
+    if memory_gb > MAX_EXECUTOR_MEMORY_ALLOWED:
+        executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
+    elif force_spark_resource_configs:
         log.warning(
             'force_spark_resource_configs is set to true: '
             'this can result in non-optimal bin-packing of executors on aws nodes or '
@@ -559,10 +561,7 @@ def _recalculate_executor_resources(
             "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n",
             'Let us know at #spark if you think, your use-case needs to be standardized.',
         )
-        executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
-    elif (
-        memory_gb > MEDIUM_EXECUTOR_MEMORY or executor_cores > MEDIUM_EXECUTOR_CORES
-    ):
+    elif memory_gb > MEDIUM_EXECUTOR_MEMORY or executor_cores > MEDIUM_EXECUTOR_CORES:
         (executor_cores, executor_memory, executor_instances, task_cpus) = \
             _calculate_resources(executor_cores, memory_gb, executor_instances, task_cpus, MEDIUM_EXECUTOR_MEMORY)
     else:
