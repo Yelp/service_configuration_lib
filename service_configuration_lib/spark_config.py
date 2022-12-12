@@ -537,10 +537,9 @@ def _recalculate_executor_resources(
             new_memory = new_cpu * TARGET_MEM_CPU_RATIO
         log.warning(
             f'Given executor resources: {cpu}cores, {memory}g {instances} instances '
-            f'=> adjusted to {new_cpu}cores {new_memory} {new_instances} instances, '
-            f'based on recommended Mem:Core category {target_memory}g, {target_memory/TARGET_MEM_CPU_RATIO} '
-            f'and Mem:core ratio: {TARGET_MEM_CPU_RATIO}:1. \n '
-            f'to better fit on available aws nodes.',
+            f'=> adjusted to {new_cpu}cores {new_memory}g {new_instances} instances, '
+            f'based on recommended Mem:Core category {target_memory}g, {target_memory//TARGET_MEM_CPU_RATIO}cores '
+            f'and Mem:core ratio: {TARGET_MEM_CPU_RATIO}:1 to better fit on available aws nodes.',
         )
 
         if new_cpu < task_cpus:
