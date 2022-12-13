@@ -275,7 +275,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     ):
         return spark_opts
 
-    spark_app_name = spark_opts.get('spark.app.name', "")
+    spark_app_name = spark_opts.get('spark.app.name', '')
     # set defaults if not provided already
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
     _append_spark_config(
@@ -320,7 +320,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             f'spark.dynamicAllocation.minExecutors in your spark args\n',
         )
 
-        if "jupyterhub" not in spark_app_name and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+        if 'jupyterhub' not in spark_app_name and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
             log.debug(
                 f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
@@ -914,7 +914,8 @@ def get_spark_conf(
         raise UnsupportedClusterManagerException(cluster_manager)
 
     # configure dynamic resource allocation configs
-    spark_conf = get_dra_configs(spark_conf)
+    if cluster_manager != 'mesos':
+        spark_conf = get_dra_configs(spark_conf)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
