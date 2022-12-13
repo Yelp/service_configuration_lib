@@ -268,12 +268,14 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
 
 def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    # don't enable DRA if it is explicitly disabled
     if (
-        'spark.dynamicAllocation.enabled' not in spark_opts or
+        'spark.dynamicAllocation.enabled' in spark_opts and
         str(spark_opts['spark.dynamicAllocation.enabled']) != 'true'
     ):
         return spark_opts
 
+    spark_app_name = spark_opts.get('spark.app.name', "")
     # set defaults if not provided already
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
     _append_spark_config(
@@ -307,20 +309,23 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
                 min_executors, int(int(spark_opts['spark.dynamicAllocation.maxExecutors']) *
                                    float(min_executor_ratio)),
             )
+        # set minExecutors equal to 0 for Jupyter Spark sessions
+        if 'jupyterhub' in spark_app_name:
+            min_executors = 0
 
         spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
         log.warning(
             f'\nSetting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
             f'change the value of minimum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.minExecutors in --spark-args\n',
+            f'spark.dynamicAllocation.minExecutors in your spark args\n',
         )
 
-        if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+        if "jupyterhub" not in spark_app_name and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
             log.debug(
                 f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
                 f'default ratio: {DEFAULT_DRA_MIN_EXECUTOR_RATIO}. If you wish to change this value, please provide '
-                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args\n',
+                f'the desired spark.yelp.dra.minExecutorRatio in your spark args\n',
             )
 
     if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
@@ -334,7 +339,20 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         log.warning(
             f'\nSetting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
             f'change the value of maximum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.maxExecutors in --spark-args\n',
+            f'spark.dynamicAllocation.maxExecutors in your spark args\n',
+        )
+
+    if 'jupyterhub' in spark_app_name and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
+        # set initialExecutors default equal to spark.executor.instances for Jupyter
+        initial_executors = int(spark_opts.get('spark.executor.instances', DEFAULT_EXECUTOR_INSTANCES))
+        # initialExecutors shouldn't be more than maxExecutors
+        initial_executors = min(initial_executors, int(spark_opts['spark.dynamicAllocation.maxExecutors']))
+
+        spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.initialExecutors as {initial_executors}. If you wish to '
+            f'change the value of initial executors, please provide the exact value of '
+            f'spark.dynamicAllocation.initialExecutors in your spark args\n',
         )
 
     spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
