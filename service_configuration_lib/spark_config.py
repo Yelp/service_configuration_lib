@@ -301,7 +301,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         f'the cached data was lost, please consider increasing this value.\n',
     )
 
-    min_ratio_executors = 0
+    min_ratio_executors = None
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
         # the ratio of total executors to be used as minExecutors
         min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', DEFAULT_DRA_MIN_EXECUTOR_RATIO)
@@ -364,7 +364,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
     # TODO: add regex to better match Jupyterhub Spark session app name
     if 'jupyterhub' in spark_app_name and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
-        if min_ratio_executors:
+        if min_ratio_executors is not None:
             # set initialExecutors default equal to minimum executors calculated above using
             # 'spark.yelp.dra.minExecutorRatio' and DEFAULT_DRA_MIN_EXECUTOR_RATIO for Jupyter Spark sessions
             initial_executors = min_ratio_executors
