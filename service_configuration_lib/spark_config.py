@@ -275,6 +275,12 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     ):
         return spark_opts
 
+    log.warning(
+        'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra. '
+        'If your job is performing worse because of DRA, consider disabling DRA. To disable, '
+        'please provide spark.dynamicAllocation.enabled=false in your spark args\n',
+    )
+
     spark_app_name = spark_opts.get('spark.app.name', '')
     # set defaults if not provided already
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.enabled', 'true')
@@ -291,7 +297,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as {DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. '
         f'Executor with cached data block will be released if it has been idle for this duration. '
         f'If you wish to change the value of cachedExecutorIdleTimeout, please provide the exact value of '
-        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in --spark-args. If your job is performing bad because '
+        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in your spark args. If your job is performing bad because '
         f'the cached data was lost, please consider increasing this value.\n',
     )
 
