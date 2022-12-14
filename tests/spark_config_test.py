@@ -548,7 +548,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '606',
                 },
                 {
-                    'spark.executor.instances': '606',
+                    'spark.executor.instances': '151',  # enabled by default, 606/4
                 },
             ),
         ],
@@ -788,6 +788,20 @@ class TestGetSparkConf:
             'spark.executor.memory': '2g',
         }
         with MockConfigFunction('_adjust_spark_requested_resources', return_value) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_get_dra_configs(self):
+        return_value = {
+            'spark.dynamicAllocation.enabled': 'true',
+            'spark.dynamicAllocation.maxExecutors': '2',
+            'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
+            'spark.dynamicAllocation.executorAllocationRatio': '0.8',
+            'spark.executor.instances': '2',
+            'spark.dynamicAllocation.minExecutors': '0',
+            'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
+        }
+        with MockConfigFunction('get_dra_configs', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1114,6 +1128,7 @@ class TestGetSparkConf:
         mock_append_aws_credentials_conf,
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
+        mock_get_dra_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1150,6 +1165,7 @@ class TestGetSparkConf:
             assert_kubernetes_conf(output) +
             list(other_spark_opts.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
+            list(mock_get_dra_configs.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_partitions_conf.return_value.keys()),
@@ -1201,6 +1217,7 @@ class TestGetSparkConf:
         mock_append_aws_credentials_conf,
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
+        mock_get_dra_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1229,6 +1246,7 @@ class TestGetSparkConf:
             assert_local_conf(output) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
+            list(mock_get_dra_configs.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_partitions_conf.return_value.keys()),
         )

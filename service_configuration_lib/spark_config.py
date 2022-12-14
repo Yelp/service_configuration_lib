@@ -268,13 +268,22 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
 
 def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
+    # don't enable DRA if it is explicitly disabled
     if (
-        'spark.dynamicAllocation.enabled' not in spark_opts or
+        'spark.dynamicAllocation.enabled' in spark_opts and
         str(spark_opts['spark.dynamicAllocation.enabled']) != 'true'
     ):
         return spark_opts
 
+    log.warning(
+        'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra. '
+        'If your job is performing worse because of DRA, consider disabling DRA. To disable, '
+        'please provide spark.dynamicAllocation.enabled=false in your spark args\n',
+    )
+
+    spark_app_name = spark_opts.get('spark.app.name', '')
     # set defaults if not provided already
+    _append_spark_config(spark_opts, 'spark.dynamicAllocation.enabled', 'true')
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
     _append_spark_config(
         spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
@@ -288,10 +297,11 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as {DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. '
         f'Executor with cached data block will be released if it has been idle for this duration. '
         f'If you wish to change the value of cachedExecutorIdleTimeout, please provide the exact value of '
-        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in --spark-args. If your job is performing bad because '
+        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in your spark args. If your job is performing bad because '
         f'the cached data was lost, please consider increasing this value.\n',
     )
 
+    min_ratio_executors = None
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
         # the ratio of total executors to be used as minExecutors
         min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', DEFAULT_DRA_MIN_EXECUTOR_RATIO)
@@ -308,19 +318,34 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
                                    float(min_executor_ratio)),
             )
 
+        min_ratio_executors = min_executors
+
+        warn_msg = '\nSetting spark.dynamicAllocation.minExecutors as'
+
+        # set minExecutors equal to 0 for Jupyter Spark sessions
+        # TODO: add regex to better match Jupyterhub Spark session app name
+        if 'jupyterhub' in spark_app_name:
+            min_executors = 0
+            warn_msg = (
+                f'Looks like you are launching Spark session from a Jupyter notebook. '
+                f'{warn_msg} {min_executors} to save spark costs when any spark action is not running'
+            )
+        else:
+            warn_msg = f'{warn_msg} {min_executors}'
+
         spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
         log.warning(
-            f'\nSetting spark.dynamicAllocation.minExecutors as {min_executors}. If you wish to '
-            f'change the value of minimum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.minExecutors in --spark-args\n',
+            f'\n{warn_msg}. If you wish to change the value of minimum executors, please provide '
+            f'the exact value of spark.dynamicAllocation.minExecutors in your spark args\n',
         )
 
-        if 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+        # TODO: add regex to better match Jupyterhub Spark session app name
+        if 'jupyterhub' not in spark_app_name and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
             log.debug(
                 f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
                 f'default ratio: {DEFAULT_DRA_MIN_EXECUTOR_RATIO}. If you wish to change this value, please provide '
-                f'the desired spark.yelp.dra.minExecutorRatio in --spark-args\n',
+                f'the desired spark.yelp.dra.minExecutorRatio in your spark args\n',
             )
 
     if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
@@ -334,7 +359,24 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         log.warning(
             f'\nSetting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
             f'change the value of maximum executors, please provide the exact value of '
-            f'spark.dynamicAllocation.maxExecutors in --spark-args\n',
+            f'spark.dynamicAllocation.maxExecutors in your spark args\n',
+        )
+
+    # TODO: add regex to better match Jupyterhub Spark session app name
+    if 'jupyterhub' in spark_app_name and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
+        if min_ratio_executors is not None:
+            # set initialExecutors default equal to minimum executors calculated above using
+            # 'spark.yelp.dra.minExecutorRatio' and DEFAULT_DRA_MIN_EXECUTOR_RATIO for Jupyter Spark sessions
+            initial_executors = min_ratio_executors
+        else:
+            # otherwise set initial executors equal to minimum executors
+            initial_executors = int(spark_opts['spark.dynamicAllocation.minExecutors'])
+
+        spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.initialExecutors as {initial_executors}. If you wish to '
+            f'change the value of initial executors, please provide the exact value of '
+            f'spark.dynamicAllocation.initialExecutors in your spark args\n',
         )
 
     spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
@@ -896,7 +938,8 @@ def get_spark_conf(
         raise UnsupportedClusterManagerException(cluster_manager)
 
     # configure dynamic resource allocation configs
-    spark_conf = get_dra_configs(spark_conf)
+    if cluster_manager != 'mesos':
+        spark_conf = get_dra_configs(spark_conf)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
