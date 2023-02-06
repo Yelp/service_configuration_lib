@@ -2,6 +2,7 @@ import functools
 import itertools
 import json
 import os
+import sys
 from unittest import mock
 
 import pytest
@@ -589,13 +590,15 @@ class TestGetSparkConf:
         force_spark_resource_configs,
         gpu_pool,
     ):
+        ratio_adj_thresh = sys.maxsize
         pool = (
             'test-batch-pool'
             if user_spark_opts.get('spark.mesos.gpus.max', '0') == '0'
             else next(iter(gpu_pool.keys()))
         )
+
         output = spark_config._adjust_spark_requested_resources(
-            user_spark_opts, cluster_manager, pool, force_spark_resource_configs,
+            user_spark_opts, cluster_manager, pool, force_spark_resource_configs, ratio_adj_thresh,
         )
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
@@ -1477,6 +1480,33 @@ def test_get_signalfx_url():
         '&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:test-instance'
         '&startTime=-1h&endTime=Now'
     )
+
+
+@pytest.mark.parametrize(
+    'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
+        (999, 10, '60g', 8, '56g'),
+        (60, 10, '60g', 8, '56g'),
+        (7, 10, '60g', 10, '60g'),
+        (999, 4, '32g', 4, '28g'),
+        (32, 4, '32g', 4, '28g'),
+        (8, 4, '32g', 4, '32g'),
+        (999, 2, '8g', 1, '7g'),
+        (8, 2, '8g', 1, '7g'),
+        (7, 2, '8g', 2, '8g'),
+    ],
+)
+def test_adjust_cpu_mem_ratio_thresh(adj_thresh, cpu, memory, expected_cpu, expected_memory):
+    spark_opts = dict()
+    spark_opts['spark.executor.cores'] = cpu
+    spark_opts['spark.executor.memory'] = memory
+    spark_opts['spark.executor.instances'] = 1
+    spark_opts['spark.task.cpus'] = 1
+
+    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh)
+    assert int(result_dict['spark.executor.cores']) == expected_cpu
+    assert result_dict['spark.executor.memory'] == expected_memory
+    assert int(result_dict['spark.executor.instances']) == 1
+    assert int(result_dict['spark.task.cpus']) == 1
 
 
 @pytest.mark.parametrize(

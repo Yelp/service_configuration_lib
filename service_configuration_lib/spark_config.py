@@ -38,6 +38,7 @@ MAX_EXECUTOR_CORES_ALLOWED = 12
 RECOMMENDED_EXECUTOR_MEMORY = 28
 MEDIUM_EXECUTOR_MEMORY = 56
 MAX_EXECUTOR_MEMORY_ALLOWED = 110
+ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 7  # Adjust if requested memory <= this threshold
 TARGET_MEM_CPU_RATIO = 7
 
 DEFAULT_MAX_CORES = 4
@@ -506,6 +507,7 @@ def _cap_executor_resources(
 def _recalculate_executor_resources(
     user_spark_opts: Dict[str, str],
     force_spark_resource_configs: bool,
+    ratio_adj_thresh: int,
 ) -> Dict[str, str]:
     executor_cores = int(user_spark_opts.get('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
     executor_memory = user_spark_opts.get('spark.executor.memory', f'{DEFAULT_EXECUTOR_MEMORY}g')
@@ -515,7 +517,14 @@ def _recalculate_executor_resources(
     memory_mb = parse_memory_string(executor_memory)
     memory_gb = math.ceil(memory_mb / 1024)
 
-    def _calculate_resources(cpu, memory, instances, task_cpus, target_memory) -> Tuple[int, str, int, int]:
+    def _calculate_resources(
+        cpu: int,
+        memory: int,
+        instances: int,
+        task_cpus: int,
+        target_memory: int,
+        ratio_adj_thresh: int,
+    ) -> Tuple[int, str, int, int]:
         """
         Calculate resource needed based on memory size and recommended mem:core ratio (7:1).
 
@@ -525,6 +534,10 @@ def _recalculate_executor_resources(
         Returns:
         A tuple of (new_cpu, new_memory, new_instances, task_cpus).
         """
+        # For multi-step release
+        if memory > ratio_adj_thresh:
+            return cpu, f'{memory}g', instances, task_cpus
+
         new_cpu: int
         new_memory: int
         new_instances = (instances * memory) // target_memory
@@ -535,6 +548,7 @@ def _recalculate_executor_resources(
             new_instances = 1
             new_cpu = max(memory // TARGET_MEM_CPU_RATIO, 1)
             new_memory = new_cpu * TARGET_MEM_CPU_RATIO
+
         log.warning(
             f'Given executor resources: {cpu}cores, {memory}g {instances} instances '
             f'=> adjusted to {new_cpu}cores {new_memory}g {new_instances} instances, '
@@ -561,11 +575,23 @@ def _recalculate_executor_resources(
             'Let us know at #spark if you think, your use-case needs to be standardized.',
         )
     elif memory_gb > MEDIUM_EXECUTOR_MEMORY or executor_cores > MEDIUM_EXECUTOR_CORES:
-        (executor_cores, executor_memory, executor_instances, task_cpus) = \
-            _calculate_resources(executor_cores, memory_gb, executor_instances, task_cpus, MEDIUM_EXECUTOR_MEMORY)
+        (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
+            executor_cores,
+            memory_gb,
+            executor_instances,
+            task_cpus,
+            MEDIUM_EXECUTOR_MEMORY,
+            ratio_adj_thresh,
+        )
     else:
-        (executor_cores, executor_memory, executor_instances, task_cpus) = \
-            _calculate_resources(executor_cores, memory_gb, executor_instances, task_cpus, RECOMMENDED_EXECUTOR_MEMORY)
+        (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
+            executor_cores,
+            memory_gb,
+            executor_instances,
+            task_cpus,
+            RECOMMENDED_EXECUTOR_MEMORY,
+            ratio_adj_thresh,
+        )
 
     user_spark_opts.update({
         'spark.executor.cores': str(executor_cores),
@@ -581,6 +607,7 @@ def _adjust_spark_requested_resources(
     cluster_manager: str,
     pool: str,
     force_spark_resource_configs: bool = False,
+    ratio_adj_thresh: int = ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH,
 ) -> Dict[str, str]:
     executor_cores = int(user_spark_opts.setdefault('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
     if cluster_manager == 'mesos':
@@ -624,7 +651,7 @@ def _adjust_spark_requested_resources(
     # we can skip this step if user is not using gpu or do not configure
     # task cpus and executor cores
     if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
-        return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs)
+        return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
 
     if num_gpus != 0 and cluster_manager != 'mesos':
         raise ValueError('spark.mesos.gpus.max is only available for mesos')
@@ -683,7 +710,7 @@ def _adjust_spark_requested_resources(
         'spark.executor.cores': str(cpus_per_gpu * gpus_per_inst),
         'spark.cores.max': str(total_cpus),
     })
-    return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs)
+    return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
 
 
 def find_spark_master(paasta_cluster):
