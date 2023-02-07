@@ -12,6 +12,7 @@ from typing import Dict
 from typing import List
 from typing import Mapping
 from typing import MutableMapping
+from typing import NamedTuple
 from typing import Optional
 from typing import Tuple
 from urllib.parse import urlparse
@@ -33,18 +34,26 @@ GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
-MEDIUM_EXECUTOR_CORES = 8
-MAX_EXECUTOR_CORES_ALLOWED = 12
-RECOMMENDED_EXECUTOR_MEMORY = 28
-MEDIUM_EXECUTOR_MEMORY = 56
-MAX_EXECUTOR_MEMORY_ALLOWED = 110
-ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 7  # Adjust if requested memory <= this threshold
+
+class ExecutorResourceConfig(NamedTuple):
+    executor_cores: int
+    executor_memory: int  # in GB
+
+
+# Multi-step release - adjust if requested memory <= this threshold (memory in GB)
+ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 7
+
+RECOMMENDED_RESOURCE_CONFIGS: Dict[str, ExecutorResourceConfig] = {
+    'recommended': ExecutorResourceConfig(4, 28),
+    'medium': ExecutorResourceConfig(8, 56),
+    'max': ExecutorResourceConfig(12, 110),
+}
 TARGET_MEM_CPU_RATIO = 7
 
 DEFAULT_MAX_CORES = 4
 DEFAULT_EXECUTOR_CORES = 2
 DEFAULT_EXECUTOR_INSTANCES = 2
-DEFAULT_EXECUTOR_MEMORY = RECOMMENDED_EXECUTOR_MEMORY
+DEFAULT_EXECUTOR_MEMORY = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
 DEFAULT_TASK_CPUS = 1
 DEFAULT_K8S_LABEL_LENGTH = 63
 DEFAULT_K8S_BATCH_SIZE = 512
@@ -482,24 +491,28 @@ def _cap_executor_resources(
     executor_memory: str,
     memory_mb: int,
 ) -> Tuple[int, str]:
-    if memory_mb > MAX_EXECUTOR_MEMORY_ALLOWED * 1024:
-        executor_memory = f'{MAX_EXECUTOR_MEMORY_ALLOWED}g'
+    recommended_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
+    max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
+    max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
+
+    if memory_mb > max_memory_gb * 1024:
+        executor_memory = f'{max_memory_gb}g'
         log.warning(
             f'Given executor memory is {int(memory_mb / 1024)}g, '
             f'=> capped to {executor_memory} to better fit on available aws nodes.',
         )
-    elif memory_mb > RECOMMENDED_EXECUTOR_MEMORY * 1024:
+    elif memory_mb > recommended_memory_gb * 1024:
         log.warning(
-            f'We recommend using setting memory as {RECOMMENDED_EXECUTOR_MEMORY}g '
-            f'and executor cores as {DEFAULT_MAX_CORES}',
+            f' Recommended value for spark config spark.executor.memory:  {recommended_memory_gb}g '
+            f'and spark.executor.cores as {DEFAULT_MAX_CORES} and adjust spark.executor.instances proportionately.',
         )
 
-    if executor_cores > MAX_EXECUTOR_CORES_ALLOWED:
+    if executor_cores > max_cores:
         log.warning(
             f'Given executor cores is {executor_cores}, '
-            f'=> capped to {MAX_EXECUTOR_CORES_ALLOWED} to better fit on available aws nodes.',
+            f'=> capped to {max_cores} to better fit on available aws nodes.',
         )
-        executor_cores = MAX_EXECUTOR_CORES_ALLOWED
+        executor_cores = max_cores
 
     return executor_cores, executor_memory
 
@@ -564,23 +577,29 @@ def _recalculate_executor_resources(
             task_cpus = new_cpu
         return new_cpu, f'{new_memory}g', new_instances, task_cpus
 
-    if memory_gb > MAX_EXECUTOR_MEMORY_ALLOWED:
+    # Constants
+    recommended_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
+    medium_cores = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_cores
+    medium_memory_mb = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_memory
+    max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
+
+    if memory_gb > max_memory_gb:
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
     elif force_spark_resource_configs:
         log.warning(
-            'force_spark_resource_configs is set to true: '
+            '--force-spark-resource-configs is set to true: '
             'this can result in non-optimal bin-packing of executors on aws nodes or '
             'can lead to wastage the resources. '
-            "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n",
+            "Please use this flag only if you have tested that standard memorycpu configs won't work for your job.\n"
             'Let us know at #spark if you think, your use-case needs to be standardized.',
         )
-    elif memory_gb > MEDIUM_EXECUTOR_MEMORY or executor_cores > MEDIUM_EXECUTOR_CORES:
+    elif memory_gb > medium_memory_mb or executor_cores > medium_cores:
         (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
             executor_cores,
             memory_gb,
             executor_instances,
             task_cpus,
-            MEDIUM_EXECUTOR_MEMORY,
+            medium_memory_mb,
             ratio_adj_thresh,
         )
     else:
@@ -589,7 +608,7 @@ def _recalculate_executor_resources(
             memory_gb,
             executor_instances,
             task_cpus,
-            RECOMMENDED_EXECUTOR_MEMORY,
+            recommended_memory_gb,
             ratio_adj_thresh,
         )
 
