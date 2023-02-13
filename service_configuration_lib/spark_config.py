@@ -495,22 +495,27 @@ def _cap_executor_resources(
     max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
     max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
 
+    warning_title = 'Capped Executor Resources based on maximun available aws nodes'
+    warning_title_printed = False
+
     if memory_mb > max_memory_gb * 1024:
         executor_memory = f'{max_memory_gb}g'
+        log.warning(warning_title)
         log.warning(
-            f'Given executor memory is {int(memory_mb / 1024)}g, '
-            f'=> capped to {executor_memory} to better fit on available aws nodes.',
+            f'  - spark.executor.memory:    {int(memory_mb / 1024):3}g  → {executor_memory}',
         )
+        warning_title_printed = True
     elif memory_mb > recommended_memory_gb * 1024:
         log.warning(
-            f' Recommended value for spark config spark.executor.memory:  {recommended_memory_gb}g '
-            f'and spark.executor.cores as {DEFAULT_MAX_CORES} and adjust spark.executor.instances proportionately.',
+            f'Recommended value for spark config spark.executor.memory:  {recommended_memory_gb}g '
+            f'and spark.executor.cores as {DEFAULT_MAX_CORES} and adjust spark.executor.instances proportionately.\n',
         )
 
     if executor_cores > max_cores:
+        if not warning_title_printed:
+            log.warning(warning_title)
         log.warning(
-            f'Given executor cores is {executor_cores}, '
-            f'=> capped to {max_cores} to better fit on available aws nodes.',
+            f'  - spark.executor.cores:     {executor_cores:3}c  → {max_cores}c\n',
         )
         executor_cores = max_cores
 
@@ -562,17 +567,21 @@ def _recalculate_executor_resources(
             new_cpu = max(memory // TARGET_MEM_CPU_RATIO, 1)
             new_memory = new_cpu * TARGET_MEM_CPU_RATIO
 
-        log.warning(
-            f'Given executor resources: {cpu}cores, {memory}g {instances} instances '
-            f'=> adjusted to {new_cpu}cores {new_memory}g {new_instances} instances, '
-            f'based on recommended Mem:Core category {target_memory}g, {target_memory//TARGET_MEM_CPU_RATIO}cores '
-            f'and Mem:core ratio: {TARGET_MEM_CPU_RATIO}:1 to better fit on available aws nodes.',
-        )
+        if cpu != new_cpu or memory != new_memory or instances != new_instances:
+            log.warning(
+                f'Adjust Executor Resources based on recommended mem:core:: 7:1 and Bucket: '
+                f'{new_memory}g, {new_cpu}cores to better fit aws nodes\n'
+                f'  - spark.executor.cores:     {cpu:3}c  → {new_cpu}c\n'
+                f'  - spark.executor.memory:    {memory:3}g  → {new_memory}g\n'
+                f'  - spark.executor.instances: {instances:3}x  → {new_instances}x\n'
+                'Check y/spark-metrics to compare how your job performance compared to previous runs.\n'
+                'Feel free to adjust to spark resource configs in yelpsoa-configs with above newly adjusted values.\n',
+            )
 
         if new_cpu < task_cpus:
             log.warning(
                 f'Given spark.task.cpus is {task_cpus}, '
-                f'=> adjusted to {new_cpu} to keep it within the limits of adjust spark.executor.cores.',
+                f'=> adjusted to {new_cpu} to keep it within the limits of adjust spark.executor.cores.\n',
             )
             task_cpus = new_cpu
         return new_cpu, f'{new_memory}g', new_instances, task_cpus
@@ -581,17 +590,18 @@ def _recalculate_executor_resources(
     recommended_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
     medium_cores = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_cores
     medium_memory_mb = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_memory
+    max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
     max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
 
-    if memory_gb > max_memory_gb:
+    if memory_gb > max_memory_gb or executor_cores > max_cores:
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
     elif force_spark_resource_configs:
         log.warning(
             '--force-spark-resource-configs is set to true: '
             'this can result in non-optimal bin-packing of executors on aws nodes or '
             'can lead to wastage the resources. '
-            "Please use this flag only if you have tested that standard memorycpu configs won't work for your job.\n"
-            'Let us know at #spark if you think, your use-case needs to be standardized.',
+            "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n"
+            'Let us know at #spark if you think, your use-case needs to be standardized.\n',
         )
     elif memory_gb > medium_memory_mb or executor_cores > medium_cores:
         (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
