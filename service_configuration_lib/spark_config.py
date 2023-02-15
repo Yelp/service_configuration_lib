@@ -4,6 +4,7 @@ import hashlib
 import itertools
 import json
 import logging
+import math
 import os
 import time
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Dict
 from typing import List
 from typing import Mapping
 from typing import MutableMapping
+from typing import NamedTuple
 from typing import Optional
 from typing import Tuple
 from urllib.parse import urlparse
@@ -31,10 +33,28 @@ DEFAULT_SPARK_SERVICE = 'spark'
 GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
-DEFAULT_MAX_CORES = 4
+
+
+class ExecutorResourceConfig(NamedTuple):
+    executor_cores: int
+    executor_memory: int  # in GB
+
+
+# Multi-step release - adjust if requested memory <= this threshold (memory in GB)
+ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 7
+
+RECOMMENDED_RESOURCE_CONFIGS: Dict[str, ExecutorResourceConfig] = {
+    'recommended': ExecutorResourceConfig(4, 28),
+    'medium': ExecutorResourceConfig(8, 56),
+    'max': ExecutorResourceConfig(12, 110),
+}
+TARGET_MEM_CPU_RATIO = 7
+
+DEFAULT_MAX_CORES = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_cores
 DEFAULT_EXECUTOR_CORES = 2
 DEFAULT_EXECUTOR_INSTANCES = 2
-DEFAULT_EXECUTOR_MEMORY = '4g'
+DEFAULT_EXECUTOR_MEMORY = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
+DEFAULT_TASK_CPUS = 1
 DEFAULT_K8S_LABEL_LENGTH = 63
 DEFAULT_K8S_BATCH_SIZE = 512
 DEFAULT_RESOURCES_WAITING_TIME_PER_EXECUTOR = 2  # seconds
@@ -43,10 +63,6 @@ DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
 DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
 DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '900s'
 DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
-
-EXECUTOR_MEMORY_WARN_GB = 28
-EXECUTOR_MEMORY_CAP_GB = 110
-EXECUTOR_CORES_CAP = 12
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -470,30 +486,141 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
     return executor_instances
 
 
-def _cap_executor_resources(user_spark_opts: Dict[str, str]) -> Dict[str, str]:
-    executor_memory = user_spark_opts.get('spark.executor.memory', DEFAULT_EXECUTOR_MEMORY)
+def _cap_executor_resources(
+    executor_cores: int,
+    executor_memory: str,
+    memory_mb: int,
+) -> Tuple[int, str]:
+    max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
+    max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
+
+    warning_title = 'Capped Executor Resources based on maximun available aws nodes'
+    warning_title_printed = False
+
+    if memory_mb > max_memory_gb * 1024:
+        executor_memory = f'{max_memory_gb}g'
+        log.warning(warning_title)
+        log.warning(
+            f'  - spark.executor.memory:    {int(memory_mb / 1024):3}g  → {executor_memory}',
+        )
+        warning_title_printed = True
+
+    if executor_cores > max_cores:
+        if not warning_title_printed:
+            log.warning(warning_title)
+        log.warning(
+            f'  - spark.executor.cores:     {executor_cores:3}c  → {max_cores}c\n',
+        )
+        executor_cores = max_cores
+
+    return executor_cores, executor_memory
+
+
+def _recalculate_executor_resources(
+    user_spark_opts: Dict[str, str],
+    force_spark_resource_configs: bool,
+    ratio_adj_thresh: int,
+) -> Dict[str, str]:
     executor_cores = int(user_spark_opts.get('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
+    executor_memory = user_spark_opts.get('spark.executor.memory', f'{DEFAULT_EXECUTOR_MEMORY}g')
+    executor_instances = int(user_spark_opts.get('spark.executor.instances', str(DEFAULT_EXECUTOR_INSTANCES)))
+    task_cpus = int(user_spark_opts.get('spark.task.cpus', str(DEFAULT_TASK_CPUS)))
 
     memory_mb = parse_memory_string(executor_memory)
-    if memory_mb > EXECUTOR_MEMORY_CAP_GB * 1024:
-        executor_memory = f'{EXECUTOR_MEMORY_CAP_GB}g'
-        log.warning(
-            f'Given executor memory is {memory_mb / 1024}g, '
-            f'capped to {executor_memory} to better fit on available aws nodes.',
-        )
-    elif memory_mb > EXECUTOR_MEMORY_WARN_GB * 1024:
-        log.warning('We recommend using setting memory as 28g and executor cores as 4')
+    memory_gb = math.ceil(memory_mb / 1024)
 
-    if executor_cores > EXECUTOR_CORES_CAP:
+    def _calculate_resources(
+        cpu: int,
+        memory: int,
+        instances: int,
+        task_cpus: int,
+        target_memory: int,
+        ratio_adj_thresh: int,
+    ) -> Tuple[int, str, int, int]:
+        """
+        Calculate resource needed based on memory size and recommended mem:core ratio (7:1).
+
+        Parameters:
+        memory: integer values in GB.
+
+        Returns:
+        A tuple of (new_cpu, new_memory, new_instances, task_cpus).
+        """
+        # For multi-step release
+        if memory > ratio_adj_thresh:
+            return cpu, f'{memory}g', instances, task_cpus
+
+        new_cpu: int
+        new_memory: int
+        new_instances = (instances * memory) // target_memory
+        if new_instances > 0:
+            new_cpu = int(target_memory / TARGET_MEM_CPU_RATIO)
+            new_memory = target_memory
+        else:
+            new_instances = 1
+            new_cpu = max(memory // TARGET_MEM_CPU_RATIO, 1)
+            new_memory = new_cpu * TARGET_MEM_CPU_RATIO
+
+        if cpu != new_cpu or memory != new_memory or instances != new_instances:
+            log.warning(
+                f'Adjust Executor Resources based on recommended mem:core:: 7:1 and Bucket: '
+                f'{new_memory}g, {new_cpu}cores to better fit aws nodes\n'
+                f'  - spark.executor.cores:     {cpu:3}c  → {new_cpu}c\n'
+                f'  - spark.executor.memory:    {memory:3}g  → {new_memory}g\n'
+                f'  - spark.executor.instances: {instances:3}x  → {new_instances}x\n'
+                'Check y/spark-metrics to compare how your job performance compared to previous runs.\n'
+                'Feel free to adjust to spark resource configs in yelpsoa-configs with above newly adjusted values.\n',
+            )
+
+        if new_cpu < task_cpus:
+            log.warning(
+                f'Given spark.task.cpus is {task_cpus}, '
+                f'=> adjusted to {new_cpu} to keep it within the limits of adjust spark.executor.cores.\n',
+            )
+            task_cpus = new_cpu
+        return new_cpu, f'{new_memory}g', new_instances, task_cpus
+
+    # Constants
+    recommended_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
+    medium_cores = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_cores
+    medium_memory_mb = RECOMMENDED_RESOURCE_CONFIGS['medium'].executor_memory
+    max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
+    max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
+
+    if memory_gb > max_memory_gb or executor_cores > max_cores:
+        executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
+    elif force_spark_resource_configs:
         log.warning(
-            f'Given executor cores is {executor_cores}, '
-            f'capped to {EXECUTOR_CORES_CAP} to better fit on available aws nodes.',
+            '--force-spark-resource-configs is set to true: '
+            'this can result in non-optimal bin-packing of executors on aws nodes or '
+            'can lead to wastage the resources. '
+            "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n"
+            'Let us know at #spark if you think, your use-case needs to be standardized.\n',
         )
-        executor_cores = EXECUTOR_CORES_CAP
+    elif memory_gb > medium_memory_mb or executor_cores > medium_cores:
+        (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
+            executor_cores,
+            memory_gb,
+            executor_instances,
+            task_cpus,
+            medium_memory_mb,
+            ratio_adj_thresh,
+        )
+    else:
+        (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
+            executor_cores,
+            memory_gb,
+            executor_instances,
+            task_cpus,
+            recommended_memory_gb,
+            ratio_adj_thresh,
+        )
 
     user_spark_opts.update({
-        'spark.executor.memory': str(executor_memory),
         'spark.executor.cores': str(executor_cores),
+        'spark.executor.memory': str(executor_memory),
+        'spark.executor.instances': str(executor_instances),
+        'spark.task.cpus': str(task_cpus),
     })
     return user_spark_opts
 
@@ -502,6 +629,8 @@ def _adjust_spark_requested_resources(
     user_spark_opts: Dict[str, str],
     cluster_manager: str,
     pool: str,
+    force_spark_resource_configs: bool = False,
+    ratio_adj_thresh: int = ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH,
 ) -> Dict[str, str]:
     executor_cores = int(user_spark_opts.setdefault('spark.executor.cores', str(DEFAULT_EXECUTOR_CORES)))
     if cluster_manager == 'mesos':
@@ -545,7 +674,7 @@ def _adjust_spark_requested_resources(
     # we can skip this step if user is not using gpu or do not configure
     # task cpus and executor cores
     if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
-        return _cap_executor_resources(user_spark_opts)
+        return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
 
     if num_gpus != 0 and cluster_manager != 'mesos':
         raise ValueError('spark.mesos.gpus.max is only available for mesos')
@@ -604,7 +733,7 @@ def _adjust_spark_requested_resources(
         'spark.executor.cores': str(cpus_per_gpu * gpus_per_inst),
         'spark.cores.max': str(total_cpus),
     })
-    return _cap_executor_resources(user_spark_opts)
+    return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
 
 
 def find_spark_master(paasta_cluster):
@@ -833,6 +962,7 @@ def get_spark_conf(
     load_paasta_default_volumes: bool = False,
     aws_region: Optional[str] = None,
     service_account_name: Optional[str] = None,
+    force_spark_resource_configs: bool = True,
 ) -> Dict[str, str]:
     """Build spark config dict to run with spark on paasta
 
@@ -867,6 +997,8 @@ def get_spark_conf(
     :param aws_region: The default aws region to use
     :param service_account_name: The k8s service account to use for spark k8s authentication.
         If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
+    :param force_spark_resource_configs: skip the resource/instances recalculation.
+        This is strongly not recommended.
     :returns: spark opts in a dict.
     """
     # for simplicity, all the following computation are assuming spark opts values
@@ -900,7 +1032,9 @@ def get_spark_conf(
     })
 
     # adjusted with spark default resources
-    spark_conf = _adjust_spark_requested_resources(spark_conf, cluster_manager, paasta_pool)
+    spark_conf = _adjust_spark_requested_resources(
+        spark_conf, cluster_manager, paasta_pool, force_spark_resource_configs,
+    )
 
     if cluster_manager == 'mesos':
         spark_conf.update(_get_mesos_spark_env(
