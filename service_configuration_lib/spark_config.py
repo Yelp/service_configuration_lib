@@ -50,7 +50,7 @@ RECOMMENDED_RESOURCE_CONFIGS: Dict[str, ExecutorResourceConfig] = {
 }
 TARGET_MEM_CPU_RATIO = 7
 
-DEFAULT_MAX_CORES = 4
+DEFAULT_MAX_CORES = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_cores
 DEFAULT_EXECUTOR_CORES = 2
 DEFAULT_EXECUTOR_INSTANCES = 2
 DEFAULT_EXECUTOR_MEMORY = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
@@ -491,7 +491,6 @@ def _cap_executor_resources(
     executor_memory: str,
     memory_mb: int,
 ) -> Tuple[int, str]:
-    recommended_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['recommended'].executor_memory
     max_cores = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_cores
     max_memory_gb = RECOMMENDED_RESOURCE_CONFIGS['max'].executor_memory
 
@@ -505,11 +504,6 @@ def _cap_executor_resources(
             f'  - spark.executor.memory:    {int(memory_mb / 1024):3}g  → {executor_memory}',
         )
         warning_title_printed = True
-    elif memory_mb > recommended_memory_gb * 1024:
-        log.warning(
-            f'Recommended value for spark config spark.executor.memory:  {recommended_memory_gb}g '
-            f'and spark.executor.cores as {DEFAULT_MAX_CORES} and adjust spark.executor.instances proportionately.\n',
-        )
 
     if executor_cores > max_cores:
         if not warning_title_printed:

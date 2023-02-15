@@ -464,14 +464,13 @@ class TestGetSparkConf:
                 {
                     'spark.executor.cores': '4',
                     'spark.executor.memory': '32g',
-                    'spark.executor.instances': '2',
+                    'spark.executor.instances': '8',
                     'spark.cores.max': '32',
-
                 },
                 {
                     'spark.executor.cores': '4',
                     'spark.executor.memory': '28g',
-                    'spark.executor.instances': '2',
+                    'spark.executor.instances': '9',
                     'spark.cores.max': '32',
                 },
                 False,
