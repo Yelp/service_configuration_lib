@@ -332,8 +332,8 @@ class TestGetSparkConf:
                 {
                     'spark.executor.memory': '28g',
                     'spark.executor.cores': '4',
+                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.instances': '2',
-                    'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
@@ -348,9 +348,9 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.memory': '28g',
-                    'spark.executor.cores': '4',
+                    'spark.executor.cores': '4',  # adjusted
+                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.instances': '600',
-                    'spark.kubernetes.executor.limit.cores': '2',
                     'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
                 },
@@ -367,10 +367,10 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.memory': '7g',
-                    'spark.executor.cores': '1',
+                    'spark.executor.cores': '1',  # adjusted
+                    'spark.kubernetes.executor.limit.cores': '1',
                     'spark.executor.instances': '1',
                     'spark.cores.max': '12',
-                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                     'spark.executor.memoryOverhead': '4096',
@@ -469,6 +469,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '4',
+                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.memory': '28g',
                     'spark.executor.instances': '9',
                     'spark.cores.max': '32',
@@ -487,6 +488,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '1',
+                    'spark.kubernetes.executor.limit.cores': '1',
                     'spark.executor.memory': '7g',
                     'spark.executor.instances': '1',
                     'spark.cores.max': '32',
@@ -505,6 +507,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '1',
+                    'spark.kubernetes.executor.limit.cores': '1',
                     'spark.executor.memory': '7g',
                     'spark.executor.instances': '1',
                     'spark.task.cpus': '1',
@@ -524,6 +527,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '12',
+                    'spark.kubernetes.executor.limit.cores': '12',
                     'spark.executor.memory': '110g',
                     'spark.executor.instances': '2',
                     'spark.cores.max': '32',
@@ -542,6 +546,7 @@ class TestGetSparkConf:
                 },
                 {
                     'spark.executor.cores': '10',
+                    'spark.kubernetes.executor.limit.cores': '10',
                     'spark.executor.memory': '100g',
                     'spark.executor.instances': '2',
                     'spark.cores.max': '32',
@@ -558,6 +563,7 @@ class TestGetSparkConf:
                     'spark.default.parallelism': '2',
                     'spark.task.cpus': '4',
                     'spark.executor.cores': '4',
+                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.memory': '28g',
                     'spark.cores.max': '16',
                 },
@@ -575,6 +581,7 @@ class TestGetSparkConf:
                     'spark.mesos.gpus.max': '2',
                     'spark.task.cpus': '2',
                     'spark.executor.cores': '4',
+                    'spark.kubernetes.executor.limit.cores': '4',
                     'spark.cores.max': '4',
                 },
                 False,
@@ -600,7 +607,7 @@ class TestGetSparkConf:
             user_spark_opts, cluster_manager, pool, force_spark_resource_configs, ratio_adj_thresh,
         )
         for key in expected_output.keys():
-            assert output[key] == expected_output[key], f'wrong value for {key}'
+            assert output[key] == expected_output[key], f'wrong value for {key}, expected_output={expected_output}'
 
     @pytest.mark.parametrize(
         'cluster_manager,spark_opts,pool', [
