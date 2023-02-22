@@ -618,6 +618,7 @@ def _recalculate_executor_resources(
 
     user_spark_opts.update({
         'spark.executor.cores': str(executor_cores),
+        'spark.kubernetes.executor.limit.cores': str(executor_cores),
         'spark.executor.memory': str(executor_memory),
         'spark.executor.instances': str(executor_instances),
         'spark.task.cpus': str(task_cpus),
