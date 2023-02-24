@@ -41,7 +41,7 @@ class ExecutorResourceConfig(NamedTuple):
 
 
 # Multi-step release - adjust if requested memory <= this threshold (memory in GB)
-ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 7
+ADJUST_EXECUTOR_MEM_CPU_RATIO_THRESH = 14
 
 RECOMMENDED_RESOURCE_CONFIGS: Dict[str, ExecutorResourceConfig] = {
     'recommended': ExecutorResourceConfig(4, 28),
