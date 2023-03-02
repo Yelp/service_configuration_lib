@@ -1125,6 +1125,7 @@ class TestGetSparkConf:
 
         return verify
 
+    @pytest.mark.skip(reason="Mesos has been deprecated")
     def test_get_spark_conf_mesos(
         self,
         user_spark_opts,

@@ -578,9 +578,9 @@ def _recalculate_executor_resources(
             log.warning(
                 f'Adjust Executor Resources based on recommended mem:core:: 7:1 and Bucket: '
                 f'{new_memory}g, {new_cpu}cores to better fit aws nodes\n'
-                f'  - spark.executor.cores:     {cpu:3}c  → {new_cpu}c\n'
-                f'  - spark.executor.memory:    {memory:3}g  → {new_memory}g\n'
-                f'  - spark.executor.instances: {instances:3}x  → {new_instances}x\n'
+                f'  - spark.executor.cores:     {TextColors.red(str(cpu)):3}c  → {TextColors.green(str(new_cpu))}c\n'
+                f'  - spark.executor.memory:    {TextColors.red(str(memory)):3}g  → {TextColors.green(str(new_memory))}g\n'
+                f'  - spark.executor.instances: {TextColors.red(str(instances)):3}x  → {TextColors.green(str(new_instances))}x\n'
                 'Check y/spark-metrics to compare how your job performance compared to previous runs.\n'
                 'Feel free to adjust to spark resource configs in yelpsoa-configs with above newly adjusted values.\n',
             )
@@ -985,8 +985,10 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
     if min_dollars != max_dollars:
         log.warning(
             TextColors.magenta(
-                f'\nThe requested resources are expected to cost between $ {min_dollars} -> $ {max_dollars} every hour '
-                f'and between $ {min_dollars * 24} -> $ {max_dollars * 24} in a day based on dynamic allocation.\n',
+                f'\nThe requested resources are expected to cost between $ {TextColors.bold(str(min_dollars))} → '
+                f'$ {TextColors.bold(str(max_dollars))} every hour and between '
+                f'$ {TextColors.bold(str(min_dollars * 24))} → $ {TextColors.bold(str(max_dollars * 24))} '
+                f'in a day based on dynamic allocation.\n',
             )
         )
     else:
