@@ -296,12 +296,6 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     log.warning(
         'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
     )
-    # TODO: add regex to better match Jupyterhub Spark session app name
-    if 'jupyterhub' not in spark_app_name:
-        log.warning(
-            'If your job is performing worse because of DRA, consider disabling DRA. To disable, '
-            'please provide spark.dynamicAllocation.enabled=false in your spark args\n',
-        )
 
     # set defaults if not provided already
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.enabled', 'true')
@@ -950,6 +944,44 @@ def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) ->
     return output
 
 
+def compute_approx_hourly_cost_dollars(spark_conf):
+    per_executor_cores = int(spark_conf.get("spark.executor.cores", DEFAULT_EXECUTOR_CORES))
+    max_cores = per_executor_cores * (int(spark_conf.get("spark.executor.instances", DEFAULT_EXECUTOR_INSTANCES)))
+    min_cores = max_cores
+    if "spark.dynamicAllocation.enabled" in spark_conf and spark_conf["spark.dynamicAllocation.enabled"] == "true":
+        max_cores = per_executor_cores * (int(
+            spark_conf.get("spark.dynamicAllocation.maxExecutors", max_cores)
+        ))
+        min_cores = per_executor_cores * (int(
+            spark_conf.get("spark.dynamicAllocation.minExecutors", min_cores)
+        ))
+    # Cost calculation:
+    # Example-1: batch pool: 1800 cores: 75$: https://yelp-shootie.appspot.com/shot/5080842585112576
+    # ~1$ every 24 core-hours; or 1 core-hour: 4.15c
+    if pool == "batch":
+        cost_factor = 0.041
+    else:
+        # Batch pool based on: https://yelp-shootie.appspot.com/shot/6626643593527296
+        # https://fluffy.yelpcorp.com/i/MQJKTdGzmbZwpvvQKQh35SRrX0c6XkNx.html
+        cost_factor = 0.142  # ~3.2x expensive
+
+    min_dollars = round(min_cores * cost_factor, 5)
+    max_dollars = round(max_cores * cost_factor, 5)
+    if max_dollars*24 > 1000:
+        log.warning(
+            f'\n!!! HIGH COST ALERT !!!\n',
+        )
+    if min_dollars != max_dollars:
+        log.warning(
+            f'\nThe resources requested are expected to cost between {min_dollars}$ -> {max_dollars}$ every hour '
+            f'or between {min_dollars*24}$ -> {max_dollars*24}$ in a day based on dynamic allocation.\n',
+        )
+    else:
+        log.warning(
+            f'\nThe resource requested are expected to cost {max_dollars}$ every hour or {max_dollars*24}$ in a day.\n',
+        )
+
+
 def get_spark_conf(
     cluster_manager: str,
     spark_app_base_name: str,
@@ -1082,6 +1114,9 @@ def get_spark_conf(
     # configure dynamic resource allocation configs
     if cluster_manager != 'mesos':
         spark_conf = get_dra_configs(spark_conf)
+
+    # generate cost warnings
+    compute_approx_hourly_cost_dollars(spark_conf)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
