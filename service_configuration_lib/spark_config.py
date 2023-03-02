@@ -291,13 +291,18 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     ):
         return spark_opts
 
-    log.warning(
-        'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra. '
-        'If your job is performing worse because of DRA, consider disabling DRA. To disable, '
-        'please provide spark.dynamicAllocation.enabled=false in your spark args\n',
-    )
-
     spark_app_name = spark_opts.get('spark.app.name', '')
+
+    log.warning(
+        'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
+    )
+    # TODO: add regex to better match Jupyterhub Spark session app name
+    if 'jupyterhub' not in spark_app_name:
+        log.warning(
+            'If your job is performing worse because of DRA, consider disabling DRA. To disable, '
+            'please provide spark.dynamicAllocation.enabled=false in your spark args\n',
+        )
+
     # set defaults if not provided already
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.enabled', 'true')
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
@@ -305,16 +310,18 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
         str(DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO),
     )
+    if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
+        log.warning(
+            f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as '
+            f'{DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. Executor with cached data block will be released '
+            f'if it has been idle for this duration. If you wish to change the value of cachedExecutorIdleTimeout, '
+            f'please provide the exact value of spark.dynamicAllocation.cachedExecutorIdleTimeout '
+            f'in your spark args. If your job is performing bad because the cached data was lost, '
+            f'please consider increasing this value.\n',
+        )
     _append_spark_config(
         spark_opts, 'spark.dynamicAllocation.cachedExecutorIdleTimeout',
         str(DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT),
-    )
-    log.warning(
-        f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as {DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. '
-        f'Executor with cached data block will be released if it has been idle for this duration. '
-        f'If you wish to change the value of cachedExecutorIdleTimeout, please provide the exact value of '
-        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in your spark args. If your job is performing bad because '
-        f'the cached data was lost, please consider increasing this value.\n',
     )
 
     min_ratio_executors = None
