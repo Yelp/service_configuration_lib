@@ -22,6 +22,7 @@ import ephemeral_port_reserve
 import requests
 import yaml
 from boto3 import Session
+from service_configuration_lib.text_colors import TextColors
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -63,6 +64,15 @@ DEFAULT_SQL_SHUFFLE_PARTITIONS = 128
 DEFAULT_DRA_EXECUTOR_ALLOCATION_RATIO = 0.8
 DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT = '900s'
 DEFAULT_DRA_MIN_EXECUTOR_RATIO = 0.25
+
+# Cost factor calculation:
+# Example-1: batch pool: 1800 cores: 75$: https://yelp-shootie.appspot.com/shot/5080842585112576
+# ~1$ every 24 core-hours; or 1 core-hour: 4.15c
+# Batch pool based on: https://yelp-shootie.appspot.com/shot/6626643593527296
+# https://fluffy.yelpcorp.com/i/MQJKTdGzmbZwpvvQKQh35SRrX0c6XkNx.html
+BATCH_COST_FACTOR = 0.041
+STABLE_BATCH_COST_FACTOR = 0.142  # ~3.2x expensive
+HIGH_COST_ALERT_THRESHOLD_DAILY = 500
 
 
 NON_CONFIGURABLE_SPARK_OPTS = {
@@ -294,7 +304,9 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     spark_app_name = spark_opts.get('spark.app.name', '')
 
     log.warning(
-        'Spark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
+        TextColors.yellow(
+            '\nSpark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
+        )
     )
 
     # set defaults if not provided already
@@ -306,7 +318,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     )
     if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
         log.warning(
-            f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as '
+            f'\nSetting {TextColors.yellow("spark.dynamicAllocation.cachedExecutorIdleTimeout")} as '
             f'{DEFAULT_DRA_CACHED_EXECUTOR_IDLE_TIMEOUT}. Executor with cached data block will be released '
             f'if it has been idle for this duration. If you wish to change the value of cachedExecutorIdleTimeout, '
             f'please provide the exact value of spark.dynamicAllocation.cachedExecutorIdleTimeout '
@@ -337,7 +349,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
         min_ratio_executors = min_executors
 
-        warn_msg = '\nSetting spark.dynamicAllocation.minExecutors as'
+        warn_msg = f'\nSetting {TextColors.yellow("spark.dynamicAllocation.minExecutors")} as'
 
         # set minExecutors equal to 0 for Jupyter Spark sessions
         # TODO: add regex to better match Jupyterhub Spark session app name
@@ -374,8 +386,8 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
         spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
         log.warning(
-            f'\nSetting spark.dynamicAllocation.maxExecutors as {max_executors}. If you wish to '
-            f'change the value of maximum executors, please provide the exact value of '
+            f'\nSetting {TextColors.yellow("spark.dynamicAllocation.maxExecutors")} as {max_executors}. '
+            f'If you wish to change the value of maximum executors, please provide the exact value of '
             f'spark.dynamicAllocation.maxExecutors in your spark args\n',
         )
 
@@ -391,8 +403,8 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
         spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
         log.warning(
-            f'\nSetting spark.dynamicAllocation.initialExecutors as {initial_executors}. If you wish to '
-            f'change the value of initial executors, please provide the exact value of '
+            f'\nSetting {TextColors.yellow("spark.dynamicAllocation.initialExecutors")} as {initial_executors}. '
+            f'If you wish to change the value of initial executors, please provide the exact value of '
             f'spark.dynamicAllocation.initialExecutors in your spark args\n',
         )
 
@@ -944,7 +956,7 @@ def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) ->
     return output
 
 
-def compute_approx_hourly_cost_dollars(spark_conf):
+def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
     per_executor_cores = int(spark_conf.get("spark.executor.cores", DEFAULT_EXECUTOR_CORES))
     max_cores = per_executor_cores * (int(spark_conf.get("spark.executor.instances", DEFAULT_EXECUTOR_INSTANCES)))
     min_cores = max_cores
@@ -955,30 +967,34 @@ def compute_approx_hourly_cost_dollars(spark_conf):
         min_cores = per_executor_cores * (int(
             spark_conf.get("spark.dynamicAllocation.minExecutors", min_cores)
         ))
-    # Cost calculation:
-    # Example-1: batch pool: 1800 cores: 75$: https://yelp-shootie.appspot.com/shot/5080842585112576
-    # ~1$ every 24 core-hours; or 1 core-hour: 4.15c
-    if pool == "batch":
-        cost_factor = 0.041
+    if paasta_pool == "batch":
+        cost_factor = BATCH_COST_FACTOR
     else:
-        # Batch pool based on: https://yelp-shootie.appspot.com/shot/6626643593527296
-        # https://fluffy.yelpcorp.com/i/MQJKTdGzmbZwpvvQKQh35SRrX0c6XkNx.html
-        cost_factor = 0.142  # ~3.2x expensive
+        cost_factor = STABLE_BATCH_COST_FACTOR
 
     min_dollars = round(min_cores * cost_factor, 5)
     max_dollars = round(max_cores * cost_factor, 5)
-    if max_dollars*24 > 1000:
+    if max_dollars*24 > HIGH_COST_ALERT_THRESHOLD_DAILY:
         log.warning(
-            f'\n!!! HIGH COST ALERT !!!\n',
+            TextColors.red(
+                TextColors.bold(
+                    f'\n!!! HIGH COST ALERT !!!',
+                )
+            )
         )
     if min_dollars != max_dollars:
         log.warning(
-            f'\nThe resources requested are expected to cost between {min_dollars}$ -> {max_dollars}$ every hour '
-            f'or between {min_dollars*24}$ -> {max_dollars*24}$ in a day based on dynamic allocation.\n',
+            TextColors.magenta(
+                f'\nThe requested resources are expected to cost between $ {min_dollars} -> $ {max_dollars} every hour '
+                f'and between $ {min_dollars * 24} -> $ {max_dollars * 24} in a day based on dynamic allocation.\n',
+            )
         )
     else:
         log.warning(
-            f'\nThe resource requested are expected to cost {max_dollars}$ every hour or {max_dollars*24}$ in a day.\n',
+            TextColors.magenta(
+                f'\nThe requested resources are expected to cost $ {max_dollars} every hour and $ {max_dollars * 24} '
+                f'in a day.\n',
+            )
         )
 
 
@@ -1116,7 +1132,7 @@ def get_spark_conf(
         spark_conf = get_dra_configs(spark_conf)
 
     # generate cost warnings
-    compute_approx_hourly_cost_dollars(spark_conf)
+    compute_approx_hourly_cost_dollars(spark_conf, paasta_pool)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
