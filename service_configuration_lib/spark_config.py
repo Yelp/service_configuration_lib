@@ -143,7 +143,7 @@ def get_aws_credentials(
             return (credentials['AccessKeyId'], credentials['SecretAccessKey'], credentials['SessionToken'])
         else:
             log.warning(
-                'Tried to assume role with web identity but either '
+                'Tried to assume role with web identity but neither '
                 'AWS_WEB_IDENTITY_TOKEN_FILE or AWS_ROLE_ARN was not found',
             )
     elif service != DEFAULT_SPARK_SERVICE:
