@@ -35,6 +35,7 @@ def mock_spark_run_conf(tmpdir, monkeypatch):
     fp = tmpdir.join('spark_run.yaml')
     fp.write(yaml.dump(spark_run_conf))
     monkeypatch.setattr(spark_config, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
+    spark_config._load_spark_srv_conf(spark_run_conf)
     return spark_run_conf
 
 
@@ -436,6 +437,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '8',
                     'spark.executor.memory': '56g',
                     'spark.executor.instances': '1',
+                    'spark.task.cpus': '1',
                     'spark.cores.max': '32',
                 },
                 False,
@@ -454,6 +456,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '8',
                     'spark.executor.memory': '56g',
                     'spark.executor.instances': '1',
+                    'spark.task.cpus': '1',
                     'spark.cores.max': '32',
                 },
                 False,
@@ -472,6 +475,7 @@ class TestGetSparkConf:
                     'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.memory': '28g',
                     'spark.executor.instances': '9',
+                    'spark.task.cpus': '1',
                     'spark.cores.max': '32',
                 },
                 False,
@@ -491,6 +495,7 @@ class TestGetSparkConf:
                     'spark.kubernetes.executor.limit.cores': '1',
                     'spark.executor.memory': '7g',
                     'spark.executor.instances': '1',
+                    'spark.task.cpus': '1',
                     'spark.cores.max': '32',
                 },
                 False,
