@@ -34,15 +34,6 @@ GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
-# Cost factor calculation:
-# Example-1: batch pool: 1800 cores: 75$: https://yelp-shootie.appspot.com/shot/5080842585112576
-# ~1$ every 24 core-hours; or 1 core-hour: 4.15c
-# Batch pool based on: https://yelp-shootie.appspot.com/shot/6626643593527296
-# https://fluffy.yelpcorp.com/i/MQJKTdGzmbZwpvvQKQh35SRrX0c6XkNx.html
-BATCH_COST_FACTOR = 0.041
-STABLE_BATCH_COST_FACTOR = 0.142  # ~3.2x expensive
-HIGH_COST_ALERT_THRESHOLD_DAILY = 500
-
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
     'spark.ui.port',
@@ -88,15 +79,17 @@ log.setLevel(logging.INFO)
 # Spark srv-configs
 spark_srv_conf = dict()
 spark_constants = dict()
+default_spark_conf = dict()
 
 
 def _load_spark_srv_conf(preset_values: Dict[str, Any] = dict()):
-    global spark_srv_conf, spark_constants
+    global spark_srv_conf, spark_constants, default_spark_conf
     try:
         with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
             loaded_values = yaml.safe_load(fp.read())
             spark_srv_conf = {**preset_values, **loaded_values}
             spark_constants = spark_srv_conf.get('spark_constants', dict())
+            default_spark_conf = spark_constants.get('defaults', dict())
     except Exception as e:
         log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
 
@@ -255,7 +248,7 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
     num_partitions = 3 * (
         int(spark_opts.get('spark.cores.max', 0)) or
         int(spark_opts.get('spark.executor.instances', 0)) *
-        int(spark_opts.get('spark.executor.cores', spark_constants.get('default_executor_cores', 2)))
+        int(spark_opts.get('spark.executor.cores', default_spark_conf.get('spark.executor.cores', 2)))
     )
 
     if (
@@ -267,16 +260,21 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
 
         num_partitions_dra = (
             int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
-            int(spark_opts.get('spark.executor.cores', spark_constants.get('default_executor_cores', 2)))
+            int(spark_opts.get('spark.executor.cores', default_spark_conf.get('spark.executor.cores', 2)))
         )
         num_partitions = max(num_partitions, num_partitions_dra)
 
-    num_partitions = num_partitions or spark_constants.get('default_sql_shuffle_partitions', 128)
+    num_partitions = num_partitions or default_spark_conf.get('spark.sql.shuffle.partitions', 128)
     _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
     _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
     _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
     return spark_opts
+
+
+def _is_jupyterhub_job(spark_app_name: str) -> bool:
+    # TODO: add regex to better match Jupyterhub Spark session app name
+    return 'jupyterhub' in spark_app_name
 
 
 def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
@@ -300,10 +298,13 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
     _append_spark_config(
         spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
-        str(spark_constants.get('default_dra_executor_allocation_ratio', 0.8)),
+        str(default_spark_conf.get('spark.dynamicAllocation.executorAllocationRatio', 0.8)),
     )
-    cached_executor_idle_timeout = spark_constants.get('default_dra_cached_executor_idle_timeout', '900s')
+    cached_executor_idle_timeout = default_spark_conf.get('spark.dynamicAllocation.cachedExecutorIdleTimeout', '1500s')
     if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
+        if _is_jupyterhub_job(spark_app_name):
+            # increase cachedExecutorIdleTimeout by 15 minutes in case of Jupyterhub
+            cached_executor_idle_timeout = str(int(cached_executor_idle_timeout[:-1]) + 900) + 's'
         log.warning(
             f'\nSetting {TextColors.yellow("spark.dynamicAllocation.cachedExecutorIdleTimeout")} as '
             f'{cached_executor_idle_timeout}. Executor with cached data block will be released '
@@ -316,16 +317,9 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts, 'spark.dynamicAllocation.cachedExecutorIdleTimeout',
         cached_executor_idle_timeout,
     )
-    log.warning(
-        f'\nSetting spark.dynamicAllocation.cachedExecutorIdleTimeout as {cached_executor_idle_timeout}. '
-        f'Executor with cached data block will be released if it has been idle for this duration. '
-        f'If you wish to change the value of cachedExecutorIdleTimeout, please provide the exact value of '
-        f'spark.dynamicAllocation.cachedExecutorIdleTimeout in your spark args. If your job is performing bad because '
-        f'the cached data was lost, please consider increasing this value.\n',
-    )
 
     min_ratio_executors = None
-    default_dra_min_executor_ratio = spark_constants.get('default_dra_min_executor_ratio', 0.25)
+    default_dra_min_executor_ratio = default_spark_conf.get('spark.yelp.dra.minExecutorRatio', 0.25)
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
         # the ratio of total executors to be used as minExecutors
         min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', default_dra_min_executor_ratio)
@@ -333,7 +327,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         num_instances = int(
             spark_opts.get(
                 'spark.executor.instances',
-                spark_constants.get('default_executor_instances', 2),
+                default_spark_conf.get('spark.executor.instances', 2),
             ),
         )
         min_executors = int(num_instances * float(min_executor_ratio))
@@ -352,8 +346,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         warn_msg = f'\nSetting {TextColors.yellow("spark.dynamicAllocation.minExecutors")} as'
 
         # set minExecutors equal to 0 for Jupyter Spark sessions
-        # TODO: add regex to better match Jupyterhub Spark session app name
-        if 'jupyterhub' in spark_app_name:
+        if _is_jupyterhub_job(spark_app_name):
             min_executors = 0
             warn_msg = (
                 f'Looks like you are launching Spark session from a Jupyter notebook. '
@@ -368,8 +361,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
             f'the exact value of spark.dynamicAllocation.minExecutors in your spark args\n',
         )
 
-        # TODO: add regex to better match Jupyterhub Spark session app name
-        if 'jupyterhub' not in spark_app_name and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
+        if not _is_jupyterhub_job(spark_app_name) and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
             log.debug(
                 f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
                 f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. Using '
@@ -382,7 +374,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         max_executors = int(
             spark_opts.get(
                 'spark.executor.instances',
-                spark_constants.get('default_executor_instances', 2),
+                default_spark_conf.get('spark.executor.instances', 2),
             ),
         )
         # maxExecutors should not be less than initialExecutors
@@ -489,7 +481,7 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
-            spark_constants.get('default_executor_cores', 2),
+            default_spark_conf.get('spark.executor.cores', 2),
         ),
     )
     if 'spark.cores.max' in user_spark_opts:
@@ -503,8 +495,8 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
         # be equal to `default_executor_instances`.
         executor_instances = max(
-            spark_constants.get('default_max_cores', 4) // executor_cores,
-            spark_constants.get('default_executor_instances', 2),
+            default_spark_conf.get('spark.cores.max', 4) // executor_cores,
+            default_spark_conf.get('spark.executor.instances', 2),
         )
     return executor_instances
 
@@ -547,23 +539,23 @@ def _recalculate_executor_resources(
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
-            spark_constants.get('default_executor_cores', 2),
+            default_spark_conf.get('spark.executor.cores', 2),
         ),
     )
     executor_memory = user_spark_opts.get(
         'spark.executor.memory',
-        f'{spark_constants.get("default_executor_memory", 28)}g',
+        f'{default_spark_conf.get("spark.executor.memory", 28)}g',
     )
     executor_instances = int(
         user_spark_opts.get(
             'spark.executor.instances',
-            spark_constants.get('default_executor_instances', 2),
+            default_spark_conf.get('spark.executor.instances', 2),
         ),
     )
     task_cpus = int(
         user_spark_opts.get(
             'spark.task.cpus',
-            spark_constants.get('default_task_cpus', 1),
+            default_spark_conf.get('spark.task.cpus', 1),
         ),
     )
 
@@ -679,14 +671,14 @@ def _adjust_spark_requested_resources(
     executor_cores = int(
         user_spark_opts.setdefault(
             'spark.executor.cores',
-            str(spark_constants.get('default_executor_cores', 2)),
+            str(default_spark_conf.get('spark.executor.cores', 2)),
         ),
     )
     if cluster_manager == 'mesos':
         max_cores = int(
             user_spark_opts.setdefault(
                 'spark.cores.max',
-                str(spark_constants.get('default_max_cores', 4)),
+                str(default_spark_conf.get('spark.cores.max', 4)),
             ),
         )
         executor_instances = max_cores / executor_cores
@@ -701,7 +693,7 @@ def _adjust_spark_requested_resources(
             user_spark_opts['spark.executor.memoryOverhead'] = user_spark_opts['spark.mesos.executor.memoryOverhead']
         user_spark_opts.setdefault(
             'spark.kubernetes.allocation.batch.size',
-            str(spark_constants.get('default_k8s_batch_size', 512)),
+            str(default_spark_conf.get('spark.kubernetes.allocation.batch.size', 512)),
         )
         user_spark_opts.setdefault('spark.kubernetes.executor.limit.cores', str(executor_cores))
         waiting_time = (
@@ -716,7 +708,7 @@ def _adjust_spark_requested_resources(
         executor_instances = int(
             user_spark_opts.setdefault(
                 'spark.executor.instances',
-                str(spark_constants.get('default_executor_instances', 2)),
+                str(default_spark_conf.get('spark.executor.instances', 2)),
             ),
         )
         max_cores = executor_instances * executor_cores
@@ -1011,13 +1003,13 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
             spark_conf.get("spark.dynamicAllocation.minExecutors", min_cores)
         ))
     if paasta_pool == "batch":
-        cost_factor = BATCH_COST_FACTOR
+        cost_factor = spark_constants.get('batch_cost_factor', 0.041)
     else:
-        cost_factor = STABLE_BATCH_COST_FACTOR
+        cost_factor = spark_constants.get('stable_batch_cost_factor', 0.142)
 
     min_dollars = round(min_cores * cost_factor, 5)
     max_dollars = round(max_cores * cost_factor, 5)
-    if max_dollars*24 > HIGH_COST_ALERT_THRESHOLD_DAILY:
+    if max_dollars*24 > spark_constants.get('high_cost_threshold_daily', 500):
         log.warning(
             TextColors.red(
                 TextColors.bold(
