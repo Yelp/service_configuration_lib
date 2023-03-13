@@ -621,7 +621,7 @@ def _recalculate_executor_resources(
             "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n"
             'Let us know at #spark if you think, your use-case needs to be standardized.\n',
         )
-    elif memory_gb >= medium_memory_mb or executor_cores >= medium_cores:
+    elif memory_gb >= medium_memory_mb or executor_cores > medium_cores:
         (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
             executor_cores,
             memory_gb,
