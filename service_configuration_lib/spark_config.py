@@ -647,6 +647,10 @@ def _recalculate_executor_resources(
         'spark.executor.instances': str(executor_instances),
         'spark.task.cpus': str(task_cpus),
     })
+    if 'spark.cores.max' in user_spark_opts:
+        core_max = int(user_spark_opts.get('spark.cores.max', 0))
+        required_cores = executor_instances * executor_cores
+        user_spark_opts['spark.cores.max'] = str(max(core_max, required_cores))
     return user_spark_opts
 
 

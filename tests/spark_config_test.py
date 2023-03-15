@@ -300,9 +300,9 @@ class TestGetSparkConf:
         return pools_def
 
     @pytest.mark.parametrize(
-        'cluster_manager,user_spark_opts,expected_output,force_spark_resource_configs', [
-            # k8s allocation batch size not specified
+        'test_name,cluster_manager,user_spark_opts,expected_output,force_spark_resource_configs', [
             (
+                'k8s allocation batch size not specified',
                 'kubernetes',
                 {
                     'spark.executor.cores': '4',
@@ -313,8 +313,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # k8s allocation batch size specified
             (
+                'k8s allocation batch size specified',
                 'kubernetes',
                 {
                     'spark.executor.cores': '4',
@@ -326,8 +326,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # use default k8s settings
             (
+                'use default k8s settings',
                 'kubernetes',
                 {},
                 {
@@ -340,8 +340,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources with k8s
             (
+                'user defined resources with k8s',
                 'kubernetes',
                 {
                     'spark.executor.cores': '2',
@@ -357,8 +357,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # kubernetes migration
             (
+                'kubernetes migration',
                 'kubernetes',
                 {
                     'spark.executor.memory': '2g',
@@ -379,19 +379,19 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # use default mesos settings
             (
+                'use default mesos settings',
                 'mesos',
                 {},
                 {
                     'spark.executor.memory': '28g',
                     'spark.executor.cores': '4',
-                    'spark.cores.max': '4',
+                    'spark.cores.max': '8',
                 },
                 False,
             ),
-            # user defined resources
             (
+                'user defined resources',
                 'mesos',
                 {
                     'spark.executor.memory': '2g',
@@ -405,8 +405,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - capped cpu & memory
             (
+                'user defined resources - capped cpu & memory',
                 'mesos',
                 {
                     'spark.executor.cores': '13',
@@ -423,8 +423,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated - medium memory
             (
+                'user defined resources - recalculated - medium memory',
                 'mesos',
                 {
                     'spark.executor.cores': '10',
@@ -442,8 +442,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated - medium memory
             (
+                'user defined resources - recalculated - medium memory',
                 'mesos',
                 {
                     'spark.executor.cores': '6',
@@ -461,8 +461,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated - recommended memory
             (
+                'user defined resources - recalculated - recommended memory',
                 'mesos',
                 {
                     'spark.executor.cores': '4',
@@ -476,12 +476,12 @@ class TestGetSparkConf:
                     'spark.executor.memory': '28g',
                     'spark.executor.instances': '9',
                     'spark.task.cpus': '1',
-                    'spark.cores.max': '32',
+                    'spark.cores.max': '36',
                 },
                 False,
             ),
-            # user defined resources - recalculated - non standard memory
             (
+                'user defined resources - recalculated - non standard memory',
                 'mesos',
                 {
                     'spark.executor.cores': '6',
@@ -500,8 +500,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - recalculated - non standard memory - task cpus capped
             (
+                'user defined resources - recalculated - non standard memory - task cpus capped',
                 'mesos',
                 {
                     'spark.executor.cores': '6',
@@ -520,8 +520,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # user defined resources - force-spark-resource-configs - capped
             (
+                'user defined resources - force-spark-resource-configs - capped',
                 'mesos',
                 {
                     'spark.executor.cores': '13',
@@ -539,8 +539,8 @@ class TestGetSparkConf:
                 },
                 True,
             ),
-            # user defined resources - force-spark-resource-configs - not capped
             (
+                'user defined resources - force-spark-resource-configs - not capped',
                 'mesos',
                 {
                     'spark.executor.cores': '10',
@@ -558,8 +558,8 @@ class TestGetSparkConf:
                 },
                 True,
             ),
-            # gpu with default settings
             (
+                'gpu with default settings',
                 'mesos',
                 {'spark.mesos.gpus.max': '2'},
                 {
@@ -574,8 +574,8 @@ class TestGetSparkConf:
                 },
                 False,
             ),
-            # Gpu with user defined resources
             (
+                'Gpu with user defined resources',
                 'mesos',
                 {
                     'spark.mesos.gpus.max': '2',
@@ -587,7 +587,7 @@ class TestGetSparkConf:
                     'spark.task.cpus': '2',
                     'spark.executor.cores': '4',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.cores.max': '4',
+                    'spark.cores.max': '8',
                 },
                 False,
             ),
@@ -595,6 +595,7 @@ class TestGetSparkConf:
     )
     def test_adjust_spark_requested_resources(
         self,
+        test_name,
         cluster_manager,
         user_spark_opts,
         expected_output,
@@ -612,7 +613,8 @@ class TestGetSparkConf:
             user_spark_opts, cluster_manager, pool, force_spark_resource_configs, ratio_adj_thresh,
         )
         for key in expected_output.keys():
-            assert output[key] == expected_output[key], f'wrong value for {key}, expected_output={expected_output}'
+            err_msg = f'[{test_name}] wrong value for {key}, expected_output={expected_output}'
+            assert output[key] == expected_output[key], err_msg
 
     @pytest.mark.parametrize(
         'cluster_manager,spark_opts,pool', [
