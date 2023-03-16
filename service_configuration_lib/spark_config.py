@@ -17,7 +17,6 @@ from typing import Tuple
 from urllib.parse import urlparse
 
 import boto3
-import botocore.exceptions
 import ephemeral_port_reserve
 import requests
 import yaml
@@ -127,6 +126,7 @@ def get_aws_credentials(
     session: Optional[boto3.Session] = None,
     aws_credentials_json: Optional[str] = None,
     assume_web_identity: bool = False,
+    session_duration: int = 43200,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
     if no_aws_credentials:
@@ -138,7 +138,7 @@ def get_aws_credentials(
             creds = json.load(f)
         return (creds.get('accessKeyId'), creds.get('secretAccessKey'), None)
     elif assume_web_identity:
-        credentials = assume_aws_role_web_identity()
+        credentials = assume_aws_role_web_identity(session_duration)
         if credentials:
             return (credentials['AccessKeyId'], credentials['SecretAccessKey'], credentials['SessionToken'])
         else:
@@ -165,7 +165,9 @@ def get_aws_credentials(
     )
 
 
-def assume_aws_role_web_identity():
+def assume_aws_role_web_identity(
+    session_duration,
+) -> Dict[str, str]:
     """
     Checks that a web identity token is available, and if it is,
     get an aws session and return a credentials dictionary
@@ -177,21 +179,12 @@ def assume_aws_role_web_identity():
     role_arn = os.environ['AWS_ROLE_ARN']
     timestamp = int(time.time())
     client = boto3.client('sts')
-    try:
-        resp = client.assume_role_with_web_identity(
-            RoleArn=role_arn,
-            RoleSessionName=f'SparkRun-{timestamp}',
-            WebIdentityToken=token,
-            DurationSeconds=43200,
-        )
-    except botocore.exceptions.ClientError:
-        resp = client.assume_role_with_web_identity(
-            RoleArn=role_arn,
-            RoleSessionName=f'SparkRun-{timestamp}',
-            WebIdentityToken=token,
-            DurationSeconds=3600,
-        )
-        log.warning(f"Session duration for {role_arn} is only 1 hour due to the role's maximum session duration")
+    resp = client.assume_role_with_web_identity(
+        RoleArn=role_arn,
+        RoleSessionName=f'SparkRun-{timestamp}',
+        WebIdentityToken=token,
+        DurationSeconds=session_duration,
+    )
     return resp['Credentials']
 
 
