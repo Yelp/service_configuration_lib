@@ -464,22 +464,18 @@ def _append_aws_credentials_conf(
 
 
 def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
-    if 'spark.executor.instances' in user_spark_opts:
-        return int(user_spark_opts['spark.executor.instances'])
-
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
             spark_constants.get('default_executor_cores', 2),
         ),
     )
-    if 'spark.cores.max' in user_spark_opts:
+
+    if 'spark.executor.instances' in user_spark_opts:
+        executor_instances = int(user_spark_opts['spark.executor.instances'])
+    elif 'spark.cores.max' in user_spark_opts:
         # spark.cores.max provided, calculate based on (max cores // per-executor cores)
         executor_instances = (int(user_spark_opts['spark.cores.max']) // executor_cores)
-        log.warning(
-            'spark.cores.max should no longer be provided and should be replaced '
-            'by the exact value of spark.executor.instances in --spark-args',
-        )
     else:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
         # be equal to `default_executor_instances`.
@@ -487,6 +483,15 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
             spark_constants.get('default_max_cores', 4) // executor_cores,
             spark_constants.get('default_executor_instances', 2),
         )
+
+    # Deprecation message
+    if 'spark.cores.max' in user_spark_opts:
+        log.warning(
+            f'spark.cores.max is DEPRECATED. Replace with '
+            f'spark.executor.instances={executor_instances} in --spark-args and in your service code '
+            f'as "spark.executor.instances * spark.executor.cores" if used.\n',
+        )
+
     return executor_instances
 
 
@@ -647,6 +652,8 @@ def _recalculate_executor_resources(
         'spark.executor.instances': str(executor_instances),
         'spark.task.cpus': str(task_cpus),
     })
+    if 'spark.cores.max' in user_spark_opts:
+        user_spark_opts['spark.cores.max'] = str(executor_instances * executor_cores)
     return user_spark_opts
 
 
