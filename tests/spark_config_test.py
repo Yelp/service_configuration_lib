@@ -110,6 +110,36 @@ class TestGetAWSCredentials:
     def test_use_profile(self, mock_session):
         assert spark_config.get_aws_credentials(profile_name='test_profile') == self.expected_temp_creds
 
+    @pytest.fixture
+    def mock_client(self):
+        mock_client = mock.Mock()
+        mock_creds = {
+            'Credentials': {
+                'AccessKeyId': self.access_key,
+                'SecretAccessKey': self.secret_key,
+                'SessionToken': self.session_token,
+            },
+        }
+        with mock.patch(
+            'service_configuration_lib.spark_config.boto3.client',
+            return_value=mock_client,
+        ):
+            mock_client.assume_role_with_web_identity.return_value = mock_creds
+            yield mock_client
+
+    def test_assume_web_identity(self, mock_client, tmpdir):
+        fp = tmpdir.join('tokenfile')
+        fp.write('token mctokenface')
+        with mock.patch.dict(
+            os.environ,
+            {'AWS_WEB_IDENTITY_TOKEN_FILE': str(fp), 'AWS_ROLE_ARN': 'arn:mock'},
+            clear=True,
+        ):
+            assert spark_config.get_aws_credentials(assume_web_identity=True) == self.expected_temp_creds
+        call_args = mock_client.assume_role_with_web_identity.call_args_list[0]
+        assert call_args[1]['WebIdentityToken'] == 'token mctokenface'
+        assert call_args[1]['RoleArn'] == 'arn:mock'
+
     def test_fail(self, tmpdir):
         fp = tmpdir.join('test.yaml')
         fp.write('not yaml file')
