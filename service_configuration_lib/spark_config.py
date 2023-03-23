@@ -1077,6 +1077,7 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
                 f'in a day.\n',
             )
         )
+    return min_dollars, max_dollars
 
 
 def get_spark_conf(

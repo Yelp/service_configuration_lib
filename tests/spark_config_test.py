@@ -750,6 +750,65 @@ class TestGetSparkConf:
             assert output[key] == expected_output[key], f'wrong value for {key}'
 
     @pytest.mark.parametrize(
+        'spark_conf,paasta_cluster,paasta_pool,expected_output', [
+            # dynamic resource allocation enabled
+            (
+                    {
+                        'spark.executor.instances': '821',
+                        'spark.executor.cores': '8',
+                        'spark.dynamicAllocation.enabled': 'true',
+                        'spark.dynamicAllocation.maxExecutors': '512',
+                        'spark.dynamicAllocation.minExecutors': '128',
+                    },
+                    'spark-pnw-prod',
+                    'stable_batch',
+                    (
+                        200,
+                        500
+                    ),
+            ),
+            # dynamic resource allocation enabled
+            (
+                    {
+                        'spark.executor.instances': '821',
+                        'spark.executor.cores': '8',
+                        'spark.dynamicAllocation.enabled': 'false',
+                        'spark.dynamicAllocation.maxExecutors': '512',
+                        'spark.dynamicAllocation.minExecutors': '128',
+                    },
+                    'spark-pnw-prod',
+                    'batch',
+                    (
+                            200,
+                            500
+                    ),
+            ),
+            # dynamic resource allocation not specified
+            (
+                    {
+                        'spark.executor.instances': '606',
+                        'spark.executor.cores': '8',
+                    },
+                    'spark-pnw-prod',
+                    'stable_batch',
+                    (
+                            200,
+                            500
+                    ),
+            ),
+        ],
+    )
+    def test_compute_approx_hourly_cost_dollars(
+            self,
+            spark_conf,
+            paasta_cluster,
+            paasta_pool,
+            expected_output,
+    ):
+        output = spark_config.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
+        assert output==expected_output
+
+    @pytest.mark.parametrize(
         'user_spark_opts,aws_creds,expected_output', [
             # user specified to disable
             (
