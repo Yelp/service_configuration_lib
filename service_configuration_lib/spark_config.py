@@ -34,6 +34,7 @@ GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
+
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
     'spark.ui.port',
@@ -129,6 +130,8 @@ def get_aws_credentials(
     profile_name: Optional[str] = None,
     session: Optional[boto3.Session] = None,
     aws_credentials_json: Optional[str] = None,
+    assume_web_identity: bool = False,
+    session_duration: int = 43200,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
     if no_aws_credentials:
@@ -139,6 +142,15 @@ def get_aws_credentials(
         with open(aws_credentials_json, 'r') as f:
             creds = json.load(f)
         return creds.get('accessKeyId'), creds.get('secretAccessKey'), None
+    elif assume_web_identity:
+        credentials = assume_aws_role_web_identity(session_duration)
+        if credentials:
+            return credentials['AccessKeyId'], credentials['SecretAccessKey'], credentials['SessionToken']
+        else:
+            log.warning(
+                'Tried to assume role with web identity but neither '
+                'AWS_WEB_IDENTITY_TOKEN_FILE or AWS_ROLE_ARN was not found',
+            )
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
@@ -156,6 +168,29 @@ def get_aws_credentials(
         creds.secret_key,
         creds.token,
     )
+
+
+def assume_aws_role_web_identity(
+    session_duration,
+) -> Dict[str, str]:
+    """
+    Checks that a web identity token is available, and if it is,
+    get an aws session and return a credentials dictionary
+    """
+    if 'AWS_WEB_IDENTITY_TOKEN_FILE' not in os.environ or 'AWS_ROLE_ARN' not in os.environ:
+        return {}
+    with open(os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']) as token_file:
+        token = token_file.read()
+    role_arn = os.environ['AWS_ROLE_ARN']
+    timestamp = int(time.time())
+    client = boto3.client('sts')
+    resp = client.assume_role_with_web_identity(
+        RoleArn=role_arn,
+        RoleSessionName=f'SparkRun-{timestamp}',
+        WebIdentityToken=token,
+        DurationSeconds=session_duration,
+    )
+    return resp['Credentials']
 
 
 def _pick_random_port(app_name):
@@ -477,22 +512,18 @@ def _append_aws_credentials_conf(
 
 
 def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
-    if 'spark.executor.instances' in user_spark_opts:
-        return int(user_spark_opts['spark.executor.instances'])
-
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
             default_spark_conf.get('spark.executor.cores', 2),
         ),
     )
-    if 'spark.cores.max' in user_spark_opts:
+
+    if 'spark.executor.instances' in user_spark_opts:
+        executor_instances = int(user_spark_opts['spark.executor.instances'])
+    elif 'spark.cores.max' in user_spark_opts:
         # spark.cores.max provided, calculate based on (max cores // per-executor cores)
         executor_instances = (int(user_spark_opts['spark.cores.max']) // executor_cores)
-        log.warning(
-            'spark.cores.max should no longer be provided and should be replaced '
-            'by the exact value of spark.executor.instances in --spark-args',
-        )
     else:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
         # be equal to `default_executor_instances`.
@@ -500,6 +531,15 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
             default_spark_conf.get('spark.cores.max', 4) // executor_cores,
             default_spark_conf.get('spark.executor.instances', 2),
         )
+
+    # Deprecation message
+    if 'spark.cores.max' in user_spark_opts:
+        log.warning(
+            f'spark.cores.max is DEPRECATED. Replace with '
+            f'spark.executor.instances={executor_instances} in --spark-args and in your service code '
+            f'as "spark.executor.instances * spark.executor.cores" if used.\n',
+        )
+
     return executor_instances
 
 
@@ -602,9 +642,9 @@ def _recalculate_executor_resources(
             log.warning(
                 f'Adjust Executor Resources based on recommended mem:core:: 7:1 and Bucket: '
                 f'{new_memory}g, {new_cpu}cores to better fit aws nodes\n'
-                f'  - spark.executor.cores:     {TextColors.red(str(cpu)):3}c  → {TextColors.green(str(new_cpu))}c\n'
-                f'  - spark.executor.memory:    {TextColors.red(str(memory)):3}g  → {TextColors.green(str(new_memory))}g\n'
-                f'  - spark.executor.instances: {TextColors.red(str(instances)):3}x  → {TextColors.green(str(new_instances))}x\n'
+                f'  - spark.executor.cores:     {cpu:3}c  → {new_cpu}c\n'
+                f'  - spark.executor.memory:    {memory:3}g  → {new_memory}g\n'
+                f'  - spark.executor.instances: {instances:3}x  → {new_instances}x\n'
                 'Check y/spark-metrics to compare how your job performance compared to previous runs.\n'
                 'Feel free to adjust to spark resource configs in yelpsoa-configs with above newly adjusted values.\n',
             )
@@ -634,7 +674,7 @@ def _recalculate_executor_resources(
             "Please use this flag only if you have tested that standard memory/cpu configs won't work for your job.\n"
             'Let us know at #spark if you think, your use-case needs to be standardized.\n',
         )
-    elif memory_gb > medium_memory_mb or executor_cores > medium_cores:
+    elif memory_gb >= medium_memory_mb or executor_cores > medium_cores:
         (executor_cores, executor_memory, executor_instances, task_cpus) = _calculate_resources(
             executor_cores,
             memory_gb,
@@ -660,6 +700,8 @@ def _recalculate_executor_resources(
         'spark.executor.instances': str(executor_instances),
         'spark.task.cpus': str(task_cpus),
     })
+    if 'spark.cores.max' in user_spark_opts:
+        user_spark_opts['spark.cores.max'] = str(executor_instances * executor_cores)
     return user_spark_opts
 
 
