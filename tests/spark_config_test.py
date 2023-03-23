@@ -679,7 +679,7 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.enabled': 'true',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
                     'spark.dynamicAllocation.minExecutors': '0',
                     'spark.dynamicAllocation.maxExecutors': '2',
                     'spark.executor.instances': '0',
@@ -699,7 +699,7 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.initialExecutors': '128',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
                     'spark.executor.instances': '128',
                 },
             ),
@@ -714,8 +714,25 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.minExecutors': '205',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
                     'spark.executor.instances': '205',
+                },
+            ),
+            # dynamic resource allocation enabled with Jupyterhub
+            (
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.executor.instances': '821',
+                    'spark.app.name': 'jupyterhub-username',
+                },
+                {
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': '821',
+                    'spark.dynamicAllocation.minExecutors': '0',
+                    'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
+                    'spark.dynamicAllocation.executorAllocationRatio': '0.8',
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '2400s',
+                    'spark.executor.instances': '0',
                 },
             ),
             # dynamic resource allocation disabled explicitly
@@ -748,6 +765,65 @@ class TestGetSparkConf:
         output = spark_config.get_dra_configs(user_spark_opts)
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
+
+    @pytest.mark.parametrize(
+        'spark_conf,paasta_cluster,paasta_pool,expected_output', [
+            # dynamic resource allocation enabled
+            (
+                {
+                    'spark.executor.instances': '821',
+                    'spark.executor.cores': '8',
+                    'spark.dynamicAllocation.enabled': 'true',
+                    'spark.dynamicAllocation.maxExecutors': '512',
+                    'spark.dynamicAllocation.minExecutors': '128',
+                },
+                'spark-pnw-prod',
+                'stable_batch',
+                (
+                    145.408,
+                    581.632,
+                ),
+            ),
+            # dynamic resource allocation enabled
+            (
+                {
+                    'spark.executor.instances': '821',
+                    'spark.executor.cores': '8',
+                    'spark.dynamicAllocation.enabled': 'false',
+                    'spark.dynamicAllocation.maxExecutors': '512',
+                    'spark.dynamicAllocation.minExecutors': '128',
+                },
+                'spark-pnw-prod',
+                'batch',
+                (
+                    269.288,
+                    269.288,
+                ),
+            ),
+            # dynamic resource allocation not specified
+            (
+                {
+                    'spark.executor.instances': '606',
+                    'spark.executor.cores': '8',
+                },
+                'spark-pnw-prod',
+                'stable_batch',
+                (
+                    688.416,
+                    688.416,
+                ),
+            ),
+        ],
+    )
+    def test_compute_approx_hourly_cost_dollars(
+            self,
+            spark_conf,
+            paasta_cluster,
+            paasta_pool,
+            expected_output,
+    ):
+        output = spark_config.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
+        assert output == expected_output
 
     @pytest.mark.parametrize(
         'user_spark_opts,aws_creds,expected_output', [
@@ -1161,99 +1237,6 @@ class TestGetSparkConf:
             return list(expected_output.keys())
 
         return verify
-
-    def test_get_spark_conf_mesos(
-        self,
-        user_spark_opts,
-        spark_opts_from_env,
-        base_volumes,
-        ui_port,
-        with_secret,
-        mesos_leader,
-        needs_docker_cfg,
-        extra_docker_params,
-        mock_get_mesos_docker_volumes_conf,
-        mock_append_event_log_conf,
-        mock_append_aws_credentials_conf,
-        mock_append_sql_partitions_conf,
-        mock_adjust_spark_requested_resources_mesos,
-        mock_time,
-        assert_mesos_leader,
-        assert_docker_parameters,
-        assert_mesos_secret,
-        assert_docker_cfg,
-        assert_mesos_conf,
-        assert_ui_port,
-        assert_app_name,
-        mock_log,
-        mock_append_spark_conf_log,
-        mock_append_console_progress_conf,
-    ):
-        other_spark_opts = {'spark.driver.memory': '2g', 'spark.executor.memoryOverhead': '1024'}
-        not_allowed_opts = {'spark.executorEnv.PAASTA_SERVICE': 'random-service'}
-        user_spark_opts = {
-            **(user_spark_opts or {}),
-            **not_allowed_opts,
-            **other_spark_opts,
-        }
-
-        aws_creds = (None, None, None)
-        aws_region = 'ice_cream'
-
-        output = spark_config.get_spark_conf(
-            cluster_manager='mesos',
-            spark_app_base_name=self.spark_app_base_name,
-            user_spark_opts=user_spark_opts,
-            paasta_cluster=self.cluster,
-            paasta_pool=self.pool,
-            paasta_service=self.service,
-            paasta_instance=self.instance,
-            docker_img=self.docker_image,
-            extra_volumes=base_volumes,
-            aws_creds=aws_creds,
-            extra_docker_params=extra_docker_params,
-            with_secret=with_secret,
-            needs_docker_cfg=needs_docker_cfg,
-            mesos_leader=mesos_leader,
-            spark_opts_from_env=spark_opts_from_env,
-            load_paasta_default_volumes=True,
-            aws_region=aws_region,
-            force_spark_resource_configs=False,
-        )
-
-        verified_keys = set(
-            assert_mesos_leader(output) +
-            assert_docker_parameters(output) +
-            assert_mesos_secret(output) +
-            assert_docker_cfg(output) +
-            assert_mesos_conf(output) +
-            assert_ui_port(output) +
-            assert_app_name(output) +
-            list(other_spark_opts.keys()) +
-            list(mock_get_mesos_docker_volumes_conf.return_value.keys()) +
-            list(mock_adjust_spark_requested_resources_mesos.return_value.keys()) +
-            list(mock_append_event_log_conf.return_value.keys()) +
-            list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_partitions_conf.return_value.keys()) +
-            list(mock_append_spark_conf_log.return_value.keys()) +
-            list(mock_append_console_progress_conf.return_value.keys()),
-        )
-        assert len(set(output.keys()) - verified_keys) == 0
-        mock_get_mesos_docker_volumes_conf.mocker.assert_called_once_with(
-            mock.ANY, base_volumes, True,
-        )
-        mock_adjust_spark_requested_resources_mesos.mocker.assert_called_once_with(
-            mock.ANY, 'mesos', self.pool, False,
-        )
-        mock_append_event_log_conf.mocker.assert_called_once_with(
-            mock.ANY, *aws_creds,
-        )
-        mock_append_aws_credentials_conf.mocker.assert_called_once_with(mock.ANY, *aws_creds, aws_region)
-        mock_append_sql_partitions_conf.mocker.assert_called_once_with(
-            mock.ANY,
-        )
-        (warning_msg,), _ = mock_log.warning.call_args
-        assert next(iter(not_allowed_opts.keys())) in warning_msg
 
     def _get_k8s_base_volumes(self):
         """Helper needed to allow tests to pass in github CI checks."""
