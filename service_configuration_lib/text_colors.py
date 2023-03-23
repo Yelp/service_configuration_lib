@@ -3,15 +3,15 @@ class TextColors:
     """Collection of static variables and methods to assist in coloring text."""
 
     # ANSI color codes
-    BLUE = "\033[34m"
-    BOLD = "\033[1m"
-    CYAN = "\033[36m"
-    DEFAULT = "\033[0m"
-    GREEN = "\033[32m"
-    GREY = "\033[38;5;242m"
-    MAGENTA = "\033[35m"
-    RED = "\033[31m"
-    YELLOW = "\033[33m"
+    BLUE = '\033[34m'
+    BOLD = '\033[1m'
+    CYAN = '\033[36m'
+    DEFAULT = '\033[0m'
+    GREEN = '\033[32m'
+    GREY = '\033[38;5;242m'
+    MAGENTA = '\033[35m'
+    RED = '\033[31m'
+    YELLOW = '\033[33m'
 
     @staticmethod
     def bold(text: str) -> str:

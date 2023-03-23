@@ -21,6 +21,7 @@ import ephemeral_port_reserve
 import requests
 import yaml
 from boto3 import Session
+
 from service_configuration_lib.text_colors import TextColors
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
@@ -327,7 +328,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     log.warning(
         TextColors.yellow(
             '\nSpark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
-        )
+        ),
     )
 
     # set defaults if not provided already
@@ -1036,18 +1037,24 @@ def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) ->
 
 
 def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
-    per_executor_cores = int(spark_conf.get("spark.executor.cores", DEFAULT_EXECUTOR_CORES))
-    max_cores = per_executor_cores * (int(spark_conf.get("spark.executor.instances", DEFAULT_EXECUTOR_INSTANCES)))
+    per_executor_cores = int(spark_conf.get(
+        'spark.executor.cores',
+        default_spark_conf.get('spark.executor.cores', 2),
+    ))
+    max_cores = per_executor_cores * (int(spark_conf.get(
+        'spark.executor.instances',
+        default_spark_conf.get('spark.executor.instances', 2),
+    )))
     min_cores = max_cores
-    if "spark.dynamicAllocation.enabled" in spark_conf and spark_conf["spark.dynamicAllocation.enabled"] == "true":
+    if 'spark.dynamicAllocation.enabled' in spark_conf and spark_conf['spark.dynamicAllocation.enabled'] == 'true':
         max_cores = per_executor_cores * (int(
-            spark_conf.get("spark.dynamicAllocation.maxExecutors", max_cores)
+            spark_conf.get('spark.dynamicAllocation.maxExecutors', max_cores),
         ))
         min_cores = per_executor_cores * (int(
-            spark_conf.get("spark.dynamicAllocation.minExecutors", min_cores)
+            spark_conf.get('spark.dynamicAllocation.minExecutors', min_cores),
         ))
 
-    if paasta_pool == "batch":
+    if paasta_pool == 'batch':
         default_cost_factor = 0.041
     else:
         default_cost_factor = 0.142
@@ -1055,27 +1062,27 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
 
     min_dollars = round(min_cores * cost_factor, 5)
     max_dollars = round(max_cores * cost_factor, 5)
-    if max_dollars*24 > spark_constants.get('high_cost_threshold_daily', 500):
+    if max_dollars * 24 > spark_constants.get('high_cost_threshold_daily', 500):
         log.warning(
             TextColors.red(
                 TextColors.bold(
-                    f'\n!!!!! HIGH COST ALERT !!!!!',
-                )
-            )
+                    '\n!!!!! HIGH COST ALERT !!!!!',
+                ),
+            ),
         )
     if min_dollars != max_dollars:
         log.warning(
             TextColors.magenta(
                 f'\nThe requested resources are expected to cost a maximum of $ {TextColors.bold(str(max_dollars))} '
                 f'every hour and $ {TextColors.bold(str(max_dollars * 24))} in a day.\n',
-            )
+            ),
         )
     else:
         log.warning(
             TextColors.magenta(
                 f'\nThe requested resources are expected to cost $ {max_dollars} every hour and $ {max_dollars * 24} '
                 f'in a day.\n',
-            )
+            ),
         )
     return min_dollars, max_dollars
 
