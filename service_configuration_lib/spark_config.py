@@ -80,16 +80,18 @@ log.setLevel(logging.INFO)
 spark_srv_conf = dict()
 spark_constants = dict()
 default_spark_conf = dict()
+spark_costs = dict()
 
 
 def _load_spark_srv_conf(preset_values: Dict[str, Any] = dict()):
-    global spark_srv_conf, spark_constants, default_spark_conf
+    global spark_srv_conf, spark_constants, default_spark_conf, spark_costs
     try:
         with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
             loaded_values = yaml.safe_load(fp.read())
             spark_srv_conf = {**preset_values, **loaded_values}
             spark_constants = spark_srv_conf.get('spark_constants', dict())
             default_spark_conf = spark_constants.get('defaults', dict())
+            spark_costs = spark_constants.get('cost_factor', dict())
     except Exception as e:
         log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
 
@@ -136,7 +138,7 @@ def get_aws_credentials(
     elif aws_credentials_json:
         with open(aws_credentials_json, 'r') as f:
             creds = json.load(f)
-        return (creds.get('accessKeyId'), creds.get('secretAccessKey'), None)
+        return creds.get('accessKeyId'), creds.get('secretAccessKey'), None
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
@@ -991,7 +993,7 @@ def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) ->
     return output
 
 
-def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
+def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
     per_executor_cores = int(spark_conf.get("spark.executor.cores", DEFAULT_EXECUTOR_CORES))
     max_cores = per_executor_cores * (int(spark_conf.get("spark.executor.instances", DEFAULT_EXECUTOR_INSTANCES)))
     min_cores = max_cores
@@ -1002,10 +1004,12 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
         min_cores = per_executor_cores * (int(
             spark_conf.get("spark.dynamicAllocation.minExecutors", min_cores)
         ))
+
     if paasta_pool == "batch":
-        cost_factor = spark_constants.get('batch_cost_factor', 0.041)
+        default_cost_factor = 0.041
     else:
-        cost_factor = spark_constants.get('stable_batch_cost_factor', 0.142)
+        default_cost_factor = 0.142
+    cost_factor = spark_costs.get(paasta_cluster, dict()).get(paasta_pool, default_cost_factor)
 
     min_dollars = round(min_cores * cost_factor, 5)
     max_dollars = round(max_cores * cost_factor, 5)
@@ -1013,17 +1017,15 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_pool):
         log.warning(
             TextColors.red(
                 TextColors.bold(
-                    f'\n!!! HIGH COST ALERT !!!',
+                    f'\n!!!!! HIGH COST ALERT !!!!!',
                 )
             )
         )
     if min_dollars != max_dollars:
         log.warning(
             TextColors.magenta(
-                f'\nThe requested resources are expected to cost between $ {TextColors.bold(str(min_dollars))} → '
-                f'$ {TextColors.bold(str(max_dollars))} every hour and between '
-                f'$ {TextColors.bold(str(min_dollars * 24))} → $ {TextColors.bold(str(max_dollars * 24))} '
-                f'in a day based on dynamic allocation.\n',
+                f'\nThe requested resources are expected to cost a maximum of $ {TextColors.bold(str(max_dollars))} '
+                f'every hour and $ {TextColors.bold(str(max_dollars * 24))} in a day.\n',
             )
         )
     else:
@@ -1169,7 +1171,7 @@ def get_spark_conf(
         spark_conf = get_dra_configs(spark_conf)
 
     # generate cost warnings
-    compute_approx_hourly_cost_dollars(spark_conf, paasta_pool)
+    compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
 
     # configure spark_event_log
     spark_conf = _append_event_log_conf(spark_conf, *aws_creds)
