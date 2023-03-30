@@ -1228,9 +1228,6 @@ def get_spark_conf(
     # configure spark conf log
     spark_conf = _append_spark_config(spark_conf, 'spark.logConf', 'true')
 
-    # configure spark Console Progress
-    spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
-
     spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
     return spark_conf
 
