@@ -1076,16 +1076,16 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
                 TextColors.bold(
                     f'\nThe requested resources are expected to cost a maximum of $ {str(max_dollars)} '
                     f'every hour and $ {str(max_dollars * 24)} in a day.\n',
-                )
+                ),
             ),
         )
     else:
         log.warning(
             TextColors.magenta(
                 TextColors.bold(
-                    f'\nThe requested resources are expected to cost $ {max_dollars} every hour and $ {max_dollars * 24} '
-                    f'in a day.\n',
-                )
+                    f'\nThe requested resources are expected to cost $ {max_dollars} every hour and '
+                    f'$ {max_dollars * 24} in a day.\n',
+                ),
             ),
         )
     return min_dollars, max_dollars
