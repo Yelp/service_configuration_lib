@@ -131,8 +131,9 @@ def get_aws_credentials(
     profile_name: Optional[str] = None,
     session: Optional[boto3.Session] = None,
     aws_credentials_json: Optional[str] = None,
-    assume_web_identity: bool = False,
-    session_duration: int = 43200,
+    assume_aws_role_arn: Optional[str] = None,
+    session_duration: int = 3600,
+    assume_role_user_creds_file: str = '/nail/etc/spark_role_assumer/spark_role_assumer.yaml',
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
     if no_aws_credentials:
@@ -143,14 +144,13 @@ def get_aws_credentials(
         with open(aws_credentials_json, 'r') as f:
             creds = json.load(f)
         return creds.get('accessKeyId'), creds.get('secretAccessKey'), None
-    elif assume_web_identity:
-        credentials = assume_aws_role_web_identity(session_duration)
+    elif assume_aws_role_arn:
+        credentials = assume_aws_role(assume_aws_role_arn, session_duration, assume_role_user_creds_file)
         if credentials:
             return credentials['AccessKeyId'], credentials['SecretAccessKey'], credentials['SessionToken']
         else:
             log.warning(
-                'Tried to assume role with web identity but neither '
-                'AWS_WEB_IDENTITY_TOKEN_FILE or AWS_ROLE_ARN was not found',
+                'Tried to assume role with web identity but something went wrong ',
             )
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
@@ -171,24 +171,24 @@ def get_aws_credentials(
     )
 
 
-def assume_aws_role_web_identity(
+def assume_aws_role(
+    role_arn,
     session_duration,
+    key_file,
 ) -> Dict[str, str]:
     """
     Checks that a web identity token is available, and if it is,
     get an aws session and return a credentials dictionary
     """
-    if 'AWS_WEB_IDENTITY_TOKEN_FILE' not in os.environ or 'AWS_ROLE_ARN' not in os.environ:
-        return {}
-    with open(os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']) as token_file:
-        token = token_file.read()
-    role_arn = os.environ['AWS_ROLE_ARN']
+    with open(key_file) as creds_file:
+        creds_dict = yaml.load(creds_file.read(), Loader=yaml.SafeLoader)
+        access_key = creds_dict['AccessKeyId']
+        secret_key = creds_dict['SecretAccessKey']
     timestamp = int(time.time())
-    client = boto3.client('sts')
-    resp = client.assume_role_with_web_identity(
+    client = boto3.client('sts', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+    resp = client.assume_role(
         RoleArn=role_arn,
         RoleSessionName=f'SparkRun-{timestamp}',
-        WebIdentityToken=token,
         DurationSeconds=session_duration,
     )
     return resp['Credentials']
