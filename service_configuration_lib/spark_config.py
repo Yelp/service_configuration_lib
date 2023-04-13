@@ -299,7 +299,7 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
             str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
         ):
 
-            num_partitions_dra = (
+            num_partitions_dra = 3 * (
                 int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
                 int(spark_opts.get('spark.executor.cores', default_spark_srv_conf.get('spark.executor.cores', 4)))
             )
@@ -308,7 +308,7 @@ def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
         num_partitions = num_partitions or default_spark_srv_conf.get('spark.sql.shuffle.partitions', 128)
         _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
     else:
-        num_partitions = spark_opts['spark.sql.shuffle.partitions']
+        num_partitions = int(spark_opts['spark.sql.shuffle.partitions'])
     _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
     _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
@@ -343,7 +343,9 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
         str(default_spark_srv_conf.get('spark.dynamicAllocation.executorAllocationRatio', 0.8)),
     )
-    cached_executor_idle_timeout = default_spark_srv_conf.get('spark.dynamicAllocation.cachedExecutorIdleTimeout', '1500s')
+    cached_executor_idle_timeout = default_spark_srv_conf.get(
+        'spark.dynamicAllocation.cachedExecutorIdleTimeout', '1500s',
+    )
     if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
         if _is_jupyterhub_job(spark_app_name):
             # increase cachedExecutorIdleTimeout by 15 minutes in case of Jupyterhub
