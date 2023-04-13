@@ -1070,20 +1070,16 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
                 ),
             ),
         )
-    if min_dollars != max_dollars:
-        log.warning(
-            TextColors.magenta(
-                f'\nThe requested resources are expected to cost a maximum of $ {TextColors.bold(str(max_dollars))} '
-                f'every hour and $ {TextColors.bold(str(max_dollars * 24))} in a day.\n',
+    log.warning(
+        TextColors.magenta(
+            TextColors.bold(
+                f'\nExpected {"maximum" if min_dollars != max_dollars else ""} cost based on requested resources: '
+                f'${str(max_dollars)} every hour and ${str(max_dollars * 24)} in a day.'
+                f'\nPlease monitor y/spark-metrics for memory and cpu usage to tune requested executor count'
+                f' config spark.executor.instances.\nFollow y/write-spark-job for optimization tips.\n',
             ),
-        )
-    else:
-        log.warning(
-            TextColors.magenta(
-                f'\nThe requested resources are expected to cost $ {max_dollars} every hour and $ {max_dollars * 24} '
-                f'in a day.\n',
-            ),
-        )
+        ),
+    )
     return min_dollars, max_dollars
 
 
