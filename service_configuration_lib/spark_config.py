@@ -172,9 +172,9 @@ def get_aws_credentials(
 
 
 def assume_aws_role(
-    role_arn,
-    session_duration,
-    key_file,
+    role_arn: str,
+    session_duration: int,
+    key_file: str,
 ) -> Dict[str, str]:
     """
     Checks that a web identity token is available, and if it is,
