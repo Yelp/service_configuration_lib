@@ -124,20 +124,18 @@ class TestGetAWSCredentials:
             'service_configuration_lib.spark_config.boto3.client',
             return_value=mock_client,
         ):
-            mock_client.assume_role_with_web_identity.return_value = mock_creds
+            mock_client.assume_role.return_value = mock_creds
             yield mock_client
 
-    def test_assume_web_identity(self, mock_client, tmpdir):
+    def test_assume_aws_role(self, mock_client, tmpdir):
         fp = tmpdir.join('tokenfile')
-        fp.write('token mctokenface')
-        with mock.patch.dict(
-            os.environ,
-            {'AWS_WEB_IDENTITY_TOKEN_FILE': str(fp), 'AWS_ROLE_ARN': 'arn:mock'},
-            clear=True,
-        ):
-            assert spark_config.get_aws_credentials(assume_web_identity=True) == self.expected_temp_creds
-        call_args = mock_client.assume_role_with_web_identity.call_args_list[0]
-        assert call_args[1]['WebIdentityToken'] == 'token mctokenface'
+        fp.write('AccessKeyId: accesskey\nSecretAccessKey: secretkey')
+        creds = spark_config.get_aws_credentials(
+            assume_aws_role_arn='arn:mock',
+            assume_role_user_creds_file=str(fp),
+        )
+        assert creds == self.expected_temp_creds
+        call_args = mock_client.assume_role.call_args_list[0]
         assert call_args[1]['RoleArn'] == 'arn:mock'
 
     def test_fail(self, tmpdir):
