@@ -949,6 +949,22 @@ class TestGetSparkConf:
 
         assert output[key] == expected_output
 
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
+            # not configured by user
+            ({}, 'true'),
+            # configured by user
+            ({'spark.ui.showConsoleProgress': 'false'}, 'false'),
+        ],
+    )
+    def test_append_console_progress_conf(
+            self, user_spark_opts, expected_output,
+    ):
+        key = 'spark.ui.showConsoleProgress'
+        output = spark_config._append_spark_config(user_spark_opts, key, 'true')
+
+        assert output[key] == expected_output
+
     def test_append_aws_credentials_conf(self):
         output = spark_config._append_aws_credentials_conf(
             {},
@@ -963,6 +979,14 @@ class TestGetSparkConf:
     @pytest.fixture
     def mock_append_spark_conf_log(self):
         return_value = {'spark.logConf': 'true'}
+        with MockConfigFunction(
+                '_append_spark_config', return_value,
+        ) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_append_console_progress_conf(self):
+        return_value = {'spark.ui.showConsoleProgress': 'true'}
         with MockConfigFunction(
                 '_append_spark_config', return_value,
         ) as m:
@@ -1248,6 +1272,7 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
             'spark.logConf': 'true',
+            'spark.ui.showConsoleProgress': 'true',
         }
         for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
@@ -1337,6 +1362,7 @@ class TestGetSparkConf:
             'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
             'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
             'spark.logConf': 'true',
+            'spark.ui.showConsoleProgress': 'true',
         }
         for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
