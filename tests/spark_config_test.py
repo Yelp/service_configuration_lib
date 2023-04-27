@@ -32,6 +32,39 @@ def mock_spark_run_conf(tmpdir, monkeypatch):
                 'history_server': 'https://spark-history-testing',
             },
         },
+        'spark_constants': {
+            'target_mem_cpu_ratio': 7,
+            'defaults': {
+                'spark.executor.cores': 4,
+                'spark.executor.instances': 2,
+                'spark.executor.memory': 28,
+                'spark.task.cpus': 1,
+                'spark.sql.shuffle.partitions': 128,
+                'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+                'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+                'spark.yelp.dra.minExecutorRatio': 0.25,
+            },
+            'resource_configs': {
+                'recommended': {
+                    'cpu': 4,
+                    'mem': 28,
+                },
+                'medium': {
+                    'cpu': 8,
+                    'mem': 56,
+                },
+                'max': {
+                    'cpu': 12,
+                    'mem': 110,
+                },
+            },
+            'cost_factor': {
+                'test-cluster': {
+                    'test-pool': 100,
+                },
+            },
+            'high_cost_threshold_daily': 500,
+        },
     }
     fp = tmpdir.join('spark_run.yaml')
     fp.write(yaml.dump(spark_run_conf))

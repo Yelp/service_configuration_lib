@@ -86,7 +86,7 @@ mandatory_default_spark_srv_conf = dict()
 spark_costs = dict()
 
 
-def _load_spark_srv_conf(preset_values: Dict[str, Any] = None):
+def _load_spark_srv_conf(preset_values=None):
     if preset_values is None:
         preset_values = dict()
     global spark_srv_conf, spark_constants, default_spark_srv_conf, mandatory_default_spark_srv_conf, spark_costs
@@ -967,7 +967,7 @@ def update_spark_srv_configs(spark_conf: MutableMapping[str, str]):
 def compute_approx_hourly_cost_dollars(
         spark_conf: Mapping[str, str],
         paasta_cluster: str,
-        paasta_pool: str
+        paasta_pool: str,
 ) -> Tuple[float, float]:
     per_executor_cores = int(spark_conf.get(
         'spark.executor.cores',
