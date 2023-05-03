@@ -1,3 +1,4 @@
 importlib-resources==5.4.0
 pyinotify==0.9.6
 pyyaml >= 3.0
+urllib3==1.26.15
