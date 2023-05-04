@@ -1129,6 +1129,10 @@ def get_spark_conf(
     # add spark srv config defaults if not specified
     update_spark_srv_configs(spark_conf)
 
+    # configure spark Console Progress
+    if _is_jupyterhub_job(spark_conf.get('spark.app.name', '')):
+        spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
+
     spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
     return spark_conf
 

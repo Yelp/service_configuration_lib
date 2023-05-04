@@ -991,14 +991,6 @@ class TestGetSparkConf:
             yield m
 
     @pytest.fixture
-    def mock_append_console_progress_conf(self):
-        return_value = {'spark.ui.showConsoleProgress': 'true'}
-        with MockConfigFunction(
-                '_append_spark_config', return_value,
-        ) as m:
-            yield m
-
-    @pytest.fixture
     def mock_get_mesos_docker_volumes_conf(self):
         return_value = {'spark.mesos.executor.docker.volumes': '/tmp:/tmp:ro'}
         with MockConfigFunction('_get_mesos_docker_volumes_conf', return_value) as m:
@@ -1378,6 +1370,42 @@ class TestGetSparkConf:
                 assert output[key] == value
             return list(expected_output.keys())
         return verify
+
+    def test_show_console_progress_jupyter(
+        self,
+        user_spark_opts,
+        spark_opts_from_env,
+        ui_port,
+        base_volumes,
+        mock_append_event_log_conf,
+        mock_append_aws_credentials_conf,
+        mock_append_sql_partitions_conf,
+        mock_adjust_spark_requested_resources_kubernetes,
+        mock_get_dra_configs,
+        mock_time,
+        assert_ui_port,
+        assert_app_name,
+        assert_local_conf,
+        mock_log,
+    ):
+        aws_creds = (None, None, None)
+        aws_region = 'ice_cream'
+        output = spark_config.get_spark_conf(
+            cluster_manager='local',
+            spark_app_base_name='jupyterhub_test_name',
+            user_spark_opts={},
+            paasta_cluster=self.cluster,
+            paasta_pool=self.pool,
+            paasta_service=self.service,
+            paasta_instance=self.instance,
+            docker_img=self.docker_image,
+            extra_volumes=base_volumes,
+            aws_creds=aws_creds,
+            spark_opts_from_env={},
+            aws_region=aws_region,
+            force_spark_resource_configs=False,
+        )
+        assert output['spark.ui.showConsoleProgress'] == 'true'
 
     def test_local_spark(
         self,

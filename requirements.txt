@@ -1,3 +1,5 @@
 importlib-resources==5.4.0
 pyinotify==0.9.6
 pyyaml >= 3.0
+# To resolve the error: botocore 1.29.125 has requirement urllib3<1.27,>=1.25.4, but you'll have urllib3 2.0.1 which is incompatible.
+urllib3==1.26.15
