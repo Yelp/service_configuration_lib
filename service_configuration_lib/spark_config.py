@@ -1255,6 +1255,16 @@ def compute_requested_memory_overhead(spark_opts: Mapping[str, str], executor_me
     )
 
 
+def get_grafana_url(spark_conf: Mapping[str, str]) -> str:
+    return (
+        'https://grafana.yelpcorp.com/d/b8f79180-bea8-4001-9d4a-94978b5a20b6/spark-on-paasta-job-status?orgId=1&'
+        f"var-paasta_cluster={spark_conf['spark.executorEnv.PAASTA_CLUSTER']}&"
+        f"var-service={spark_conf['spark.executorEnv.PAASTA_SERVICE']}&"
+        f"var-instance={spark_conf['spark.executorEnv.PAASTA_INSTANCE']}&"
+        'var-pod_name_spark=All'
+    )
+
+
 def get_signalfx_url(spark_conf: Mapping[str, str]) -> str:
     return (
         'https://app.signalfx.com/#/dashboard/FOjL2yRAcAA?density=4'
