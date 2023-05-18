@@ -919,6 +919,7 @@ def _get_k8s_spark_env(
     paasta_pool: str,
     service_account_name: Optional[str] = None,
     include_self_managed_configs: bool = True,
+    k8s_server_address: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -954,6 +955,10 @@ def _get_k8s_spark_env(
                 'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
             },
         )
+    elif not include_self_managed_configs:
+        spark_env.update({
+            'spark.master': f'k8s://{k8s_server_address}',
+        })
     elif include_self_managed_configs:
         spark_env.update(
             {
@@ -1097,6 +1102,7 @@ def get_spark_conf(
     aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
     extra_volumes: Optional[List[Mapping[str, str]]] = None,
     use_eks: bool = False,
+    k8s_server_address: Optional[str] = None,
     # the follow arguments only being used for mesos
     extra_docker_params: Optional[MutableMapping[str, str]] = None,
     with_secret: bool = True,
@@ -1205,6 +1211,7 @@ def get_spark_conf(
             paasta_pool,
             service_account_name=service_account_name,
             include_self_managed_configs=not use_eks,
+            k8s_server_address=k8s_server_address,
         ))
     elif cluster_manager == 'local':
         spark_conf.update(_get_local_spark_env(
