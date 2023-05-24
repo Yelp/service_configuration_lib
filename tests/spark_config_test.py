@@ -1252,7 +1252,6 @@ class TestGetSparkConf:
             'spark.kubernetes.authenticate.clientCertFile': (
                 f'{spark_config.K8S_AUTH_FOLDER}/{self.cluster}-client.crt'
             ),
-            'spark.kubernetes.container.image.pullPolicy': 'Always',
             'spark.kubernetes.executor.label.yelp.com/paasta_service': self.service,
             'spark.kubernetes.executor.label.yelp.com/paasta_instance': self.instance,
             'spark.kubernetes.executor.label.yelp.com/paasta_cluster': self.cluster,
