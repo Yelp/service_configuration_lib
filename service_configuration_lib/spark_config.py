@@ -841,6 +841,8 @@ def _get_k8s_spark_env(
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
     service_account_name: Optional[str] = None,
+    include_self_managed_configs: bool = True,
+    k8s_server_address: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -848,8 +850,8 @@ def _get_k8s_spark_env(
     _paasta_cluster = _get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
     _paasta_service = _get_k8s_resource_name_limit_size_with_hash(paasta_service)
     _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
+
     spark_env = {
-        'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
@@ -858,7 +860,6 @@ def _get_k8s_spark_env(
         'spark.kubernetes.pyspark.pythonVersion': '3',
         'spark.kubernetes.container.image': docker_img,
         'spark.kubernetes.namespace': 'paasta-spark',
-        'spark.kubernetes.container.image.pullPolicy': 'Always',
         'spark.kubernetes.executor.label.yelp.com/paasta_service': _paasta_service,
         'spark.kubernetes.executor.label.yelp.com/paasta_instance': _paasta_instance,
         'spark.kubernetes.executor.label.yelp.com/paasta_cluster': _paasta_cluster,
@@ -877,14 +878,20 @@ def _get_k8s_spark_env(
                 'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
             },
         )
-    else:
+    elif not include_self_managed_configs:
+        spark_env.update({
+            'spark.master': f'k8s://{k8s_server_address}',
+        })
+    elif include_self_managed_configs:
         spark_env.update(
             {
+                'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
                 'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
                 'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
                 'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
             },
         )
+
     return spark_env
 
 
@@ -1022,6 +1029,13 @@ def get_spark_conf(
     docker_img: str,
     aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
     extra_volumes: Optional[List[Mapping[str, str]]] = None,
+    use_eks: bool = False,
+    k8s_server_address: Optional[str] = None,
+    # the follow arguments only being used for mesos
+    extra_docker_params: Optional[MutableMapping[str, str]] = None,
+    with_secret: bool = True,
+    needs_docker_cfg: bool = False,
+    mesos_leader: Optional[str] = None,
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     aws_region: Optional[str] = None,
     service_account_name: Optional[str] = None,
@@ -1103,6 +1117,8 @@ def get_spark_conf(
             extra_volumes,
             paasta_pool,
             service_account_name=service_account_name,
+            include_self_managed_configs=not use_eks,
+            k8s_server_address=k8s_server_address,
         ))
     elif cluster_manager == 'local':
         spark_conf.update(_get_local_spark_env(
@@ -1153,6 +1169,16 @@ def compute_requested_memory_overhead(spark_opts: Mapping[str, str], executor_me
         parse_memory_string(spark_opts.get('spark.executor.memoryOverhead')),
         parse_memory_string(spark_opts.get('spark.mesos.executor.memoryOverhead')),
         float(spark_opts.get('spark.kubernetes.memoryOverheadFactor', 0)) * executor_memory,
+    )
+
+
+def get_grafana_url(spark_conf: Mapping[str, str]) -> str:
+    return (
+        'https://grafana.yelpcorp.com/d/b8f79180-bea8-4001-9d4a-94978b5a20b6/spark-on-paasta-job-status?orgId=1&'
+        f"var-paasta_cluster={spark_conf['spark.executorEnv.PAASTA_CLUSTER']}&"
+        f"var-service={spark_conf['spark.executorEnv.PAASTA_SERVICE']}&"
+        f"var-instance={spark_conf['spark.executorEnv.PAASTA_INSTANCE']}&"
+        'var-pod_name_spark=All'
     )
 
 

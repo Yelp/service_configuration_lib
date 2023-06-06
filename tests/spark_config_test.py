@@ -1258,7 +1258,6 @@ class TestGetSparkConf:
             'spark.kubernetes.authenticate.clientCertFile': (
                 f'{spark_config.K8S_AUTH_FOLDER}/{self.cluster}-client.crt'
             ),
-            'spark.kubernetes.container.image.pullPolicy': 'Always',
             'spark.kubernetes.executor.label.yelp.com/paasta_service': self.service,
             'spark.kubernetes.executor.label.yelp.com/paasta_instance': self.instance,
             'spark.kubernetes.executor.label.yelp.com/paasta_cluster': self.cluster,
@@ -1512,6 +1511,21 @@ def test_get_history_url(mock_spark_run_conf, spark_conf, expected_output):
 )
 def test_parse_memory_string(memory_string, expected_output):
     assert spark_config.parse_memory_string(memory_string) == expected_output
+
+
+def test_get_grafana_url():
+    spark_conf = {
+        'spark.executorEnv.PAASTA_CLUSTER': 'test-cluster',
+        'spark.executorEnv.PAASTA_SERVICE': 'test-service',
+        'spark.executorEnv.PAASTA_INSTANCE': 'test-instance',
+    }
+    assert spark_config.get_grafana_url(spark_conf) == (
+        'https://grafana.yelpcorp.com/d/b8f79180-bea8-4001-9d4a-94978b5a20b6/spark-on-paasta-job-status?orgId=1&'
+        'var-paasta_cluster=test-cluster&'
+        'var-service=test-service&'
+        'var-instance=test-instance&'
+        'var-pod_name_spark=All'
+    )
 
 
 def test_get_signalfx_url():
