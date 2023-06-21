@@ -69,7 +69,7 @@ spark_run_conf = {
     },
 }
 mp = MonkeyPatch()
-with open('spark_run.yaml', 'w+') as fp:
+with open('tmp_spark_srv_config.yaml', 'w+') as fp:
     fp.write(yaml.dump(spark_run_conf))
     mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
 
@@ -1776,3 +1776,6 @@ def test_send_and_calculate_resources_cost(
 )
 def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_instance_label):
     assert expected_instance_label == spark_config._get_k8s_resource_name_limit_size_with_hash(instance_name)
+
+
+os.remove('tmp_spark_srv_config.yaml')
