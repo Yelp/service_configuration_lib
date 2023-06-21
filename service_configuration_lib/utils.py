@@ -18,7 +18,10 @@ def load_spark_srv_conf(preset_values=None):
             default_spark_srv_conf = spark_constants['defaults']
             mandatory_default_spark_srv_conf = spark_constants['mandatory_defaults']
             spark_costs = spark_constants['cost_factor']
-            return spark_srv_conf, spark_constants, default_spark_srv_conf, mandatory_default_spark_srv_conf, spark_costs
+            return (
+                spark_srv_conf, spark_constants, default_spark_srv_conf,
+                mandatory_default_spark_srv_conf, spark_costs
+            )
     except Exception as e:
         log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
         raise e

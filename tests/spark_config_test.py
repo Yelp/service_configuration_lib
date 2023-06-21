@@ -65,7 +65,7 @@ spark_run_conf = {
             'spark.kubernetes.allocation.batch.size': 512,
             'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
             'spark.logConf': 'true',
-        }
+        },
     },
 }
 mp = MonkeyPatch()
@@ -73,7 +73,7 @@ with open('spark_run.yaml', 'w+') as fp:
     fp.write(yaml.dump(spark_run_conf))
     mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
 
-from service_configuration_lib import spark_config
+from service_configuration_lib import spark_config  # noreorder
 
 
 @pytest.fixture

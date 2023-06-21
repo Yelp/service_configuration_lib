@@ -77,8 +77,10 @@ SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
-(spark_srv_conf, spark_constants, default_spark_srv_conf,
- mandatory_default_spark_srv_conf, spark_costs) = load_spark_srv_conf()
+(
+    spark_srv_conf, spark_constants, default_spark_srv_conf,
+    mandatory_default_spark_srv_conf, spark_costs,
+) = load_spark_srv_conf()
 
 
 class UnsupportedClusterManagerException(Exception):
