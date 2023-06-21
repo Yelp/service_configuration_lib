@@ -8,11 +8,72 @@ from unittest import mock
 import pytest
 import requests
 import yaml
+from service_configuration_lib import utils
 
-from service_configuration_lib import spark_config
-from service_configuration_lib.spark_config import UnsupportedClusterManagerException
+from pytest import MonkeyPatch
 
 TEST_ACCOUNT_ID = '123456789'
+
+spark_run_conf = {
+    'environments': {
+        'testing': {
+            'account_id': TEST_ACCOUNT_ID,
+            'default_event_log_dir': 's3a://test/eventlog',
+            'history_server': 'https://spark-history-testing',
+        },
+    },
+    'spark_constants': {
+        'target_mem_cpu_ratio': 7,
+        'resource_configs': {
+            'recommended': {
+                'cpu': 4,
+                'mem': 28,
+            },
+            'medium': {
+                'cpu': 8,
+                'mem': 56,
+            },
+            'max': {
+                'cpu': 12,
+                'mem': 110,
+            },
+        },
+        'cost_factor': {
+            'test-cluster': {
+                'test-pool': 100,
+            },
+            'spark-pnw-prod': {
+                'batch': 0.041,
+                'stable_batch': 0.142,
+            },
+        },
+        'adjust_executor_res_ratio_thresh': 99999,
+        'default_resources_waiting_time_per_executor': 2,
+        'default_clusterman_observed_scaling_time': 15,
+        'high_cost_threshold_daily': 500,
+        'defaults': {
+            'spark.executor.cores': 4,
+            'spark.executor.instances': 2,
+            'spark.executor.memory': 28,
+            'spark.task.cpus': 1,
+            'spark.sql.shuffle.partitions': 128,
+            'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+            'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+            'spark.yelp.dra.minExecutorRatio': 0.25,
+        },
+        'mandatory_defaults': {
+            'spark.kubernetes.allocation.batch.size': 512,
+            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+            'spark.logConf': 'true',
+        }
+    },
+}
+mp = MonkeyPatch()
+with open('spark_run.yaml', 'w+') as fp:
+    fp.write(yaml.dump(spark_run_conf))
+    mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
+
+from service_configuration_lib import spark_config
 
 
 @pytest.fixture
@@ -20,57 +81,6 @@ def mock_log(monkeypatch):
     mock_log = mock.Mock()
     monkeypatch.setattr(spark_config, 'log', mock_log)
     return mock_log
-
-
-@pytest.fixture
-def mock_spark_run_conf(tmpdir, monkeypatch):
-    spark_run_conf = {
-        'environments': {
-            'testing': {
-                'account_id': TEST_ACCOUNT_ID,
-                'default_event_log_dir': 's3a://test/eventlog',
-                'history_server': 'https://spark-history-testing',
-            },
-        },
-        'spark_constants': {
-            'target_mem_cpu_ratio': 7,
-            'defaults': {
-                'spark.executor.cores': 4,
-                'spark.executor.instances': 2,
-                'spark.executor.memory': 28,
-                'spark.task.cpus': 1,
-                'spark.sql.shuffle.partitions': 128,
-                'spark.dynamicAllocation.executorAllocationRatio': 0.8,
-                'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-                'spark.yelp.dra.minExecutorRatio': 0.25,
-            },
-            'resource_configs': {
-                'recommended': {
-                    'cpu': 4,
-                    'mem': 28,
-                },
-                'medium': {
-                    'cpu': 8,
-                    'mem': 56,
-                },
-                'max': {
-                    'cpu': 12,
-                    'mem': 110,
-                },
-            },
-            'cost_factor': {
-                'test-cluster': {
-                    'test-pool': 100,
-                },
-            },
-            'high_cost_threshold_daily': 500,
-        },
-    }
-    fp = tmpdir.join('spark_run.yaml')
-    fp.write(yaml.dump(spark_run_conf))
-    monkeypatch.setattr(spark_config, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
-    spark_config._load_spark_srv_conf(spark_run_conf)
-    return spark_run_conf
 
 
 @pytest.fixture
@@ -868,7 +878,6 @@ class TestGetSparkConf:
     )
     def test_append_event_log_conf(
         self,
-        mock_spark_run_conf,
         mock_account_id,
         user_spark_opts,
         aws_creds,
@@ -1061,6 +1070,16 @@ class TestGetSparkConf:
             'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
         }
         with MockConfigFunction('get_dra_configs', return_value) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_update_spark_srv_configs(self):
+        return_value = {
+            'spark.kubernetes.allocation.batch.size': 512,
+            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+            'spark.logConf': 'true',
+        }
+        with MockConfigFunction('update_spark_srv_configs', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1293,6 +1312,7 @@ class TestGetSparkConf:
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
+        mock_update_spark_srv_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1417,6 +1437,7 @@ class TestGetSparkConf:
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
+        mock_update_spark_srv_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1462,22 +1483,6 @@ class TestGetSparkConf:
             mock.ANY,
         )
 
-    def test_get_spark_conf_mesos_error(self):
-        with pytest.raises(UnsupportedClusterManagerException):
-            spark_config.get_spark_conf(
-                cluster_manager='mesos',
-                spark_app_base_name=self.spark_app_base_name,
-                user_spark_opts={},
-                paasta_cluster=self.cluster,
-                paasta_pool=self.pool,
-                paasta_service=self.service,
-                paasta_instance=self.instance,
-                docker_img=self.docker_image,
-                aws_creds=(None, None, None),
-                extra_volumes=[],
-                force_spark_resource_configs=False,
-            )
-
 
 def test_stringify_spark_env():
     conf = {'spark.mesos.leader': '1234', 'spark.mesos.principal': 'spark'}
@@ -1499,7 +1504,7 @@ def test_stringify_spark_env():
         ),
     ],
 )
-def test_get_history_url(mock_spark_run_conf, spark_conf, expected_output):
+def test_get_history_url(spark_conf, expected_output):
     assert spark_config.get_history_url(spark_conf) == expected_output
 
 

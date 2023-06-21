@@ -23,13 +23,13 @@ import yaml
 from boto3 import Session
 
 from service_configuration_lib.text_colors import TextColors
+from service_configuration_lib.utils import load_spark_srv_conf
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
 GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
 DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
-DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 DEFAULT_SPARK_SERVICE = 'spark'
 GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
@@ -77,33 +77,8 @@ SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
-
-# Spark srv-configs
-spark_srv_conf = dict()
-spark_constants = dict()
-default_spark_srv_conf = dict()
-mandatory_default_spark_srv_conf = dict()
-spark_costs = dict()
-
-
-def _load_spark_srv_conf(preset_values=None):
-    if preset_values is None:
-        preset_values = dict()
-    global spark_srv_conf, spark_constants, default_spark_srv_conf, mandatory_default_spark_srv_conf, spark_costs
-    try:
-        with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
-            loaded_values = yaml.safe_load(fp.read())
-            spark_srv_conf = {**preset_values, **loaded_values}
-            spark_constants = spark_srv_conf.get('spark_constants', dict())
-            default_spark_srv_conf = spark_constants.get('defaults', dict())
-            mandatory_default_spark_srv_conf = spark_constants.get('mandatory_defaults', dict())
-            spark_costs = spark_constants.get('cost_factor', dict())
-    except Exception as e:
-        log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
-        raise e
-
-
-_load_spark_srv_conf()
+(spark_srv_conf, spark_constants, default_spark_srv_conf,
+ mandatory_default_spark_srv_conf, spark_costs) = load_spark_srv_conf()
 
 
 class UnsupportedClusterManagerException(Exception):
