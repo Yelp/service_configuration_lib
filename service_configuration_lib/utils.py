@@ -1,4 +1,5 @@
 import logging
+
 import yaml
 
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
@@ -20,7 +21,7 @@ def load_spark_srv_conf(preset_values=None):
             spark_costs = spark_constants['cost_factor']
             return (
                 spark_srv_conf, spark_constants, default_spark_srv_conf,
-                mandatory_default_spark_srv_conf, spark_costs
+                mandatory_default_spark_srv_conf, spark_costs,
             )
     except Exception as e:
         log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')

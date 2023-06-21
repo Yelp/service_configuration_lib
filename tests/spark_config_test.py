@@ -8,9 +8,9 @@ from unittest import mock
 import pytest
 import requests
 import yaml
-from service_configuration_lib import utils
-
 from pytest import MonkeyPatch
+
+from service_configuration_lib import utils
 
 TEST_ACCOUNT_ID = '123456789'
 
@@ -73,7 +73,7 @@ with open('spark_run.yaml', 'w+') as fp:
     fp.write(yaml.dump(spark_run_conf))
     mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
 
-from service_configuration_lib import spark_config  # noreorder
+from service_configuration_lib import spark_config  # noqa
 
 
 @pytest.fixture
