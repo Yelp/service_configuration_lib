@@ -73,6 +73,7 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 ]
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
+DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -182,43 +183,6 @@ def _pick_random_port(app_name):
     hash_number = int(hashlib.sha1(hash_key).hexdigest(), 16)
     preferred_port = 33000 + (hash_number % 25000)
     return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
-
-
-def _get_mesos_docker_volumes_conf(
-    spark_opts: Mapping[str, str],
-    extra_volumes: Optional[List[Mapping[str, str]]] = None,
-    load_paasta_default_volumes: bool = False,
-) -> Dict[str, str]:
-    """return volume str to be configured for spark.mesos.executor.docker.volume
-    if no extra_volumes and volumes_from_spark_opts, it will read from
-    DEFAULT_PAASTA_VOLUME_PATH and parse it.
-
-    Also spark required to have `/etc/passwd` and `/etc/group` being mounted as
-    well. This will ensure it does have those files in the list.
-    """
-    volume_str = spark_opts.get('spark.mesos.executor.docker.volumes')
-    volumes = volume_str.split(',') if volume_str else []
-
-    if load_paasta_default_volumes:
-        with open(DEFAULT_PAASTA_VOLUME_PATH) as fp:
-            extra_volumes = (extra_volumes or []) + json.load(fp)['volumes']
-
-    for volume in (extra_volumes or []):
-        if os.path.exists(volume['hostPath']):
-            volumes.append(f"{volume['hostPath']}:{volume['containerPath']}:{volume['mode'].lower()}")
-        else:
-            log.warning(f"Path {volume['hostPath']} does not exist on this host. Skipping this bindings.")
-
-    distinct_volumes = set(volumes)
-
-    # docker.parameters user needs /etc/passwd and /etc/group to be mounted
-    for required in ['/etc/passwd', '/etc/group']:
-        full_mount_str = f'{required}:{required}:ro'
-        if full_mount_str not in distinct_volumes:
-            distinct_volumes.add(full_mount_str)
-
-    volume_str = ','.join(distinct_volumes)  # ensure we don't have duplicated files
-    return {'spark.mesos.executor.docker.volumes': volume_str}
 
 
 def _get_k8s_docker_volumes_conf(
@@ -1008,11 +972,6 @@ def get_spark_conf(
     extra_volumes: Optional[List[Mapping[str, str]]] = None,
     use_eks: bool = False,
     k8s_server_address: Optional[str] = None,
-    # the follow arguments only being used for mesos
-    extra_docker_params: Optional[MutableMapping[str, str]] = None,
-    with_secret: bool = True,
-    needs_docker_cfg: bool = False,
-    mesos_leader: Optional[str] = None,
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
     aws_region: Optional[str] = None,
     service_account_name: Optional[str] = None,

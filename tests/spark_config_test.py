@@ -250,57 +250,6 @@ class TestGetSparkConf:
         with mock.patch('os.path.exists', side_effect=lambda f: f in existed_files):
             yield existed_files
 
-    @pytest.mark.parametrize(
-        'original_volumes', [
-            None,
-            [
-                '/host/file1:/containter/file1:ro',
-                '/host/file2:/containter/file2:ro',
-                '/host/paasta1:/container/paasta1:ro',
-            ],
-        ],
-    )
-    @pytest.mark.parametrize('load_paasta_volumes', [True, False])
-    @pytest.mark.parametrize(
-        'extra_volumes', [
-            None,
-            [
-                {'hostPath': '/host/file1', 'containerPath': '/container/file1', 'mode': 'RO'},
-                {'hostPath': '/host/file3', 'containerPath': '/container/file3', 'mode': 'RW'},
-                {'hostPath': '/host/not_exist', 'containerPath': '/container/not_exist', 'mode': 'RW'},
-            ],
-        ],
-    )
-    def test_get_mesos_docker_volumes_conf(
-        self,
-        load_paasta_volumes,
-        original_volumes,
-        extra_volumes,
-        mock_existed_files,
-        mock_paasta_volumes,
-    ):
-        validate_key = 'spark.mesos.executor.docker.volumes'
-        expected_volumes = [
-            '/etc/passwd:/etc/passwd:ro', '/etc/group:/etc/group:ro',
-        ]
-        if load_paasta_volumes:
-            expected_volumes.extend(mock_paasta_volumes)
-        if original_volumes:
-            expected_volumes.extend(original_volumes)
-        if extra_volumes:
-            expected_volumes.extend([
-                f"{v['hostPath']}:{v['containerPath']}:{v['mode'].lower()}"
-                for v in extra_volumes
-                if v['hostPath'] in mock_existed_files
-            ])
-
-        spark_conf = {validate_key: ','.join(original_volumes)} if original_volumes else {}
-
-        output = spark_config._get_mesos_docker_volumes_conf(
-            spark_conf, extra_volumes, load_paasta_volumes,
-        )
-        assert sorted(output[validate_key].split(',')) == sorted(set(expected_volumes))
-
     def test_get_k8s_volume_hostpath_dict(self):
         assert spark_config._get_k8s_volume_hostpath_dict(
             '/host/file1', '/container/file1', 'RO', itertools.count(),
