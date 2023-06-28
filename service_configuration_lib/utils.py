@@ -1,4 +1,6 @@
 import logging
+from typing import Mapping
+from typing import Tuple
 
 import yaml
 
@@ -8,7 +10,7 @@ log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
 
-def load_spark_srv_conf(preset_values=None):
+def load_spark_srv_conf(preset_values=None) -> Tuple[Mapping, Mapping, Mapping, Mapping, Mapping]:
     if preset_values is None:
         preset_values = dict()
     try:
