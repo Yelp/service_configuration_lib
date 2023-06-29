@@ -23,13 +23,13 @@ import yaml
 from boto3 import Session
 
 from service_configuration_lib.text_colors import TextColors
+from service_configuration_lib.utils import load_spark_srv_conf
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
 GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
 DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
-DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 DEFAULT_SPARK_SERVICE = 'spark'
 GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
@@ -72,33 +72,16 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
     {'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'},
 ]
 
-SUPPORTED_CLUSTER_MANAGERS = ['mesos', 'kubernetes', 'local']
+SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
+DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
-
-# Spark srv-configs
-spark_srv_conf = dict()
-spark_constants = dict()
-default_spark_conf = dict()
-spark_costs = dict()
-
-
-def _load_spark_srv_conf(preset_values: Dict[str, Any] = dict()):
-    global spark_srv_conf, spark_constants, default_spark_conf, spark_costs
-    try:
-        with open(DEFAULT_SPARK_RUN_CONFIG) as fp:
-            loaded_values = yaml.safe_load(fp.read())
-            spark_srv_conf = {**preset_values, **loaded_values}
-            spark_constants = spark_srv_conf.get('spark_constants', dict())
-            default_spark_conf = spark_constants.get('defaults', dict())
-            spark_costs = spark_constants.get('cost_factor', dict())
-    except Exception as e:
-        log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
-
-
-_load_spark_srv_conf()
+(
+    spark_srv_conf, spark_constants, default_spark_srv_conf,
+    mandatory_default_spark_srv_conf, spark_costs,
+) = load_spark_srv_conf()
 
 
 class UnsupportedClusterManagerException(Exception):
@@ -202,43 +185,6 @@ def _pick_random_port(app_name):
     return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
 
 
-def _get_mesos_docker_volumes_conf(
-    spark_opts: Mapping[str, str],
-    extra_volumes: Optional[List[Mapping[str, str]]] = None,
-    load_paasta_default_volumes: bool = False,
-) -> Dict[str, str]:
-    """return volume str to be configured for spark.mesos.executor.docker.volume
-    if no extra_volumes and volumes_from_spark_opts, it will read from
-    DEFAULT_PAASTA_VOLUME_PATH and parse it.
-
-    Also spark required to have `/etc/passwd` and `/etc/group` being mounted as
-    well. This will ensure it does have those files in the list.
-    """
-    volume_str = spark_opts.get('spark.mesos.executor.docker.volumes')
-    volumes = volume_str.split(',') if volume_str else []
-
-    if load_paasta_default_volumes:
-        with open(DEFAULT_PAASTA_VOLUME_PATH) as fp:
-            extra_volumes = (extra_volumes or []) + json.load(fp)['volumes']
-
-    for volume in (extra_volumes or []):
-        if os.path.exists(volume['hostPath']):
-            volumes.append(f"{volume['hostPath']}:{volume['containerPath']}:{volume['mode'].lower()}")
-        else:
-            log.warning(f"Path {volume['hostPath']} does not exist on this host. Skipping this bindings.")
-
-    distinct_volumes = set(volumes)
-
-    # docker.parameters user needs /etc/passwd and /etc/group to be mounted
-    for required in ['/etc/passwd', '/etc/group']:
-        full_mount_str = f'{required}:{required}:ro'
-        if full_mount_str not in distinct_volumes:
-            distinct_volumes.add(full_mount_str)
-
-    volume_str = ','.join(distinct_volumes)  # ensure we don't have duplicated files
-    return {'spark.mesos.executor.docker.volumes': volume_str}
-
-
 def _get_k8s_docker_volumes_conf(
     volumes: Optional[List[Mapping[str, str]]] = None,
 ):
@@ -283,27 +229,30 @@ def _append_spark_config(spark_opts: Dict[str, str], config_name: str, config_va
 
 
 def _append_sql_partitions_conf(spark_opts: Dict[str, str]) -> Dict[str, str]:
-    num_partitions = 3 * (
-        int(spark_opts.get('spark.cores.max', 0)) or
-        int(spark_opts.get('spark.executor.instances', 0)) *
-        int(spark_opts.get('spark.executor.cores', default_spark_conf.get('spark.executor.cores', 2)))
-    )
-
-    if (
-        'spark.dynamicAllocation.enabled' in spark_opts and
-        str(spark_opts['spark.dynamicAllocation.enabled']) == 'true' and
-        'spark.dynamicAllocation.maxExecutors' in spark_opts and
-        str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
-    ):
-
-        num_partitions_dra = (
-            int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
-            int(spark_opts.get('spark.executor.cores', default_spark_conf.get('spark.executor.cores', 2)))
+    if 'spark.sql.shuffle.partitions' not in spark_opts:
+        num_partitions = 3 * (
+            int(spark_opts.get('spark.cores.max', 0)) or
+            (int(spark_opts.get('spark.executor.instances', 0)) *
+             int(spark_opts.get('spark.executor.cores', default_spark_srv_conf['spark.executor.cores'])))
         )
-        num_partitions = max(num_partitions, num_partitions_dra)
 
-    num_partitions = num_partitions or default_spark_conf.get('spark.sql.shuffle.partitions', 128)
-    _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
+        if (
+            'spark.dynamicAllocation.enabled' in spark_opts and
+            str(spark_opts['spark.dynamicAllocation.enabled']) == 'true' and
+            'spark.dynamicAllocation.maxExecutors' in spark_opts and
+            str(spark_opts['spark.dynamicAllocation.maxExecutors']) != 'infinity'
+        ):
+
+            num_partitions_dra = 3 * (
+                int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
+                int(spark_opts.get('spark.executor.cores', default_spark_srv_conf['spark.executor.cores']))
+            )
+            num_partitions = max(num_partitions, num_partitions_dra)
+
+        num_partitions = num_partitions or default_spark_srv_conf['spark.sql.shuffle.partitions']
+        _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
+    else:
+        num_partitions = int(spark_opts['spark.sql.shuffle.partitions'])
     _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
     _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
@@ -336,9 +285,9 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     _append_spark_config(spark_opts, 'spark.dynamicAllocation.shuffleTracking.enabled', 'true')
     _append_spark_config(
         spark_opts, 'spark.dynamicAllocation.executorAllocationRatio',
-        str(default_spark_conf.get('spark.dynamicAllocation.executorAllocationRatio', 0.8)),
+        str(default_spark_srv_conf['spark.dynamicAllocation.executorAllocationRatio']),
     )
-    cached_executor_idle_timeout = default_spark_conf.get('spark.dynamicAllocation.cachedExecutorIdleTimeout', '1500s')
+    cached_executor_idle_timeout = default_spark_srv_conf['spark.dynamicAllocation.cachedExecutorIdleTimeout']
     if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
         if _is_jupyterhub_job(spark_app_name):
             # increase cachedExecutorIdleTimeout by 15 minutes in case of Jupyterhub
@@ -357,7 +306,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
     )
 
     min_ratio_executors = None
-    default_dra_min_executor_ratio = default_spark_conf.get('spark.yelp.dra.minExecutorRatio', 0.25)
+    default_dra_min_executor_ratio = default_spark_srv_conf['spark.yelp.dra.minExecutorRatio']
     if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
         # the ratio of total executors to be used as minExecutors
         min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', default_dra_min_executor_ratio)
@@ -365,7 +314,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         num_instances = int(
             spark_opts.get(
                 'spark.executor.instances',
-                default_spark_conf.get('spark.executor.instances', 2),
+                default_spark_srv_conf['spark.executor.instances'],
             ),
         )
         min_executors = int(num_instances * float(min_executor_ratio))
@@ -412,7 +361,7 @@ def get_dra_configs(spark_opts: Dict[str, str]) -> Dict[str, str]:
         max_executors = int(
             spark_opts.get(
                 'spark.executor.instances',
-                default_spark_conf.get('spark.executor.instances', 2),
+                default_spark_srv_conf['spark.executor.instances'],
             ),
         )
         # maxExecutors should not be less than initialExecutors
@@ -516,7 +465,7 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
-            default_spark_conf.get('spark.executor.cores', 2),
+            default_spark_srv_conf['spark.executor.cores'],
         ),
     )
 
@@ -529,8 +478,9 @@ def compute_executor_instances_k8s(user_spark_opts: Dict[str, str]) -> int:
         # spark.executor.instances and spark.cores.max not provided, the executor instances should at least
         # be equal to `default_executor_instances`.
         executor_instances = max(
-            default_spark_conf.get('spark.cores.max', 4) // executor_cores,
-            default_spark_conf.get('spark.executor.instances', 2),
+            (default_spark_srv_conf['spark.executor.instances'] *
+             default_spark_srv_conf['spark.executor.cores']) // executor_cores,
+            default_spark_srv_conf['spark.executor.instances'],
         )
 
     # Deprecation message
@@ -549,8 +499,8 @@ def _cap_executor_resources(
     executor_memory: str,
     memory_mb: int,
 ) -> Tuple[int, str]:
-    max_cores = spark_constants.get('resource_configs', {}).get('max', {}).get('cpu', 12)
-    max_memory_gb = spark_constants.get('resource_configs', {}).get('max', {}).get('mem', 110)
+    max_cores = spark_constants.get('resource_configs', {}).get('max', {})['cpu']
+    max_memory_gb = spark_constants.get('resource_configs', {}).get('max', {})['mem']
 
     warning_title = 'Capped Executor Resources based on maximun available aws nodes'
     warning_title_printed = False
@@ -582,23 +532,23 @@ def _recalculate_executor_resources(
     executor_cores = int(
         user_spark_opts.get(
             'spark.executor.cores',
-            default_spark_conf.get('spark.executor.cores', 2),
+            default_spark_srv_conf['spark.executor.cores'],
         ),
     )
     executor_memory = user_spark_opts.get(
         'spark.executor.memory',
-        f'{default_spark_conf.get("spark.executor.memory", 28)}g',
+        f'{default_spark_srv_conf["spark.executor.memory"]}g',
     )
     executor_instances = int(
         user_spark_opts.get(
             'spark.executor.instances',
-            default_spark_conf.get('spark.executor.instances', 2),
+            default_spark_srv_conf['spark.executor.instances'],
         ),
     )
     task_cpus = int(
         user_spark_opts.get(
             'spark.task.cpus',
-            default_spark_conf.get('spark.task.cpus', 1),
+            default_spark_srv_conf['spark.task.cpus'],
         ),
     )
 
@@ -626,7 +576,7 @@ def _recalculate_executor_resources(
         if memory > ratio_adj_thresh:
             return cpu, f'{memory}g', instances, task_cpus
 
-        target_mem_cpu_ratio = spark_constants.get('target_mem_cpu_ratio', 7)
+        target_mem_cpu_ratio = spark_constants['target_mem_cpu_ratio']
 
         new_cpu: int
         new_memory: int
@@ -659,11 +609,11 @@ def _recalculate_executor_resources(
         return new_cpu, f'{new_memory}g', new_instances, task_cpus
 
     # Constants
-    recommended_memory_gb = spark_constants.get('resource_configs', {}).get('recommended', {}).get('mem', 28)
-    medium_cores = spark_constants.get('resource_configs', {}).get('medium', {}).get('cpu', 8)
-    medium_memory_mb = spark_constants.get('resource_configs', {}).get('medium', {}).get('mem', 56)
-    max_cores = spark_constants.get('resource_configs', {}).get('max', {}).get('cpu', 12)
-    max_memory_gb = spark_constants.get('resource_configs', {}).get('max', {}).get('mem', 110)
+    recommended_memory_gb = spark_constants.get('resource_configs', {}).get('recommended', {})['mem']
+    medium_cores = spark_constants.get('resource_configs', {}).get('medium', {})['cpu']
+    medium_memory_mb = spark_constants.get('resource_configs', {}).get('medium', {})['mem']
+    max_cores = spark_constants.get('resource_configs', {}).get('max', {})['cpu']
+    max_memory_gb = spark_constants.get('resource_configs', {}).get('max', {})['mem']
 
     if memory_gb > max_memory_gb or executor_cores > max_cores:
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
@@ -711,23 +661,15 @@ def _adjust_spark_requested_resources(
     cluster_manager: str,
     pool: str,
     force_spark_resource_configs: bool = False,
-    ratio_adj_thresh: int = spark_constants.get('adjust_executor_res_ratio_thresh', 14),
+    ratio_adj_thresh: int = spark_constants['adjust_executor_res_ratio_thresh'],
 ) -> Dict[str, str]:
     executor_cores = int(
         user_spark_opts.setdefault(
             'spark.executor.cores',
-            str(default_spark_conf.get('spark.executor.cores', 2)),
+            str(default_spark_srv_conf['spark.executor.cores']),
         ),
     )
-    if cluster_manager == 'mesos':
-        max_cores = int(
-            user_spark_opts.setdefault(
-                'spark.cores.max',
-                str(default_spark_conf.get('spark.cores.max', 4)),
-            ),
-        )
-        executor_instances = max_cores / executor_cores
-    elif cluster_manager == 'kubernetes':
+    if cluster_manager == 'kubernetes':
         executor_instances = compute_executor_instances_k8s(user_spark_opts)
         user_spark_opts.setdefault('spark.executor.instances', str(executor_instances))
         max_cores = executor_instances * executor_cores
@@ -736,14 +678,10 @@ def _adjust_spark_requested_resources(
             'spark.executor.memoryOverhead' not in user_spark_opts
         ):
             user_spark_opts['spark.executor.memoryOverhead'] = user_spark_opts['spark.mesos.executor.memoryOverhead']
-        user_spark_opts.setdefault(
-            'spark.kubernetes.allocation.batch.size',
-            str(default_spark_conf.get('spark.kubernetes.allocation.batch.size', 512)),
-        )
         user_spark_opts.setdefault('spark.kubernetes.executor.limit.cores', str(executor_cores))
         waiting_time = (
-            spark_constants.get('default_clusterman_observed_scaling_time', 15) +
-            executor_instances * spark_constants.get('default_resources_waiting_time_per_executor', 2) // 60
+            spark_constants['default_clusterman_observed_scaling_time'] +
+            executor_instances * spark_constants['default_resources_waiting_time_per_executor'] // 60
         )
         user_spark_opts.setdefault(
             'spark.scheduler.maxRegisteredResourcesWaitingTime',
@@ -753,7 +691,7 @@ def _adjust_spark_requested_resources(
         executor_instances = int(
             user_spark_opts.setdefault(
                 'spark.executor.instances',
-                str(default_spark_conf.get('spark.executor.instances', 2)),
+                str(default_spark_srv_conf['spark.executor.instances']),
             ),
         )
         max_cores = executor_instances * executor_cores
@@ -763,6 +701,7 @@ def _adjust_spark_requested_resources(
     if max_cores < executor_cores:
         raise ValueError(f'Total number of cores {max_cores} is less than per-executor cores {executor_cores}')
 
+    # TODO: replace this with kubernetes specific config
     num_gpus = int(user_spark_opts.get('spark.mesos.gpus.max', '0'))
     task_cpus = int(user_spark_opts.get('spark.task.cpus', '1'))
     # we can skip this step if user is not using gpu or do not configure
@@ -770,31 +709,26 @@ def _adjust_spark_requested_resources(
     if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
         return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
 
-    if num_gpus != 0 and cluster_manager != 'mesos':
-        raise ValueError('spark.mesos.gpus.max is only available for mesos')
-
     if num_gpus > GPUS_HARD_LIMIT:
         raise ValueError(
             'Requested {num_gpus} GPUs, which exceeds hard limit of {GPUS_HARD_LIMIT}',
         )
-    gpus_per_inst = 0
-    cpus_per_inst = 0
 
     with open(GPU_POOLS_YAML_FILE_PATH) as fp:
         pool_def = yaml.safe_load(fp).get(pool)
 
-    if pool_def is not None:
-        gpus_per_inst = int(pool_def['gpus_per_instance'])
-        cpus_per_inst = int(pool_def['cpus_per_instance'])
-        if gpus_per_inst == 0 or cpus_per_inst == 0:
-            raise ValueError(
-                'Unable to adjust spark.task.cpus and spark.executor.cores because '
-                f'pool {pool} does not appear to have any GPUs and/or CPUs',
-            )
-    else:
+    if pool_def is None:
         raise ValueError(
             'Unable to adjust spark.task.cpus and spark.executor.cores because '
             f"pool \"{pool}\" not found in gpu_pools",
+        )
+
+    gpus_per_inst = int(pool_def['gpus_per_instance'])
+    cpus_per_inst = int(pool_def['cpus_per_instance'])
+    if gpus_per_inst == 0 or cpus_per_inst == 0:
+        raise ValueError(
+            'Unable to adjust spark.task.cpus and spark.executor.cores because '
+            f'pool {pool} does not appear to have any GPUs and/or CPUs',
         )
 
     instances = num_gpus // gpus_per_inst
@@ -807,10 +741,7 @@ def _adjust_spark_requested_resources(
 
     cpus_per_gpu = cpus_per_inst // gpus_per_inst
     total_cpus = cpus_per_gpu * num_gpus
-    num_cpus = (
-        int(max_cores) if cluster_manager == 'mesos'
-        else int(executor_instances) * int(executor_cores)
-    )
+    num_cpus = int(executor_instances) * int(executor_cores)
     if num_cpus != total_cpus:
         log.warning(
             f'spark.cores.max has been adjusted to {total_cpus}. '
@@ -841,73 +772,6 @@ def find_spark_master(paasta_cluster):
     except requests.RequestException:
         raise ValueError(f'Cannot find spark master for cluster {paasta_cluster}')
     return f'mesos://{urlparse(response.url).hostname}:5050'
-
-
-def _get_mesos_spark_env(
-    user_spark_opts: Mapping[str, Any],
-    paasta_cluster: str,
-    paasta_pool: str,
-    paasta_service: str,
-    paasta_instance: str,
-    docker_img: str,
-    extra_volumes: Optional[List[Mapping[str, str]]],
-    extra_docker_params: Optional[Mapping[str, str]],
-    with_secret: bool,
-    needs_docker_cfg: bool,
-    mesos_leader: Optional[str],
-    load_paasta_default_volumes: bool,
-) -> Dict[str, str]:
-
-    if mesos_leader is None:
-        mesos_leader = find_spark_master(paasta_cluster)
-    else:
-        mesos_leader = f'mesos://{mesos_leader}'
-
-    docker_parameters = [
-        # Limit a container's cpu usage
-        f"cpus={user_spark_opts['spark.executor.cores']}",
-        f'label=paasta_service={paasta_service}',
-        f'label=paasta_instance={paasta_instance}',
-    ]
-    if extra_docker_params:
-        docker_parameters.extend(f'{key}={value}' for key, value in extra_docker_params.items())
-
-    auth_configs = {}
-    if with_secret:
-        try:
-            with open(DEFAULT_SPARK_MESOS_SECRET_FILE, 'r') as f:
-                secret = f.read()
-        except IOError as e:
-            log.error(
-                'Cannot load mesos secret from %s' % DEFAULT_SPARK_MESOS_SECRET_FILE,
-            )
-            raise ValueError(str(e))
-        auth_configs = {'spark.mesos.secret': secret}
-
-    spark_env = {
-        'spark.master': mesos_leader,
-        'spark.executorEnv.PAASTA_SERVICE': paasta_service,
-        'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
-        'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
-        'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
-        'spark.executorEnv.SPARK_USER': 'root',
-        'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
-        'spark.mesos.executor.docker.parameters': ','.join(docker_parameters),
-        'spark.mesos.executor.docker.image': docker_img,
-        'spark.mesos.constraints': f'pool:{paasta_pool}',
-        'spark.mesos.executor.docker.forcePullImage': 'true',
-        'spark.mesos.principal': 'spark',
-        'spark.shuffle.useOldFetchProtocol': 'true',
-        **auth_configs,
-        **_get_mesos_docker_volumes_conf(
-            user_spark_opts, extra_volumes,
-            load_paasta_default_volumes,
-        ),
-    }
-    if needs_docker_cfg:
-        spark_env['spark.mesos.uris'] = 'file:///root/.dockercfg'
-
-    return spark_env
 
 
 def _get_k8s_spark_env(
@@ -1043,14 +907,23 @@ def _convert_user_spark_opts_value_to_str(user_spark_opts: Mapping[str, Any]) ->
     return output
 
 
-def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
+def update_spark_srv_configs(spark_conf: MutableMapping[str, str]):
+    additional_conf = {k: v for k, v in mandatory_default_spark_srv_conf.items() if k not in spark_conf}
+    spark_conf.update(additional_conf)
+
+
+def compute_approx_hourly_cost_dollars(
+        spark_conf: Mapping[str, str],
+        paasta_cluster: str,
+        paasta_pool: str,
+) -> Tuple[float, float]:
     per_executor_cores = int(spark_conf.get(
         'spark.executor.cores',
-        default_spark_conf.get('spark.executor.cores', 2),
+        default_spark_srv_conf['spark.executor.cores'],
     ))
     max_cores = per_executor_cores * (int(spark_conf.get(
         'spark.executor.instances',
-        default_spark_conf.get('spark.executor.instances', 2),
+        default_spark_srv_conf['spark.executor.instances'],
     )))
     min_cores = max_cores
     if 'spark.dynamicAllocation.enabled' in spark_conf and spark_conf['spark.dynamicAllocation.enabled'] == 'true':
@@ -1061,15 +934,11 @@ def compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool):
             spark_conf.get('spark.dynamicAllocation.minExecutors', min_cores),
         ))
 
-    if paasta_pool == 'batch':
-        default_cost_factor = 0.041
-    else:
-        default_cost_factor = 0.142
-    cost_factor = spark_costs.get(paasta_cluster, dict()).get(paasta_pool, default_cost_factor)
+    cost_factor = spark_costs.get(paasta_cluster, dict())[paasta_pool]
 
     min_dollars = round(min_cores * cost_factor, 5)
     max_dollars = round(max_cores * cost_factor, 5)
-    if max_dollars * 24 > spark_constants.get('high_cost_threshold_daily', 500):
+    if max_dollars * 24 > spark_constants['high_cost_threshold_daily']:
         log.warning(
             TextColors.red(
                 TextColors.bold(
@@ -1103,13 +972,7 @@ def get_spark_conf(
     extra_volumes: Optional[List[Mapping[str, str]]] = None,
     use_eks: bool = False,
     k8s_server_address: Optional[str] = None,
-    # the follow arguments only being used for mesos
-    extra_docker_params: Optional[MutableMapping[str, str]] = None,
-    with_secret: bool = True,
-    needs_docker_cfg: bool = False,
-    mesos_leader: Optional[str] = None,
     spark_opts_from_env: Optional[Mapping[str, str]] = None,
-    load_paasta_default_volumes: bool = False,
     aws_region: Optional[str] = None,
     service_account_name: Optional[str] = None,
     force_spark_resource_configs: bool = True,
@@ -1130,20 +993,10 @@ def get_spark_conf(
     :param aws_creds: the aws creds to be used for this spark job. If a key triplet is passed,
         we configure a different credentials provider to support this workflow.
     :param extra_volumes: extra files to mount on the spark executors
-    :param extra_docker_params: extra docker parameters to launch the spark executor
-        container. This is only being used when `cluster_manager` is set to `mesos`
-    :param with_secret: whether the output spark config should include mesos secrets.
-        This is only being used when `cluster_manager` is set to `mesos`
-    :param needs_docker_cfg: whether we should add docker.cfg file for accessing
-        docker registry. This is only being used when `cluster_manager` is set to `mesos`
-    :param mesos_leader: the mesos leader to be used. leave empty to use the default
-        pnw-devc master. This is only being used when `cluster_manager` is set to `mesos`
     :param spark_opts_from_env: different from user_spark_opts, configuration in this
         dict will not be filtered. This options is left for people who use `paasta spark-run`
         to launch the batch, and inside the batch use `spark_tools.paasta` to create
         spark session.
-    :param load_paasta_default_volumes: whether to include default paasta mounted volumes
-        into the spark executors.
     :param aws_region: The default aws region to use
     :param service_account_name: The k8s service account to use for spark k8s authentication.
         If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
@@ -1151,6 +1004,11 @@ def get_spark_conf(
         This is strongly not recommended.
     :returns: spark opts in a dict.
     """
+    # Mesos deprecation
+    if cluster_manager == 'mesos':
+        log.warning('Mesos has been deprecated. Please use kubernetes as the cluster manager.\n')
+        raise UnsupportedClusterManagerException(cluster_manager)
+
     # for simplicity, all the following computation are assuming spark opts values
     # is str type.
     user_spark_opts = _convert_user_spark_opts_value_to_str(user_spark_opts)
@@ -1186,22 +1044,7 @@ def get_spark_conf(
         spark_conf, cluster_manager, paasta_pool, force_spark_resource_configs,
     )
 
-    if cluster_manager == 'mesos':
-        spark_conf.update(_get_mesos_spark_env(
-            spark_conf,
-            paasta_cluster,
-            paasta_pool,
-            paasta_service,
-            paasta_instance,
-            docker_img,
-            extra_volumes,
-            extra_docker_params,
-            with_secret,
-            needs_docker_cfg,
-            mesos_leader,
-            load_paasta_default_volumes,
-        ))
-    elif cluster_manager == 'kubernetes':
+    if cluster_manager == 'kubernetes':
         spark_conf.update(_get_k8s_spark_env(
             paasta_cluster,
             paasta_service,
@@ -1224,8 +1067,7 @@ def get_spark_conf(
         raise UnsupportedClusterManagerException(cluster_manager)
 
     # configure dynamic resource allocation configs
-    if cluster_manager != 'mesos':
-        spark_conf = get_dra_configs(spark_conf)
+    spark_conf = get_dra_configs(spark_conf)
 
     # generate cost warnings
     compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
@@ -1236,8 +1078,8 @@ def get_spark_conf(
     # configure sql shuffle partitions
     spark_conf = _append_sql_partitions_conf(spark_conf)
 
-    # configure spark conf log
-    spark_conf = _append_spark_config(spark_conf, 'spark.logConf', 'true')
+    # add spark srv config defaults if not specified
+    update_spark_srv_configs(spark_conf)
 
     # configure spark Console Progress
     if _is_jupyterhub_job(spark_conf.get('spark.app.name', '')):

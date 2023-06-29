@@ -8,10 +8,72 @@ from unittest import mock
 import pytest
 import requests
 import yaml
+from pytest import MonkeyPatch
 
-from service_configuration_lib import spark_config
+from service_configuration_lib import utils
 
 TEST_ACCOUNT_ID = '123456789'
+
+spark_run_conf = {
+    'environments': {
+        'testing': {
+            'account_id': TEST_ACCOUNT_ID,
+            'default_event_log_dir': 's3a://test/eventlog',
+            'history_server': 'https://spark-history-testing',
+        },
+    },
+    'spark_constants': {
+        'target_mem_cpu_ratio': 7,
+        'resource_configs': {
+            'recommended': {
+                'cpu': 4,
+                'mem': 28,
+            },
+            'medium': {
+                'cpu': 8,
+                'mem': 56,
+            },
+            'max': {
+                'cpu': 12,
+                'mem': 110,
+            },
+        },
+        'cost_factor': {
+            'test-cluster': {
+                'test-pool': 100,
+            },
+            'spark-pnw-prod': {
+                'batch': 0.041,
+                'stable_batch': 0.142,
+            },
+        },
+        'adjust_executor_res_ratio_thresh': 99999,
+        'default_resources_waiting_time_per_executor': 2,
+        'default_clusterman_observed_scaling_time': 15,
+        'high_cost_threshold_daily': 500,
+        'defaults': {
+            'spark.executor.cores': 4,
+            'spark.executor.instances': 2,
+            'spark.executor.memory': 28,
+            'spark.task.cpus': 1,
+            'spark.sql.shuffle.partitions': 128,
+            'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+            'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+            'spark.yelp.dra.minExecutorRatio': 0.25,
+        },
+        'mandatory_defaults': {
+            'spark.kubernetes.allocation.batch.size': 512,
+            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+            'spark.logConf': 'true',
+        },
+    },
+}
+mp = MonkeyPatch()
+with open('tmp_spark_srv_config.yaml', 'w+') as fp:
+    fp.write(yaml.dump(spark_run_conf))
+    mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
+
+from service_configuration_lib import spark_config  # noqa
 
 
 @pytest.fixture
@@ -19,24 +81,6 @@ def mock_log(monkeypatch):
     mock_log = mock.Mock()
     monkeypatch.setattr(spark_config, 'log', mock_log)
     return mock_log
-
-
-@pytest.fixture
-def mock_spark_run_conf(tmpdir, monkeypatch):
-    spark_run_conf = {
-        'environments': {
-            'testing': {
-                'account_id': TEST_ACCOUNT_ID,
-                'default_event_log_dir': 's3a://test/eventlog',
-                'history_server': 'https://spark-history-testing',
-            },
-        },
-    }
-    fp = tmpdir.join('spark_run.yaml')
-    fp.write(yaml.dump(spark_run_conf))
-    monkeypatch.setattr(spark_config, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
-    spark_config._load_spark_srv_conf(spark_run_conf)
-    return spark_run_conf
 
 
 @pytest.fixture
@@ -206,57 +250,6 @@ class TestGetSparkConf:
         with mock.patch('os.path.exists', side_effect=lambda f: f in existed_files):
             yield existed_files
 
-    @pytest.mark.parametrize(
-        'original_volumes', [
-            None,
-            [
-                '/host/file1:/containter/file1:ro',
-                '/host/file2:/containter/file2:ro',
-                '/host/paasta1:/container/paasta1:ro',
-            ],
-        ],
-    )
-    @pytest.mark.parametrize('load_paasta_volumes', [True, False])
-    @pytest.mark.parametrize(
-        'extra_volumes', [
-            None,
-            [
-                {'hostPath': '/host/file1', 'containerPath': '/container/file1', 'mode': 'RO'},
-                {'hostPath': '/host/file3', 'containerPath': '/container/file3', 'mode': 'RW'},
-                {'hostPath': '/host/not_exist', 'containerPath': '/container/not_exist', 'mode': 'RW'},
-            ],
-        ],
-    )
-    def test_get_mesos_docker_volumes_conf(
-        self,
-        load_paasta_volumes,
-        original_volumes,
-        extra_volumes,
-        mock_existed_files,
-        mock_paasta_volumes,
-    ):
-        validate_key = 'spark.mesos.executor.docker.volumes'
-        expected_volumes = [
-            '/etc/passwd:/etc/passwd:ro', '/etc/group:/etc/group:ro',
-        ]
-        if load_paasta_volumes:
-            expected_volumes.extend(mock_paasta_volumes)
-        if original_volumes:
-            expected_volumes.extend(original_volumes)
-        if extra_volumes:
-            expected_volumes.extend([
-                f"{v['hostPath']}:{v['containerPath']}:{v['mode'].lower()}"
-                for v in extra_volumes
-                if v['hostPath'] in mock_existed_files
-            ])
-
-        spark_conf = {validate_key: ','.join(original_volumes)} if original_volumes else {}
-
-        output = spark_config._get_mesos_docker_volumes_conf(
-            spark_conf, extra_volumes, load_paasta_volumes,
-        )
-        assert sorted(output[validate_key].split(',')) == sorted(set(expected_volumes))
-
     def test_get_k8s_volume_hostpath_dict(self):
         assert spark_config._get_k8s_volume_hostpath_dict(
             '/host/file1', '/container/file1', 'RO', itertools.count(),
@@ -330,18 +323,6 @@ class TestGetSparkConf:
     @pytest.mark.parametrize(
         'test_name,cluster_manager,user_spark_opts,expected_output,force_spark_resource_configs', [
             (
-                'k8s allocation batch size not specified',
-                'kubernetes',
-                {
-                    'spark.executor.cores': '4',
-                    'spark.cores.max': '128',
-                },
-                {
-                    'spark.kubernetes.allocation.batch.size': '512',
-                },
-                False,
-            ),
-            (
                 'k8s allocation batch size specified',
                 'kubernetes',
                 {
@@ -363,7 +344,6 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.instances': '2',
-                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                 },
                 False,
@@ -380,7 +360,6 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',  # adjusted
                     'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.instances': '600',
-                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '35min',
                 },
                 False,
@@ -400,7 +379,6 @@ class TestGetSparkConf:
                     'spark.kubernetes.executor.limit.cores': '1',
                     'spark.executor.instances': '1',
                     'spark.cores.max': '1',
-                    'spark.kubernetes.allocation.batch.size': '512',
                     'spark.scheduler.maxRegisteredResourcesWaitingTime': '15min',
                     'spark.executor.memoryOverhead': '4096',
                     'spark.mesos.executor.memoryOverhead': '4096',
@@ -408,19 +386,8 @@ class TestGetSparkConf:
                 False,
             ),
             (
-                'use default mesos settings',
-                'mesos',
-                {},
-                {
-                    'spark.executor.memory': '28g',
-                    'spark.executor.cores': '4',
-                    'spark.cores.max': '8',
-                },
-                False,
-            ),
-            (
                 'user defined resources',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.memory': '2g',
                     'spark.executor.cores': '4',
@@ -435,7 +402,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - capped cpu & memory',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '13',
                     'spark.executor.memory': '112g',
@@ -453,7 +420,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - recalculated - medium memory',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '10',
                     'spark.executor.memory': '60g',
@@ -472,7 +439,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - recalculated - medium memory',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '6',
                     'spark.executor.memory': '60g',
@@ -491,7 +458,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - recalculated - recommended memory',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '4',
                     'spark.executor.memory': '32g',
@@ -510,7 +477,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - recalculated - non standard memory',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '6',
                     'spark.executor.memory': '13g',
@@ -530,7 +497,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - recalculated - non standard memory - task cpus capped',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '6',
                     'spark.executor.memory': '13g',
@@ -550,7 +517,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - force-spark-resource-configs - capped',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '13',
                     'spark.executor.memory': '112g',
@@ -569,7 +536,7 @@ class TestGetSparkConf:
             ),
             (
                 'user defined resources - force-spark-resource-configs - not capped',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.executor.cores': '10',
                     'spark.executor.memory': '100g',
@@ -588,7 +555,7 @@ class TestGetSparkConf:
             ),
             (
                 'gpu with default settings',
-                'mesos',
+                'kubernetes',
                 {'spark.mesos.gpus.max': '2'},
                 {
                     'spark.mesos.gpus.max': '2',
@@ -598,13 +565,12 @@ class TestGetSparkConf:
                     'spark.executor.cores': '4',
                     'spark.kubernetes.executor.limit.cores': '4',
                     'spark.executor.memory': '28g',
-                    'spark.cores.max': '8',
                 },
                 False,
             ),
             (
                 'Gpu with user defined resources',
-                'mesos',
+                'kubernetes',
                 {
                     'spark.mesos.gpus.max': '2',
                     'spark.task.cpus': '2',
@@ -615,7 +581,6 @@ class TestGetSparkConf:
                     'spark.task.cpus': '2',
                     'spark.executor.cores': '4',
                     'spark.kubernetes.executor.limit.cores': '4',
-                    'spark.cores.max': '8',
                 },
                 False,
             ),
@@ -647,13 +612,13 @@ class TestGetSparkConf:
     @pytest.mark.parametrize(
         'cluster_manager,spark_opts,pool', [
             # max_cores < executor_core
-            ('mesos', {'spark.cores.max': '10', 'spark.executor.cores': '20'}, pool),
+            ('kubernetes', {'spark.cores.max': '10', 'spark.executor.cores': '20'}, pool),
             # use gpu with kubernetes
             ('kubernetes', {'spark.mesos.gpus.max': '10'}, pool),
             # gpu over limit
-            ('mesos', {'spark.mesos.gpus.max': str(spark_config.GPUS_HARD_LIMIT + 1)}, pool),
+            ('kubernetes', {'spark.mesos.gpus.max': str(spark_config.GPUS_HARD_LIMIT + 1)}, pool),
             # pool not found
-            ('mesos', {'spark.mesos.gpus.max': '2'}, 'not_exist_pool'),
+            ('kubernetes', {'spark.mesos.gpus.max': '2'}, 'not_exist_pool'),
         ],
     )
     def test_adjust_spark_requested_resources_error(
@@ -862,7 +827,6 @@ class TestGetSparkConf:
     )
     def test_append_event_log_conf(
         self,
-        mock_spark_run_conf,
         mock_account_id,
         user_spark_opts,
         aws_creds,
@@ -879,7 +843,7 @@ class TestGetSparkConf:
             # k8s
             ({'spark.executor.instances': '10', 'spark.executor.cores': '3'}, '90'),
             # user defined
-            ({'spark.sql.shuffle.partitions': '300'}, ['300', '128', '128']),
+            ({'spark.sql.shuffle.partitions': '300'}, ['300', '300', '300']),
             # dynamic resource allocation enabled, both maxExecutors and max cores defined
             (
                 {
@@ -888,7 +852,7 @@ class TestGetSparkConf:
                     'spark.executor.cores': '3',
                     'spark.cores.max': '10',
                 },
-                '384',  # max (3 * (max cores), (maxExecutors * executor cores))
+                '1152',  # max (3 * (max cores), 3 * (maxExecutors * executor cores))
             ),
             # dynamic resource allocation enabled maxExecutors not defined, max cores defined
             (
@@ -1055,6 +1019,16 @@ class TestGetSparkConf:
             'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
         }
         with MockConfigFunction('get_dra_configs', return_value) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_update_spark_srv_configs(self):
+        return_value = {
+            'spark.kubernetes.allocation.batch.size': 512,
+            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+            'spark.logConf': 'true',
+        }
+        with MockConfigFunction('update_spark_srv_configs', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1262,7 +1236,6 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
-            'spark.logConf': 'true',
         }
         for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
@@ -1288,6 +1261,7 @@ class TestGetSparkConf:
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
+        mock_update_spark_srv_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1351,7 +1325,6 @@ class TestGetSparkConf:
             'spark.executorEnv.PAASTA_CLUSTER': self.cluster,
             'spark.executorEnv.PAASTA_INSTANCE_TYPE': 'spark',
             'spark.executorEnv.SPARK_EXECUTOR_DIRS': '/tmp',
-            'spark.logConf': 'true',
         }
         for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
@@ -1413,6 +1386,7 @@ class TestGetSparkConf:
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
+        mock_update_spark_srv_configs,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1458,27 +1432,6 @@ class TestGetSparkConf:
             mock.ANY,
         )
 
-    @pytest.mark.parametrize('reason', ['mesos_leader', 'mesos_secret'])
-    def test_get_spark_conf_mesos_error(self, reason, monkeypatch, mock_request_mesos_leader):
-        if reason == 'mesos_leader':
-            mock_request_mesos_leader.side_effect = spark_config.requests.RequestException()
-        else:
-            monkeypatch.setattr(spark_config, 'DEFAULT_SPARK_MESOS_SECRET_FILE', '/not_exist')
-        with pytest.raises(ValueError):
-            spark_config.get_spark_conf(
-                cluster_manager='mesos',
-                spark_app_base_name=self.spark_app_base_name,
-                user_spark_opts={},
-                paasta_cluster=self.cluster,
-                paasta_pool=self.pool,
-                paasta_service=self.service,
-                paasta_instance=self.instance,
-                docker_img=self.docker_image,
-                aws_creds=(None, None, None),
-                extra_volumes=[],
-                force_spark_resource_configs=False,
-            )
-
 
 def test_stringify_spark_env():
     conf = {'spark.mesos.leader': '1234', 'spark.mesos.principal': 'spark'}
@@ -1500,7 +1453,7 @@ def test_stringify_spark_env():
         ),
     ],
 )
-def test_get_history_url(mock_spark_run_conf, spark_conf, expected_output):
+def test_get_history_url(spark_conf, expected_output):
     assert spark_config.get_history_url(spark_conf) == expected_output
 
 
@@ -1772,3 +1725,6 @@ def test_send_and_calculate_resources_cost(
 )
 def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_instance_label):
     assert expected_instance_label == spark_config._get_k8s_resource_name_limit_size_with_hash(instance_name)
+
+
+os.remove('tmp_spark_srv_config.yaml')
