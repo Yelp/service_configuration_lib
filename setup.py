@@ -17,7 +17,7 @@ from setuptools import setup
 
 setup(
     name='service-configuration-lib',
-    version='2.17.1',
+    version='2.17.2',
     provides=['service_configuration_lib'],
     description='Start, stop, and inspect Yelp SOA services',
     url='https://github.com/Yelp/service_configuration_lib',
