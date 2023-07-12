@@ -561,9 +561,9 @@ class TestGetSparkConf:
                     'spark.mesos.gpus.max': '2',
                     'spark.mesos.containerizer': 'mesos',
                     'spark.default.parallelism': '2',
-                    'spark.task.cpus': '4',
-                    'spark.executor.cores': '4',
-                    'spark.kubernetes.executor.limit.cores': '4',
+                    'spark.task.cpus': '8',
+                    'spark.executor.cores': '8',
+                    'spark.kubernetes.executor.limit.cores': '8',
                     'spark.executor.memory': '28g',
                 },
                 False,
@@ -597,7 +597,7 @@ class TestGetSparkConf:
     ):
         ratio_adj_thresh = sys.maxsize
         pool = (
-            'test-batch-pool'
+            'batch'
             if user_spark_opts.get('spark.mesos.gpus.max', '0') == '0'
             else next(iter(gpu_pool.keys()))
         )
@@ -1519,7 +1519,27 @@ def test_adjust_cpu_mem_ratio_thresh(adj_thresh, cpu, memory, expected_cpu, expe
     spark_opts['spark.executor.instances'] = 1
     spark_opts['spark.task.cpus'] = 1
 
-    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh)
+    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh, 'batch')
+    assert int(result_dict['spark.executor.cores']) == expected_cpu
+    assert result_dict['spark.executor.memory'] == expected_memory
+    assert int(result_dict['spark.executor.instances']) == 1
+    assert int(result_dict['spark.task.cpus']) == 1
+
+
+@pytest.mark.parametrize(
+    'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
+        (999, 10, '60g', 10, '60g'),
+        (7, 2, '8g', 2, '8g'),
+    ],
+)
+def test_adjust_cpu_mem_ratio_thresh_non_regular_pool(adj_thresh, cpu, memory, expected_cpu, expected_memory):
+    spark_opts = dict()
+    spark_opts['spark.executor.cores'] = cpu
+    spark_opts['spark.executor.memory'] = memory
+    spark_opts['spark.executor.instances'] = 1
+    spark_opts['spark.task.cpus'] = 1
+
+    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh, 'non_batch')
     assert int(result_dict['spark.executor.cores']) == expected_cpu
     assert result_dict['spark.executor.memory'] == expected_memory
     assert int(result_dict['spark.executor.instances']) == 1

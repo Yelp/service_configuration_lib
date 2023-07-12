@@ -528,6 +528,7 @@ def _recalculate_executor_resources(
     user_spark_opts: Dict[str, str],
     force_spark_resource_configs: bool,
     ratio_adj_thresh: int,
+    pool: str,
 ) -> Dict[str, str]:
     executor_cores = int(
         user_spark_opts.get(
@@ -615,7 +616,12 @@ def _recalculate_executor_resources(
     max_cores = spark_constants.get('resource_configs', {}).get('max', {})['cpu']
     max_memory_gb = spark_constants.get('resource_configs', {}).get('max', {})['mem']
 
-    if memory_gb > max_memory_gb or executor_cores > max_cores:
+    if pool not in ['batch', 'stable_batch']:
+        log.warning(
+            f'We are not internally adjusting any spark resources for given pool {pool}. '
+            'Please ensure that given resource requests are optimal.',
+        )
+    elif memory_gb > max_memory_gb or executor_cores > max_cores:
         executor_cores, executor_memory = _cap_executor_resources(executor_cores, executor_memory, memory_mb)
     elif force_spark_resource_configs:
         log.warning(
@@ -707,7 +713,7 @@ def _adjust_spark_requested_resources(
     # we can skip this step if user is not using gpu or do not configure
     # task cpus and executor cores
     if num_gpus == 0 or (task_cpus != 1 and executor_cores != 1):
-        return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
+        return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh, pool)
 
     if num_gpus > GPUS_HARD_LIMIT:
         raise ValueError(
@@ -758,7 +764,7 @@ def _adjust_spark_requested_resources(
         'spark.executor.cores': str(cpus_per_gpu * gpus_per_inst),
         'spark.cores.max': str(total_cpus),
     })
-    return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh)
+    return _recalculate_executor_resources(user_spark_opts, force_spark_resource_configs, ratio_adj_thresh, pool)
 
 
 def find_spark_master(paasta_cluster):
