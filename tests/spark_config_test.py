@@ -223,7 +223,6 @@ class TestGetSparkConf:
     docker_image = 'docker-dev.yelp.com/test-image'
     executor_cores = '10'
     spark_app_base_name = 'test_app_base_name'
-    default_mesos_leader = 'mesos://some-url.yelp.com:5050'
     aws_provider_key = 'spark.hadoop.fs.s3a.aws.credentials.provider'
 
     @pytest.fixture
@@ -1039,37 +1038,6 @@ class TestGetSparkConf:
         monkeypatch.setattr(spark_config, 'DEFAULT_SPARK_MESOS_SECRET_FILE', str(fp))
         return secret
 
-    @pytest.fixture(params=[False, True])
-    def with_secret(self, request):
-        return request.param
-
-    @pytest.fixture
-    def assert_mesos_secret(self, with_secret, mock_secret):
-        expected_output = mock_secret if with_secret else None
-
-        def verify(output):
-            if expected_output:
-                key = 'spark.mesos.secret'
-                assert output[key] == mock_secret
-                return [key]
-            return []
-        return verify
-
-    @pytest.fixture
-    def mock_request_mesos_leader(self):
-        return_value = self.default_mesos_leader.replace('mesos://', 'http://') + '/#/'
-        with mock.patch.object(spark_config.requests, 'get') as m:
-            m.return_value = mock.Mock(url=return_value)
-            yield m
-
-    def test_find_spark_master(self, mock_request_mesos_leader):
-        assert spark_config.find_spark_master('test-cluster') == 'mesos://some-url.yelp.com:5050'
-
-    def test_find_spark_master_error(self, mock_request_mesos_leader):
-        mock_request_mesos_leader.side_effect = requests.RequestException()
-        with pytest.raises(ValueError):
-            spark_config.find_spark_master('test-cluster')
-
     def test_convert_user_spark_opts_value_str(self):
         spark_conf = {
             'spark.executor.memory': '4g',
@@ -1081,56 +1049,6 @@ class TestGetSparkConf:
             'spark.executor.cores': '2',
             'spark.eventLog.enabled': 'false',
         }
-
-    @pytest.fixture(params=[None, 'test-mesos:5050'])
-    def mesos_leader(self, request):
-        return request.param
-
-    @pytest.fixture
-    def assert_mesos_leader(self, mesos_leader, mock_request_mesos_leader):
-        expected_output = f'mesos://{mesos_leader}' if mesos_leader else self.default_mesos_leader
-
-        def validate(output):
-            key = 'spark.master'
-            assert output[key] == expected_output
-            return [key]
-
-        return validate
-
-    @pytest.fixture(params=[None, {'workdir': '/tmp'}])
-    def extra_docker_params(self, request):
-        return request.param
-
-    @pytest.fixture
-    def assert_docker_parameters(self, extra_docker_params):
-        def verify(output):
-            expected_output = (
-                f'cpus={self.executor_cores},'
-                f'label=paasta_service={self.service},'
-                f'label=paasta_instance={self.instance}'
-            )
-            if extra_docker_params:
-                for key, value in extra_docker_params.items():
-                    expected_output += f',{key}={value}'
-
-            key = 'spark.mesos.executor.docker.parameters'
-            assert output[key] == expected_output
-            return [key]
-        return verify
-
-    @pytest.fixture(params=[False, True])
-    def needs_docker_cfg(self, request):
-        return request.param
-
-    @pytest.fixture
-    def assert_docker_cfg(self, needs_docker_cfg):
-        def verify(output):
-            if needs_docker_cfg:
-                key = 'spark.mesos.uris'
-                assert output[key] == 'file:///root/.dockercfg'
-                return [key]
-            return []
-        return verify
 
     @pytest.fixture
     def mock_pick_random_port(self):

@@ -78,10 +78,13 @@ DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
-(
-    spark_srv_conf, spark_constants, default_spark_srv_conf,
-    mandatory_default_spark_srv_conf, spark_costs,
-) = load_spark_srv_conf()
+try:
+    (
+        spark_srv_conf, spark_constants, default_spark_srv_conf,
+        mandatory_default_spark_srv_conf, spark_costs,
+    ) = load_spark_srv_conf()
+except Exception as e:
+    log.error(f'Failed to load Spark srv configs: {e}')
 
 
 class UnsupportedClusterManagerException(Exception):
