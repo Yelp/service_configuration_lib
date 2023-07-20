@@ -6,74 +6,13 @@ import sys
 from unittest import mock
 
 import pytest
-import requests
 import yaml
-from pytest import MonkeyPatch
 
+from service_configuration_lib import spark_config
 from service_configuration_lib import utils
 
+
 TEST_ACCOUNT_ID = '123456789'
-
-spark_run_conf = {
-    'environments': {
-        'testing': {
-            'account_id': TEST_ACCOUNT_ID,
-            'default_event_log_dir': 's3a://test/eventlog',
-            'history_server': 'https://spark-history-testing',
-        },
-    },
-    'spark_constants': {
-        'target_mem_cpu_ratio': 7,
-        'resource_configs': {
-            'recommended': {
-                'cpu': 4,
-                'mem': 28,
-            },
-            'medium': {
-                'cpu': 8,
-                'mem': 56,
-            },
-            'max': {
-                'cpu': 12,
-                'mem': 110,
-            },
-        },
-        'cost_factor': {
-            'test-cluster': {
-                'test-pool': 100,
-            },
-            'spark-pnw-prod': {
-                'batch': 0.041,
-                'stable_batch': 0.142,
-            },
-        },
-        'adjust_executor_res_ratio_thresh': 99999,
-        'default_resources_waiting_time_per_executor': 2,
-        'default_clusterman_observed_scaling_time': 15,
-        'high_cost_threshold_daily': 500,
-        'defaults': {
-            'spark.executor.cores': 4,
-            'spark.executor.instances': 2,
-            'spark.executor.memory': 28,
-            'spark.task.cpus': 1,
-            'spark.sql.shuffle.partitions': 128,
-            'spark.dynamicAllocation.executorAllocationRatio': 0.8,
-            'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-            'spark.yelp.dra.minExecutorRatio': 0.25,
-        },
-        'mandatory_defaults': {
-            'spark.kubernetes.allocation.batch.size': 512,
-            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
-            'spark.logConf': 'true',
-        },
-    },
-}
-mp = MonkeyPatch()
-with open('tmp_spark_srv_config.yaml', 'w+') as fp:
-    fp.write(yaml.dump(spark_run_conf))
-    mp.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', os.path.abspath(fp.name))
-
-from service_configuration_lib import spark_config  # noqa
 
 
 @pytest.fixture
@@ -200,12 +139,12 @@ def test_pick_random_port():
 
 class MockConfigFunction:
 
-    def __init__(self, mock_func, return_value):
+    def __init__(self, mock_obj, mock_func, return_value):
         self.return_value = return_value
 
         def side_effect(*args, **kwargs):
             return {**args[0], **self.return_value}
-        self._patch = mock.patch.object(spark_config, mock_func, side_effect=side_effect)
+        self._patch = mock.patch.object(mock_obj, mock_func, side_effect=side_effect)
 
     def __enter__(self):
         self.mocker = self._patch.__enter__()
@@ -224,6 +163,77 @@ class TestGetSparkConf:
     executor_cores = '10'
     spark_app_base_name = 'test_app_base_name'
     aws_provider_key = 'spark.hadoop.fs.s3a.aws.credentials.provider'
+
+    @pytest.fixture
+    def mock_spark_srv_conf_file(self, tmpdir, monkeypatch):
+        spark_run_conf = {
+            'environments': {
+                'testing': {
+                    'account_id': TEST_ACCOUNT_ID,
+                    'default_event_log_dir': 's3a://test/eventlog',
+                    'history_server': 'https://spark-history-testing',
+                },
+            },
+            'spark_constants': {
+                'target_mem_cpu_ratio': 7,
+                'resource_configs': {
+                    'recommended': {
+                        'cpu': 4,
+                        'mem': 28,
+                    },
+                    'medium': {
+                        'cpu': 8,
+                        'mem': 56,
+                    },
+                    'max': {
+                        'cpu': 12,
+                        'mem': 110,
+                    },
+                },
+                'cost_factor': {
+                    'test-cluster': {
+                        'test-pool': 100,
+                    },
+                    'spark-pnw-prod': {
+                        'batch': 0.041,
+                        'stable_batch': 0.142,
+                    },
+                },
+                'adjust_executor_res_ratio_thresh': 99999,
+                'default_resources_waiting_time_per_executor': 2,
+                'default_clusterman_observed_scaling_time': 15,
+                'high_cost_threshold_daily': 500,
+                'defaults': {
+                    'spark.executor.cores': 4,
+                    'spark.executor.instances': 2,
+                    'spark.executor.memory': 28,
+                    'spark.task.cpus': 1,
+                    'spark.sql.shuffle.partitions': 128,
+                    'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+                    'spark.yelp.dra.minExecutorRatio': 0.25,
+                },
+                'mandatory_defaults': {
+                    'spark.kubernetes.allocation.batch.size': 512,
+                    'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+                    'spark.logConf': 'true',
+                },
+            },
+        }
+        fp = tmpdir.join('tmp_spark_srv_config.yaml')
+        fp.write(yaml.dump(spark_run_conf))
+        monkeypatch.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
+
+    @pytest.fixture
+    def mock_log(self, monkeypatch):
+        mock_log = mock.Mock()
+        monkeypatch.setattr(spark_config, 'log', mock_log)
+        return mock_log
+
+    @pytest.fixture
+    def mock_time(self):
+        with mock.patch.object(spark_config.time, 'time', return_value=123.456):
+            yield 123.456
 
     @pytest.fixture
     def base_volumes(self):
@@ -248,6 +258,23 @@ class TestGetSparkConf:
         ]
         with mock.patch('os.path.exists', side_effect=lambda f: f in existed_files):
             yield existed_files
+
+    @pytest.mark.parametrize(
+        'spark_conf,expected_output', [
+            ({'spark.eventLog.enabled': 'false'}, None),
+            (
+                {'spark.eventLog.enabled': 'true', 'spark.eventLog.dir': 's3a://test/eventlog'},
+                'https://spark-history-testing',
+            ),
+            (
+                {'spark.eventLog.enabled': 'true', 'spark.eventLog.dir': 's3a://test/different/eventlog'},
+                None,
+            ),
+        ],
+    )
+    def test_get_history_url(self, spark_conf, expected_output, mock_spark_srv_conf_file):
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        assert spark_conf_builder.get_history_url(spark_conf) == expected_output
 
     def test_get_k8s_volume_hostpath_dict(self):
         assert spark_config._get_k8s_volume_hostpath_dict(
@@ -600,8 +627,8 @@ class TestGetSparkConf:
             if user_spark_opts.get('spark.mesos.gpus.max', '0') == '0'
             else next(iter(gpu_pool.keys()))
         )
-
-        output = spark_config._adjust_spark_requested_resources(
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder._adjust_spark_requested_resources(
             user_spark_opts, cluster_manager, pool, force_spark_resource_configs, ratio_adj_thresh,
         )
         for key in expected_output.keys():
@@ -628,7 +655,8 @@ class TestGetSparkConf:
         gpu_pool,
     ):
         with pytest.raises(ValueError):
-            spark_config._adjust_spark_requested_resources(spark_opts, cluster_manager, pool)
+            spark_conf_builder = spark_config.SparkConfBuilder()
+            spark_conf_builder._adjust_spark_requested_resources(spark_opts, cluster_manager, pool)
 
     @pytest.mark.parametrize(
         'user_spark_opts,expected_output', [
@@ -724,7 +752,8 @@ class TestGetSparkConf:
             user_spark_opts,
             expected_output,
     ):
-        output = spark_config.get_dra_configs(user_spark_opts)
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder.get_dra_configs(user_spark_opts)
         for key in expected_output.keys():
             assert output[key] == expected_output[key], f'wrong value for {key}'
 
@@ -784,7 +813,8 @@ class TestGetSparkConf:
             paasta_pool,
             expected_output,
     ):
-        output = spark_config.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
         assert output == expected_output
 
     @pytest.mark.parametrize(
@@ -830,8 +860,10 @@ class TestGetSparkConf:
         user_spark_opts,
         aws_creds,
         expected_output,
+        mock_spark_srv_conf_file,
     ):
-        output = spark_config._append_event_log_conf(user_spark_opts, *aws_creds)
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder._append_event_log_conf(user_spark_opts, *aws_creds)
         for key in expected_output:
             assert output[key] == expected_output[key]
 
@@ -885,7 +917,8 @@ class TestGetSparkConf:
     def test_append_sql_partitions_conf(
         self, user_spark_opts, expected_output,
     ):
-        output = spark_config._append_sql_partitions_conf(user_spark_opts)
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder._append_sql_partitions_conf(user_spark_opts)
         keys = [
             'spark.sql.shuffle.partitions',
             'spark.sql.files.minPartitionNum',
@@ -943,14 +976,14 @@ class TestGetSparkConf:
     def mock_append_spark_conf_log(self):
         return_value = {'spark.logConf': 'true'}
         with MockConfigFunction(
-                '_append_spark_config', return_value,
+                spark_config, '_append_spark_config', return_value,
         ) as m:
             yield m
 
     @pytest.fixture
     def mock_get_mesos_docker_volumes_conf(self):
         return_value = {'spark.mesos.executor.docker.volumes': '/tmp:/tmp:ro'}
-        with MockConfigFunction('_get_mesos_docker_volumes_conf', return_value) as m:
+        with MockConfigFunction(spark_config, '_get_mesos_docker_volumes_conf', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -961,9 +994,7 @@ class TestGetSparkConf:
             'spark.default.parallelism',
         ]
         return_value = {k: '10' for k in keys}
-        with MockConfigFunction(
-            '_append_sql_partitions_conf', return_value,
-        ) as m:
+        with MockConfigFunction(spark_config.SparkConfBuilder, '_append_sql_partitions_conf', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -972,7 +1003,7 @@ class TestGetSparkConf:
             'spark.eventLog.enabled': 'true',
             'spark.eventLog.dir': 's3a://test/bucket/',
         }
-        with MockConfigFunction('_append_event_log_conf', return_value) as m:
+        with MockConfigFunction(spark_config.SparkConfBuilder, '_append_event_log_conf', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -983,17 +1014,7 @@ class TestGetSparkConf:
             'spark.executorEnv.AWS_SESSION_TOKEN': 'we_all_key',
             'spark.executorEnv.AWS_DEFAULT_REGION': 'ice_cream',
         }
-        with MockConfigFunction('_append_aws_credentials_conf', return_value) as m:
-            yield m
-
-    @pytest.fixture
-    def mock_adjust_spark_requested_resources_mesos(self):
-        return_value = {
-            'spark.cores.max': '10',
-            'spark.executor.cores': self.executor_cores,
-            'spark.executor.memory': '2g',
-        }
-        with MockConfigFunction('_adjust_spark_requested_resources', return_value) as m:
+        with MockConfigFunction(spark_config, '_append_aws_credentials_conf', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1003,7 +1024,7 @@ class TestGetSparkConf:
             'spark.executor.cores': self.executor_cores,
             'spark.executor.memory': '2g',
         }
-        with MockConfigFunction('_adjust_spark_requested_resources', return_value) as m:
+        with MockConfigFunction(spark_config.SparkConfBuilder, '_adjust_spark_requested_resources', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1017,7 +1038,7 @@ class TestGetSparkConf:
             'spark.dynamicAllocation.minExecutors': '0',
             'spark.dynamicAllocation.cachedExecutorIdleTimeout': '900s',
         }
-        with MockConfigFunction('get_dra_configs', return_value) as m:
+        with MockConfigFunction(spark_config.SparkConfBuilder, 'get_dra_configs', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1027,7 +1048,7 @@ class TestGetSparkConf:
             'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
             'spark.logConf': 'true',
         }
-        with MockConfigFunction('update_spark_srv_configs', return_value) as m:
+        with MockConfigFunction(spark_config.SparkConfBuilder, 'update_spark_srv_configs', return_value) as m:
             yield m
 
     @pytest.fixture
@@ -1180,6 +1201,7 @@ class TestGetSparkConf:
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
         mock_update_spark_srv_configs,
+        mock_spark_srv_conf_file,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1195,7 +1217,8 @@ class TestGetSparkConf:
         aws_creds = (None, None, None)
         aws_region = 'ice_cream'
 
-        output = spark_config.get_spark_conf(
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder.get_spark_conf(
             cluster_manager='kubernetes',
             spark_app_base_name=self.spark_app_base_name,
             user_spark_opts=user_spark_opts,
@@ -1268,6 +1291,7 @@ class TestGetSparkConf:
         mock_append_sql_partitions_conf,
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
+        mock_spark_srv_conf_file,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1276,7 +1300,8 @@ class TestGetSparkConf:
     ):
         aws_creds = (None, None, None)
         aws_region = 'ice_cream'
-        output = spark_config.get_spark_conf(
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder.get_spark_conf(
             cluster_manager='local',
             spark_app_base_name='jupyterhub_test_name',
             user_spark_opts={},
@@ -1305,6 +1330,7 @@ class TestGetSparkConf:
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
         mock_update_spark_srv_configs,
+        mock_spark_srv_conf_file,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1313,7 +1339,8 @@ class TestGetSparkConf:
     ):
         aws_creds = (None, None, None)
         aws_region = 'ice_cream'
-        output = spark_config.get_spark_conf(
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder.get_spark_conf(
             cluster_manager='local',
             spark_app_base_name=self.spark_app_base_name,
             user_spark_opts=user_spark_opts or {},
@@ -1356,23 +1383,6 @@ def test_stringify_spark_env():
     assert spark_config.stringify_spark_env(conf) == (
         '--conf spark.mesos.leader=1234 --conf spark.mesos.principal=spark'
     )
-
-
-@pytest.mark.parametrize(
-    'spark_conf,expected_output', [
-        ({'spark.eventLog.enabled': 'false'}, None),
-        (
-            {'spark.eventLog.enabled': 'true', 'spark.eventLog.dir': 's3a://test/eventlog'},
-            'https://spark-history-testing',
-        ),
-        (
-            {'spark.eventLog.enabled': 'true', 'spark.eventLog.dir': 's3a://test/different/eventlog'},
-            None,
-        ),
-    ],
-)
-def test_get_history_url(spark_conf, expected_output):
-    assert spark_config.get_history_url(spark_conf) == expected_output
 
 
 @pytest.mark.parametrize(
@@ -1437,7 +1447,8 @@ def test_adjust_cpu_mem_ratio_thresh(adj_thresh, cpu, memory, expected_cpu, expe
     spark_opts['spark.executor.instances'] = 1
     spark_opts['spark.task.cpus'] = 1
 
-    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh, 'batch')
+    spark_conf_builder = spark_config.SparkConfBuilder()
+    result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'batch')
     assert int(result_dict['spark.executor.cores']) == expected_cpu
     assert result_dict['spark.executor.memory'] == expected_memory
     assert int(result_dict['spark.executor.instances']) == 1
@@ -1457,7 +1468,8 @@ def test_adjust_cpu_mem_ratio_thresh_non_regular_pool(adj_thresh, cpu, memory, e
     spark_opts['spark.executor.instances'] = 1
     spark_opts['spark.task.cpus'] = 1
 
-    result_dict = spark_config._recalculate_executor_resources(spark_opts, False, adj_thresh, 'non_batch')
+    spark_conf_builder = spark_config.SparkConfBuilder()
+    result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'non_batch')
     assert int(result_dict['spark.executor.cores']) == expected_cpu
     assert result_dict['spark.executor.memory'] == expected_memory
     assert int(result_dict['spark.executor.instances']) == 1
@@ -1663,6 +1675,3 @@ def test_send_and_calculate_resources_cost(
 )
 def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_instance_label):
     assert expected_instance_label == spark_config._get_k8s_resource_name_limit_size_with_hash(instance_name)
-
-
-os.remove('tmp_spark_srv_config.yaml')
