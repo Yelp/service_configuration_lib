@@ -620,6 +620,7 @@ class TestGetSparkConf:
         expected_output,
         force_spark_resource_configs,
         gpu_pool,
+        mock_spark_srv_conf_file,
     ):
         ratio_adj_thresh = sys.maxsize
         pool = (
@@ -653,6 +654,7 @@ class TestGetSparkConf:
         spark_opts,
         pool,
         gpu_pool,
+        mock_spark_srv_conf_file,
     ):
         with pytest.raises(ValueError):
             spark_conf_builder = spark_config.SparkConfBuilder()
@@ -751,6 +753,7 @@ class TestGetSparkConf:
             self,
             user_spark_opts,
             expected_output,
+            mock_spark_srv_conf_file,
     ):
         spark_conf_builder = spark_config.SparkConfBuilder()
         output = spark_conf_builder.get_dra_configs(user_spark_opts)
@@ -812,6 +815,7 @@ class TestGetSparkConf:
             paasta_cluster,
             paasta_pool,
             expected_output,
+            mock_spark_srv_conf_file,
     ):
         spark_conf_builder = spark_config.SparkConfBuilder()
         output = spark_conf_builder.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
@@ -915,7 +919,7 @@ class TestGetSparkConf:
         ],
     )
     def test_append_sql_partitions_conf(
-        self, user_spark_opts, expected_output,
+        self, user_spark_opts, expected_output, mock_spark_srv_conf_file,
     ):
         spark_conf_builder = spark_config.SparkConfBuilder()
         output = spark_conf_builder._append_sql_partitions_conf(user_spark_opts)
@@ -1377,6 +1381,59 @@ class TestGetSparkConf:
             mock.ANY,
         )
 
+    @pytest.mark.parametrize(
+        'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
+            (999, 10, '60g', 8, '56g'),
+            (60, 10, '60g', 8, '56g'),
+            (7, 10, '60g', 10, '60g'),
+            (999, 4, '32g', 4, '28g'),
+            (32, 4, '32g', 4, '28g'),
+            (8, 4, '32g', 4, '32g'),
+            (999, 2, '8g', 1, '7g'),
+            (8, 2, '8g', 1, '7g'),
+            (7, 2, '8g', 2, '8g'),
+        ],
+    )
+    def test_adjust_cpu_mem_ratio_thresh(
+        self, adj_thresh, cpu, memory, expected_cpu,
+        expected_memory, mock_spark_srv_conf_file,
+    ):
+        spark_opts = dict()
+        spark_opts['spark.executor.cores'] = cpu
+        spark_opts['spark.executor.memory'] = memory
+        spark_opts['spark.executor.instances'] = 1
+        spark_opts['spark.task.cpus'] = 1
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'batch')
+        assert int(result_dict['spark.executor.cores']) == expected_cpu
+        assert result_dict['spark.executor.memory'] == expected_memory
+        assert int(result_dict['spark.executor.instances']) == 1
+        assert int(result_dict['spark.task.cpus']) == 1
+
+    @pytest.mark.parametrize(
+        'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
+            (999, 10, '60g', 10, '60g'),
+            (7, 2, '8g', 2, '8g'),
+        ],
+    )
+    def test_adjust_cpu_mem_ratio_thresh_non_regular_pool(
+        self, adj_thresh, cpu, memory, expected_cpu,
+        expected_memory, mock_spark_srv_conf_file,
+    ):
+        spark_opts = dict()
+        spark_opts['spark.executor.cores'] = cpu
+        spark_opts['spark.executor.memory'] = memory
+        spark_opts['spark.executor.instances'] = 1
+        spark_opts['spark.task.cpus'] = 1
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'non_batch')
+        assert int(result_dict['spark.executor.cores']) == expected_cpu
+        assert result_dict['spark.executor.memory'] == expected_memory
+        assert int(result_dict['spark.executor.instances']) == 1
+        assert int(result_dict['spark.task.cpus']) == 1
+
 
 def test_stringify_spark_env():
     conf = {'spark.mesos.leader': '1234', 'spark.mesos.principal': 'spark'}
@@ -1425,55 +1482,6 @@ def test_get_signalfx_url():
         '&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:test-instance'
         '&startTime=-1h&endTime=Now'
     )
-
-
-@pytest.mark.parametrize(
-    'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
-        (999, 10, '60g', 8, '56g'),
-        (60, 10, '60g', 8, '56g'),
-        (7, 10, '60g', 10, '60g'),
-        (999, 4, '32g', 4, '28g'),
-        (32, 4, '32g', 4, '28g'),
-        (8, 4, '32g', 4, '32g'),
-        (999, 2, '8g', 1, '7g'),
-        (8, 2, '8g', 1, '7g'),
-        (7, 2, '8g', 2, '8g'),
-    ],
-)
-def test_adjust_cpu_mem_ratio_thresh(adj_thresh, cpu, memory, expected_cpu, expected_memory):
-    spark_opts = dict()
-    spark_opts['spark.executor.cores'] = cpu
-    spark_opts['spark.executor.memory'] = memory
-    spark_opts['spark.executor.instances'] = 1
-    spark_opts['spark.task.cpus'] = 1
-
-    spark_conf_builder = spark_config.SparkConfBuilder()
-    result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'batch')
-    assert int(result_dict['spark.executor.cores']) == expected_cpu
-    assert result_dict['spark.executor.memory'] == expected_memory
-    assert int(result_dict['spark.executor.instances']) == 1
-    assert int(result_dict['spark.task.cpus']) == 1
-
-
-@pytest.mark.parametrize(
-    'adj_thresh,cpu,memory,expected_cpu,expected_memory', [
-        (999, 10, '60g', 10, '60g'),
-        (7, 2, '8g', 2, '8g'),
-    ],
-)
-def test_adjust_cpu_mem_ratio_thresh_non_regular_pool(adj_thresh, cpu, memory, expected_cpu, expected_memory):
-    spark_opts = dict()
-    spark_opts['spark.executor.cores'] = cpu
-    spark_opts['spark.executor.memory'] = memory
-    spark_opts['spark.executor.instances'] = 1
-    spark_opts['spark.task.cpus'] = 1
-
-    spark_conf_builder = spark_config.SparkConfBuilder()
-    result_dict = spark_conf_builder._recalculate_executor_resources(spark_opts, False, adj_thresh, 'non_batch')
-    assert int(result_dict['spark.executor.cores']) == expected_cpu
-    assert result_dict['spark.executor.memory'] == expected_memory
-    assert int(result_dict['spark.executor.instances']) == 1
-    assert int(result_dict['spark.task.cpus']) == 1
 
 
 @pytest.mark.parametrize(
