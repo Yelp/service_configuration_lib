@@ -163,10 +163,17 @@ def assume_aws_role(
     Checks that a web identity token is available, and if it is,
     get an aws session and return a credentials dictionary
     """
-    with open(key_file) as creds_file:
-        creds_dict = yaml.load(creds_file.read(), Loader=yaml.SafeLoader)
-        access_key = creds_dict['AccessKeyId']
-        secret_key = creds_dict['SecretAccessKey']
+    try:
+        with open(key_file) as creds_file:
+            creds_dict = yaml.load(creds_file.read(), Loader=yaml.SafeLoader)
+            access_key = creds_dict['AccessKeyId']
+            secret_key = creds_dict['SecretAccessKey']
+    except PermissionError:
+        log.warning(
+            'If using spark-run as a human, you must manually export '
+            'AWS session credentials first. See y/spark-run-aws-role',
+        )
+        raise
     timestamp = int(time.time())
     client = boto3.client('sts', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
     resp = client.assume_role(
