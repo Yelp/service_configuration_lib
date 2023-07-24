@@ -977,6 +977,19 @@ class TestGetSparkConf:
         assert output['spark.executorEnv.AWS_SESSION_TOKEN'] == mock.sentinel.token
 
     @pytest.fixture
+    def mock_append_spark_prometheus_conf(self):
+        return_value = {
+            'spark.ui.prometheus.enabled': 'true',
+            'spark.metrics.conf.*.sink.prometheusServlet.class': 'org.apache.spark.metrics.sink.PrometheusServlet',
+            'spark.metrics.conf.*.sink.prometheusServlet.path': '/metrics/prometheus',
+        }
+
+        with MockConfigFunction(
+            '_append_spark_prometheus_conf', return_value,
+        ) as m:
+            yield m
+
+    @pytest.fixture
     def mock_append_spark_conf_log(self):
         return_value = {'spark.logConf': 'true'}
         with MockConfigFunction(
@@ -1199,6 +1212,7 @@ class TestGetSparkConf:
         spark_opts_from_env,
         ui_port,
         base_volumes,
+        mock_append_spark_prometheus_conf,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
         mock_append_sql_partitions_conf,
@@ -1245,6 +1259,7 @@ class TestGetSparkConf:
             list(other_spark_opts.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_get_dra_configs.return_value.keys()) +
+            list(mock_append_spark_prometheus_conf.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
             list(mock_append_sql_partitions_conf.return_value.keys()),
@@ -1328,6 +1343,7 @@ class TestGetSparkConf:
         spark_opts_from_env,
         ui_port,
         base_volumes,
+        mock_append_spark_prometheus_conf,
         mock_append_event_log_conf,
         mock_append_aws_credentials_conf,
         mock_append_sql_partitions_conf,
@@ -1363,6 +1379,7 @@ class TestGetSparkConf:
             assert_ui_port(output) +
             assert_app_name(output) +
             assert_local_conf(output) +
+            list(mock_append_spark_prometheus_conf.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_get_dra_configs.return_value.keys()) +

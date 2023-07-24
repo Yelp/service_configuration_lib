@@ -409,6 +409,13 @@ class SparkConfBuilder:
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
 
+    def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
+        spark_opts['spark.ui.prometheus.enabled'] = 'true'
+        spark_opts[
+            'spark.metrics.conf.*.sink.prometheusServlet.class'] = 'org.apache.spark.metrics.sink.PrometheusServlet'
+        spark_opts['spark.metrics.conf.*.sink.prometheusServlet.path'] = '/metrics/prometheus'
+        return spark_opts
+
     def get_dra_configs(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         # don't enable DRA if it is explicitly disabled
         if (
@@ -1106,6 +1113,9 @@ class SparkConfBuilder:
 
         # generate cost warnings
         self.compute_approx_hourly_cost_dollars(spark_conf, paasta_cluster, paasta_pool)
+
+        # configure spark prometheus metrics
+        spark_conf = self._append_spark_prometheus_conf(spark_conf)
 
         # configure spark_event_log
         spark_conf = self._append_event_log_conf(spark_conf, *aws_creds)
