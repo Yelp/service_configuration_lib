@@ -412,7 +412,8 @@ class SparkConfBuilder:
     def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts['spark.ui.prometheus.enabled'] = 'true'
         spark_opts[
-            'spark.metrics.conf.*.sink.prometheusServlet.class'] = 'org.apache.spark.metrics.sink.PrometheusServlet'
+            'spark.metrics.conf.*.sink.prometheusServlet.class'
+        ] = 'org.apache.spark.metrics.sink.PrometheusServlet'
         spark_opts['spark.metrics.conf.*.sink.prometheusServlet.path'] = '/metrics/prometheus'
         return spark_opts
 

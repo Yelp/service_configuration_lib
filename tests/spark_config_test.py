@@ -985,7 +985,7 @@ class TestGetSparkConf:
         }
 
         with MockConfigFunction(
-            '_append_spark_prometheus_conf', return_value,
+            spark_config.SparkConfBuilder, '_append_spark_prometheus_conf', return_value,
         ) as m:
             yield m
 
