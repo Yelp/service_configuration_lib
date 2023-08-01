@@ -278,6 +278,7 @@ def _get_k8s_spark_env(
     _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
 
     spark_env = {
+        'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
         'spark.executorEnv.PAASTA_SERVICE': paasta_service,
         'spark.executorEnv.PAASTA_INSTANCE': paasta_instance,
         'spark.executorEnv.PAASTA_CLUSTER': paasta_cluster,
@@ -311,7 +312,6 @@ def _get_k8s_spark_env(
     elif include_self_managed_configs:
         spark_env.update(
             {
-                'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
                 'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
                 'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
                 'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
