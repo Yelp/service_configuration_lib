@@ -1109,6 +1109,10 @@ class SparkConfBuilder:
         else:
             raise UnsupportedClusterManagerException(cluster_manager)
 
+        # Enabling auto-decommission feature to move data around makes sense for only spot nodes
+        if 'batch' != paasta_pool and 'spark.decommission.enabled' in spark_conf:
+            spark_conf.update({'spark.decommission.enabled': 'false'})
+
         # configure dynamic resource allocation configs
         spark_conf = self.get_dra_configs(spark_conf)
 
