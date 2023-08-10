@@ -275,7 +275,7 @@ def _get_k8s_spark_env(
     _paasta_cluster = _get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
     _paasta_service = _get_k8s_resource_name_limit_size_with_hash(paasta_service)
     _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
-    user = os.environ.get('USER', '')
+    user = os.environ.get('USER', '_unspecified_')
 
     spark_env = {
         'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
