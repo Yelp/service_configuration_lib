@@ -13,6 +13,7 @@ from service_configuration_lib import utils
 
 
 TEST_ACCOUNT_ID = '123456789'
+TEST_USER = 'UNIT_TEST_USER'
 
 
 @pytest.fixture
@@ -130,7 +131,8 @@ class TestGetAWSCredentials:
 
 def test_pick_random_port():
     with mock.patch('ephemeral_port_reserve.reserve') as mock_reserve:
-        port = spark_config._pick_random_port('test')
+        preferred_port = 33123  # Any ephemeral port for testing
+        port = spark_config._pick_random_port(preferred_port)
         (host, prefer_port), _ = mock_reserve.call_args
         assert host == '0.0.0.0'
         assert prefer_port >= 33000
@@ -1188,6 +1190,7 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.paasta.yelp.com/service': self.service,
             'spark.kubernetes.executor.label.paasta.yelp.com/instance': self.instance,
             'spark.kubernetes.executor.label.paasta.yelp.com/cluster': self.cluster,
+            'spark.kubernetes.executor.label.spark.yelp.com/user': TEST_USER,
             'spark.kubernetes.node.selector.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
@@ -1206,6 +1209,7 @@ class TestGetSparkConf:
             return list(expected_output.keys())
         return verify
 
+    @mock.patch.dict(os.environ, {'USER': TEST_USER})
     def test_leaders_get_spark_conf_kubernetes(
         self,
         user_spark_opts,

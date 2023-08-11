@@ -63,6 +63,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.paasta.yelp.com/service',
     'spark.kubernetes.executor.label.paasta.yelp.com/instance',
     'spark.kubernetes.executor.label.paasta.yelp.com/cluster',
+    'spark.kubernetes.executor.label.spark.yelp.com/user',
 }
 
 K8S_AUTH_FOLDER = '/etc/pki/spark'
@@ -74,6 +75,7 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
+PREFERRED_SPARK_UI_PORT = 39091
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -172,11 +174,8 @@ def assume_aws_role(
     return resp['Credentials']
 
 
-def _pick_random_port(app_name):
+def _pick_random_port(preferred_port: int = 0) -> int:
     """Return a random port. """
-    hash_key = f'{app_name}_{time.time()}'.encode('utf-8')
-    hash_number = int(hashlib.sha1(hash_key).hexdigest(), 16)
-    preferred_port = 33000 + (hash_number % 25000)
     return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
 
 
@@ -276,6 +275,7 @@ def _get_k8s_spark_env(
     _paasta_cluster = _get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
     _paasta_service = _get_k8s_resource_name_limit_size_with_hash(paasta_service)
     _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
+    user = os.environ.get('USER', '_unspecified_')
 
     spark_env = {
         'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
@@ -293,6 +293,7 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/service': _paasta_service,
         'spark.kubernetes.executor.label.paasta.yelp.com/instance': _paasta_instance,
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': _paasta_cluster,
+        'spark.kubernetes.executor.label.spark.yelp.com/user': user,
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.paasta.yelp.com/pool': paasta_pool,
@@ -1062,7 +1063,7 @@ class SparkConfBuilder:
         )
 
         ui_port = (spark_opts_from_env or {}).get('spark.ui.port') or _pick_random_port(
-            app_base_name + str(time.time()),
+            PREFERRED_SPARK_UI_PORT,
         )
 
         # app_name from env is already appended port and time to make it unique
