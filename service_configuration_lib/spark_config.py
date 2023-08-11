@@ -174,7 +174,7 @@ def assume_aws_role(
     return resp['Credentials']
 
 
-def _pick_random_port(preferred_port: int = 0):
+def _pick_random_port(preferred_port: int = 0) -> int:
     """Return a random port. """
     return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
 
