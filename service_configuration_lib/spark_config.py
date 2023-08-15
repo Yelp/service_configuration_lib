@@ -265,6 +265,7 @@ def _get_k8s_spark_env(
     docker_img: str,
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
+    driver_ui_port: int,
     service_account_name: Optional[str] = None,
     include_self_managed_configs: bool = True,
     k8s_server_address: Optional[str] = None,
@@ -294,6 +295,7 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/instance': _paasta_instance,
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': _paasta_cluster,
         'spark.kubernetes.executor.label.spark.yelp.com/user': user,
+        'spark.kubernetes.executor.label.spark.yelp.com/driver_ui_port': str(driver_ui_port),
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.paasta.yelp.com/pool': paasta_pool,
@@ -1062,8 +1064,9 @@ class SparkConfBuilder:
             spark_app_base_name
         )
 
-        ui_port = (spark_opts_from_env or {}).get('spark.ui.port') or _pick_random_port(
-            PREFERRED_SPARK_UI_PORT,
+        ui_port = int(
+            (spark_opts_from_env or {}).get('spark.ui.port') or
+            _pick_random_port(PREFERRED_SPARK_UI_PORT),
         )
 
         # app_name from env is already appended port and time to make it unique
@@ -1096,6 +1099,7 @@ class SparkConfBuilder:
                 docker_img,
                 extra_volumes,
                 paasta_pool,
+                ui_port,
                 service_account_name=service_account_name,
                 include_self_managed_configs=not use_eks,
                 k8s_server_address=k8s_server_address,

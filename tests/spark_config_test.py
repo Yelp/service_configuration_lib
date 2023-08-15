@@ -1168,7 +1168,9 @@ class TestGetSparkConf:
         ]
 
     @pytest.fixture
-    def assert_kubernetes_conf(self, base_volumes):
+    def assert_kubernetes_conf(self, base_volumes, ui_port, mock_pick_random_port):
+        expected_ui_port = ui_port if ui_port else mock_pick_random_port
+
         expected_output = {
             'spark.master': f'k8s://https://k8s.{self.cluster}.paasta:6443',
             'spark.executorEnv.PAASTA_SERVICE': self.service,
@@ -1191,6 +1193,7 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.paasta.yelp.com/instance': self.instance,
             'spark.kubernetes.executor.label.paasta.yelp.com/cluster': self.cluster,
             'spark.kubernetes.executor.label.spark.yelp.com/user': TEST_USER,
+            'spark.kubernetes.executor.label.spark.yelp.com/driver_ui_port': str(expected_ui_port),
             'spark.kubernetes.node.selector.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
