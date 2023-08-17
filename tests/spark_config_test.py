@@ -1143,7 +1143,19 @@ class TestGetSparkConf:
     def assert_app_id(self):
         def verify(output):
             key = 'spark.app.id'
-            assert output[key] == re.sub(r'[\.,-]', '_', output['spark.app.name'])
+            app_name = output['spark.app.name']
+            is_jupyter = 'jupyterhub' in app_name
+            paasta_service = output['spark.executorEnv.PAASTA_SERVICE']
+            paasta_instance = output['spark.executorEnv.PAASTA_INSTANCE']
+
+            if is_jupyter:
+                raw_app_id_prefix = app_name
+            else:
+                raw_app_id_prefix = f'{paasta_service}_{paasta_instance}_'
+            app_id_prefix = re.sub(r'[\.,-]', '_', raw_app_id_prefix)
+            output_app_id = output[key]
+            assert output_app_id.startswith(app_id_prefix)
+            assert len(output_app_id) <= 63
             return [key]
         return verify
 

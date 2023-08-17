@@ -1089,12 +1089,17 @@ class SparkConfBuilder:
             # We want to make the app name more unique so that we can search it
             # from history server.
             app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
+        is_jupyter = _is_jupyterhub_job(app_name)
 
         # Explicitly setting app id: replace special characters to '_' to make it consistent
         # in all places for metric systems:
         # - since in the Promehteus metrics endpoint those will be converted to '_'
         # - while the 'spark-app-selector' executor pod label will keep the original app id
-        app_id = re.sub(r'[\.,-]', '_', app_name)
+        if is_jupyter:
+            raw_app_id = app_name
+        else:
+            raw_app_id = f'{paasta_service}_{paasta_instance}_{int(time.time())}'
+        app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 
         spark_conf.update({
             'spark.app.name': app_name,
@@ -1149,7 +1154,7 @@ class SparkConfBuilder:
         self.update_spark_srv_configs(spark_conf)
 
         # configure spark Console Progress
-        if _is_jupyterhub_job(spark_conf.get('spark.app.name', '')):
+        if is_jupyter:
             spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
 
         spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
