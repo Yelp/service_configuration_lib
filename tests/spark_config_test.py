@@ -1151,7 +1151,7 @@ class TestGetSparkConf:
             if is_jupyter:
                 raw_app_id_prefix = app_name
             else:
-                raw_app_id_prefix = f'{paasta_service}_{paasta_instance}_'
+                raw_app_id_prefix = f'{paasta_service}__{paasta_instance}__'
             app_id_prefix = re.sub(r'[\.,-]', '_', raw_app_id_prefix)
             output_app_id = output[key]
             assert output_app_id.startswith(app_id_prefix)

@@ -1098,7 +1098,7 @@ class SparkConfBuilder:
         if is_jupyter:
             raw_app_id = app_name
         else:
-            raw_app_id = f'{paasta_service}_{paasta_instance}_{int(time.time())}'
+            raw_app_id = f'{paasta_service}__{paasta_instance}__{int(time.time()) % 10000}'
         app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 
         spark_conf.update({
