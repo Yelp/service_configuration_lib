@@ -1139,6 +1139,14 @@ class TestGetSparkConf:
         return verify
 
     @pytest.fixture
+    def assert_app_id(self):
+        def verify(output):
+            key = 'spark.app.id'
+            assert output[key] == output['spark.app.name'].replace('-', '_')
+            return [key]
+        return verify
+
+    @pytest.fixture
     def assert_mesos_conf(self):
         def verify(output):
             expected_output = {
@@ -1230,6 +1238,7 @@ class TestGetSparkConf:
         mock_time,
         assert_ui_port,
         assert_app_name,
+        assert_app_id,
         assert_kubernetes_conf,
         mock_log,
     ):
@@ -1262,6 +1271,7 @@ class TestGetSparkConf:
         verified_keys = set(
             assert_ui_port(output) +
             assert_app_name(output) +
+            assert_app_id(output) +
             assert_kubernetes_conf(output) +
             list(other_spark_opts.keys()) +
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
@@ -1321,6 +1331,7 @@ class TestGetSparkConf:
         mock_time,
         assert_ui_port,
         assert_app_name,
+        assert_app_id,
         assert_local_conf,
         mock_log,
     ):
@@ -1361,6 +1372,7 @@ class TestGetSparkConf:
         mock_time,
         assert_ui_port,
         assert_app_name,
+        assert_app_id,
         assert_local_conf,
         mock_log,
     ):
@@ -1385,6 +1397,7 @@ class TestGetSparkConf:
         verified_keys = set(
             assert_ui_port(output) +
             assert_app_name(output) +
+            assert_app_id(output) +
             assert_local_conf(output) +
             list(mock_append_spark_prometheus_conf.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
