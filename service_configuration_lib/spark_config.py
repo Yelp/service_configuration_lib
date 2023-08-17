@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from typing import Any
 from typing import Dict
@@ -1089,10 +1090,11 @@ class SparkConfBuilder:
             # from history server.
             app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
 
-        # Explicitly setting app id: replace '-' to '_' to make it consistent in all places for metric systems:
-        # - since the Spark app id in Promehteus metrics will be converted to underscores,
-        # - while the 'spark-app-selector' executor pod label will keep the original app id.
-        app_id = app_name.replace('-', '_')
+        # Explicitly setting app id: replace special characters to '_' to make it consistent
+        # in all places for metric systems:
+        # - since in the Promehteus metrics endpoint those will be converted to '_'
+        # - while the 'spark-app-selector' executor pod label will keep the original app id
+        app_id = re.sub(r'[\.,-]', '_', app_name)
 
         spark_conf.update({
             'spark.app.name': app_name,

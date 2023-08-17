@@ -2,6 +2,7 @@ import functools
 import itertools
 import json
 import os
+import re
 import sys
 from unittest import mock
 
@@ -1142,7 +1143,7 @@ class TestGetSparkConf:
     def assert_app_id(self):
         def verify(output):
             key = 'spark.app.id'
-            assert output[key] == output['spark.app.name'].replace('-', '_')
+            assert output[key] == re.sub(r'[\.,-]', '_', output['spark.app.name'])
             return [key]
         return verify
 
