@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from typing import Any
 from typing import Dict
@@ -37,6 +38,7 @@ CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
+    'spark.app.id',
     'spark.ui.port',
     'spark.mesos.principal',
     'spark.mesos.secret',
@@ -1076,6 +1078,11 @@ class SparkConfBuilder:
             _pick_random_port(PREFERRED_SPARK_UI_PORT),
         )
 
+        spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
+
+        if aws_creds[2] is not None:
+            spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
+
         # app_name from env is already appended port and time to make it unique
         app_name = (spark_opts_from_env or {}).get('spark.app.name')
         if not app_name:
@@ -1083,13 +1090,15 @@ class SparkConfBuilder:
             # from history server.
             app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
 
-        spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
-
-        if aws_creds[2] is not None:
-            spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
+        # Explicitly setting app id: replace special characters to '_' to make it consistent
+        # in all places for metric systems:
+        # - since in the Promehteus metrics endpoint those will be converted to '_'
+        # - while the 'spark-app-selector' executor pod label will keep the original app id
+        app_id = re.sub(r'[\.,-]', '_', app_name)
 
         spark_conf.update({
             'spark.app.name': app_name,
+            'spark.app.id': app_id,
             'spark.ui.port': str(ui_port),
         })
 
