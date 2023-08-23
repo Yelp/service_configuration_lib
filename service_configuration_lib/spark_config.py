@@ -6,7 +6,9 @@ import json
 import logging
 import math
 import os
+import random
 import re
+import string
 import time
 from typing import Any
 from typing import Dict
@@ -38,7 +40,6 @@ CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
-    'spark.app.id',
     'spark.ui.port',
     'spark.mesos.principal',
     'spark.mesos.secret',
@@ -1029,6 +1030,7 @@ class SparkConfBuilder:
         aws_region: Optional[str] = None,
         service_account_name: Optional[str] = None,
         force_spark_resource_configs: bool = True,
+        spark_app_id: str = '',  # to be removed once verified all applications are not explicitly setting app id
     ) -> Dict[str, str]:
         """Build spark config dict to run with spark on paasta
 
@@ -1057,6 +1059,7 @@ class SparkConfBuilder:
             If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
         :param force_spark_resource_configs: skip the resource/instances recalculation.
             This is strongly not recommended.
+        :param explcitly setting spark.app.id
         :returns: spark opts in a dict.
         """
         # Mesos deprecation
@@ -1095,11 +1098,19 @@ class SparkConfBuilder:
         # in all places for metric systems:
         # - since in the Promehteus metrics endpoint those will be converted to '_'
         # - while the 'spark-app-selector' executor pod label will keep the original app id
-        if is_jupyter:
-            raw_app_id = app_name
+        if len(spark_app_id) == 0:
+            if is_jupyter:
+                raw_app_id = app_name
+            else:
+                random_postfix = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(4))
+                raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
+            app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
         else:
-            raw_app_id = f'{paasta_service}__{paasta_instance}__{int(time.time()) % 10000}'
-        app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
+            log.warning(
+                'We do not recommend users to set spark.app.id, as it could diminish the clarity of identification '
+                'and can potentially cause the monitoring dashboard to not work properly.',
+            )
+            app_id = spark_app_id
 
         spark_conf.update({
             'spark.app.name': app_name,
