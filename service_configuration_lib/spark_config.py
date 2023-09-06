@@ -1030,7 +1030,6 @@ class SparkConfBuilder:
         aws_region: Optional[str] = None,
         service_account_name: Optional[str] = None,
         force_spark_resource_configs: bool = True,
-        spark_app_id: str = '',  # to be removed once verified all applications are not explicitly setting app id
     ) -> Dict[str, str]:
         """Build spark config dict to run with spark on paasta
 
@@ -1098,19 +1097,12 @@ class SparkConfBuilder:
         # in all places for metric systems:
         # - since in the Promehteus metrics endpoint those will be converted to '_'
         # - while the 'spark-app-selector' executor pod label will keep the original app id
-        if len(spark_app_id) == 0:
-            if is_jupyter:
-                raw_app_id = app_name
-            else:
-                random_postfix = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(4))
-                raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
-            app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
+        if is_jupyter:
+            raw_app_id = app_name
         else:
-            log.warning(
-                'We do not recommend users to set spark.app.id, as it could diminish the clarity of identification '
-                'and can potentially cause the monitoring dashboard to not work properly.',
-            )
-            app_id = spark_app_id
+            random_postfix = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(4))
+            raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
+        app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 
         spark_conf.update({
             'spark.app.name': app_name,
