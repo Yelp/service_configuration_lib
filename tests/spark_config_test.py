@@ -130,16 +130,6 @@ class TestGetAWSCredentials:
             spark_config.get_aws_credentials(aws_credentials_yaml=str(fp))
 
 
-def test_pick_random_port():
-    with mock.patch('ephemeral_port_reserve.reserve') as mock_reserve:
-        preferred_port = 33123  # Any ephemeral port for testing
-        port = spark_config._pick_random_port(preferred_port)
-        (host, prefer_port), _ = mock_reserve.call_args
-        assert host == '0.0.0.0'
-        assert prefer_port >= 33000
-        assert port == mock_reserve.return_value
-
-
 class MockConfigFunction:
 
     def __init__(self, mock_obj, mock_func, return_value):
@@ -1092,13 +1082,13 @@ class TestGetSparkConf:
         }
 
     @pytest.fixture
-    def mock_pick_random_port(self):
+    def mock_ephemeral_port_reserve_range(self):
         port = '12345'
-        with mock.patch.object(spark_config, '_pick_random_port', return_value=port):
+        with mock.patch.object(utils, 'ephemeral_port_reserve_range', return_value=port):
             yield port
 
     @pytest.fixture(params=[None, '23456'])
-    def ui_port(self, request, mock_pick_random_port):
+    def ui_port(self, request):
         return request.param
 
     @pytest.fixture(params=[None, 'test_app_name_from_env'])
@@ -1111,8 +1101,8 @@ class TestGetSparkConf:
         return spark_opts or None
 
     @pytest.fixture
-    def assert_ui_port(self, spark_opts_from_env, ui_port, mock_pick_random_port):
-        expected_output = ui_port if ui_port else mock_pick_random_port
+    def assert_ui_port(self, ui_port, mock_ephemeral_port_reserve_range):
+        expected_output = ui_port or mock_ephemeral_port_reserve_range
 
         def verify(output):
             key = 'spark.ui.port'
@@ -1125,13 +1115,13 @@ class TestGetSparkConf:
         return request.param
 
     @pytest.fixture
-    def assert_app_name(self, spark_opts_from_env, user_spark_opts, ui_port, mock_pick_random_port):
+    def assert_app_name(self, spark_opts_from_env, user_spark_opts, ui_port, mock_ephemeral_port_reserve_range):
         expected_output = (spark_opts_from_env or {}).get('spark.app.name')
         if not expected_output:
             expected_output = (
                 (user_spark_opts or {}).get('spark.app.name') or
                 self.spark_app_base_name
-            ) + '_' + (ui_port or mock_pick_random_port) + '_123'
+            ) + '_' + (ui_port or mock_ephemeral_port_reserve_range) + '_123'
 
         def verify(output):
             key = 'spark.app.name'
@@ -1189,8 +1179,8 @@ class TestGetSparkConf:
         ]
 
     @pytest.fixture
-    def assert_kubernetes_conf(self, base_volumes, ui_port, mock_pick_random_port):
-        expected_ui_port = ui_port if ui_port else mock_pick_random_port
+    def assert_kubernetes_conf(self, base_volumes, ui_port, mock_ephemeral_port_reserve_range):
+        expected_ui_port = ui_port if ui_port else mock_ephemeral_port_reserve_range
 
         expected_output = {
             'spark.master': f'k8s://https://k8s.{self.cluster}.paasta:6443',
@@ -1238,7 +1228,6 @@ class TestGetSparkConf:
         self,
         user_spark_opts,
         spark_opts_from_env,
-        ui_port,
         base_volumes,
         mock_append_spark_prometheus_conf,
         mock_append_event_log_conf,
@@ -1248,6 +1237,7 @@ class TestGetSparkConf:
         mock_get_dra_configs,
         mock_update_spark_srv_configs,
         mock_spark_srv_conf_file,
+        mock_ephemeral_port_reserve_range,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1341,6 +1331,7 @@ class TestGetSparkConf:
         mock_adjust_spark_requested_resources_kubernetes,
         mock_get_dra_configs,
         mock_spark_srv_conf_file,
+        mock_ephemeral_port_reserve_range,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1382,6 +1373,7 @@ class TestGetSparkConf:
         mock_get_dra_configs,
         mock_update_spark_srv_configs,
         mock_spark_srv_conf_file,
+        mock_ephemeral_port_reserve_range,
         mock_time,
         assert_ui_port,
         assert_app_name,
