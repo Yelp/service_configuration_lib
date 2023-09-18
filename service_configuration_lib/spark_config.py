@@ -77,8 +77,6 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
-PREFERRED_SPARK_UI_PORT_START = 39091
-PREFERRED_SPARK_UI_PORT_END = 39100
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -1073,8 +1071,8 @@ class SparkConfBuilder:
         ui_port = int(
             (spark_opts_from_env or {}).get('spark.ui.port') or
             utils.ephemeral_port_reserve_range(
-                PREFERRED_SPARK_UI_PORT_START,
-                PREFERRED_SPARK_UI_PORT_END,
+                self.spark_constants.get('preferred_spark_ui_port_start'),
+                self.spark_constants.get('preferred_spark_ui_port_end'),
             ),
         )
 
