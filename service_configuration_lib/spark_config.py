@@ -20,13 +20,12 @@ from typing import Tuple
 from urllib.parse import urlparse
 
 import boto3
-import ephemeral_port_reserve
 import requests
 import yaml
 from boto3 import Session
 
+from service_configuration_lib import utils
 from service_configuration_lib.text_colors import TextColors
-from service_configuration_lib.utils import load_spark_srv_conf
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -78,7 +77,6 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
-PREFERRED_SPARK_UI_PORT = 39091
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -182,11 +180,6 @@ def assume_aws_role(
         DurationSeconds=session_duration,
     )
     return resp['Credentials']
-
-
-def _pick_random_port(preferred_port: int = 0) -> int:
-    """Return a random port. """
-    return ephemeral_port_reserve.reserve('0.0.0.0', preferred_port)
 
 
 def _get_k8s_docker_volumes_conf(
@@ -418,7 +411,7 @@ class SparkConfBuilder:
             (
                 self.spark_srv_conf, self.spark_constants, self.default_spark_srv_conf,
                 self.mandatory_default_spark_srv_conf, self.spark_costs,
-            ) = load_spark_srv_conf()
+            ) = utils.load_spark_srv_conf()
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
 
@@ -1075,9 +1068,15 @@ class SparkConfBuilder:
             spark_app_base_name
         )
 
+        # Pick a port from a pre-defined port range, which will then be used by our Jupyter
+        # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
+        # Spark sessions and exposes them through a single endpoint.
         ui_port = int(
             (spark_opts_from_env or {}).get('spark.ui.port') or
-            _pick_random_port(PREFERRED_SPARK_UI_PORT),
+            utils.ephemeral_port_reserve_range(
+                self.spark_constants.get('preferred_spark_ui_port_start'),
+                self.spark_constants.get('preferred_spark_ui_port_end'),
+            ),
         )
 
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
