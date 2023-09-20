@@ -1068,6 +1068,9 @@ class SparkConfBuilder:
             spark_app_base_name
         )
 
+        # Pick a port from a pre-defined port range, which will then be used by our Jupyter
+        # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
+        # Spark sessions and exposes them through a single endpoint.
         ui_port = int(
             (spark_opts_from_env or {}).get('spark.ui.port') or
             utils.ephemeral_port_reserve_range(
