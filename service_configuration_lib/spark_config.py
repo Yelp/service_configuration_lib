@@ -39,6 +39,7 @@ CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
+    'spark.app.id',
     'spark.ui.port',
     'spark.mesos.principal',
     'spark.mesos.secret',
@@ -1051,7 +1052,6 @@ class SparkConfBuilder:
             If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
         :param force_spark_resource_configs: skip the resource/instances recalculation.
             This is strongly not recommended.
-        :param explcitly setting spark.app.id
         :returns: spark opts in a dict.
         """
         # Mesos deprecation
