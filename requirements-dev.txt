@@ -6,4 +6,5 @@ mypy
 pre-commit==1.21.0
 pytest
 types-PyYAML
-types-requests
+# To resolve the error: types-requests 2.31.0.6 has requirement urllib3>=2, but you'll have urllib3 1.26.15 which is incompatible.
+types-requests==2.31.0.5
