@@ -1501,11 +1501,10 @@ def test_get_grafana_url():
         'spark.executorEnv.PAASTA_INSTANCE': 'test-instance',
     }
     assert spark_config.get_grafana_url(spark_conf) == (
-        'https://grafana.yelpcorp.com/d/b8f79180-bea8-4001-9d4a-94978b5a20b6/spark-on-paasta-job-status?orgId=1&'
+        'http://y/spark-monitoring?'
         'var-paasta_cluster=test-cluster&'
         'var-service=test-service&'
-        'var-instance=test-instance&'
-        'var-pod_name_spark=All'
+        'var-instance=test-instance'
     )
 
 
