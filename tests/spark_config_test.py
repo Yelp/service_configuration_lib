@@ -16,6 +16,11 @@ from service_configuration_lib import utils
 TEST_ACCOUNT_ID = '123456789'
 TEST_USER = 'UNIT_TEST_USER'
 
+UI_PORT_RETURN_VALUE = 65432
+EPHEMERAL_PORT_RETURN_VALUE = '12345'
+TIME_RETURN_VALUE = 123.456
+RANDOM_STRING_RETURN_VALUE = 'do1re2mi3fa4sol4'
+
 
 @pytest.fixture
 def mock_log(monkeypatch):
@@ -26,8 +31,14 @@ def mock_log(monkeypatch):
 
 @pytest.fixture
 def mock_time():
-    with mock.patch.object(spark_config.time, 'time', return_value=123.456):
-        yield 123.456
+    with mock.patch.object(spark_config.time, 'time', return_value=TIME_RETURN_VALUE):
+        yield TIME_RETURN_VALUE
+
+
+@pytest.fixture
+def mock_get_random_string():
+    with mock.patch.object(utils, 'get_random_string', return_value=RANDOM_STRING_RETURN_VALUE):
+        yield RANDOM_STRING_RETURN_VALUE
 
 
 class TestGetAWSCredentials:
@@ -1083,11 +1094,10 @@ class TestGetSparkConf:
 
     @pytest.fixture
     def mock_ephemeral_port_reserve_range(self):
-        port = '12345'
-        with mock.patch.object(utils, 'ephemeral_port_reserve_range', return_value=port):
-            yield port
+        with mock.patch.object(utils, 'ephemeral_port_reserve_range', return_value=EPHEMERAL_PORT_RETURN_VALUE):
+            yield EPHEMERAL_PORT_RETURN_VALUE
 
-    @pytest.fixture(params=[None, '23456'])
+    @pytest.fixture(params=[None, str(UI_PORT_RETURN_VALUE)])
     def ui_port(self, request):
         return request.param
 
@@ -1115,13 +1125,21 @@ class TestGetSparkConf:
         return request.param
 
     @pytest.fixture
-    def assert_app_name(self, spark_opts_from_env, user_spark_opts, ui_port, mock_ephemeral_port_reserve_range):
+    def assert_app_name(
+        self,
+        spark_opts_from_env,
+        user_spark_opts,
+        ui_port,
+        mock_ephemeral_port_reserve_range,
+        mock_get_random_string,
+    ):
         expected_output = (spark_opts_from_env or {}).get('spark.app.name')
+
         if not expected_output:
-            expected_output = (
-                (user_spark_opts or {}).get('spark.app.name') or
-                self.spark_app_base_name
-            ) + '_' + (ui_port or mock_ephemeral_port_reserve_range) + '_123'
+            base_name = (user_spark_opts or {}).get('spark.app.name') or self.spark_app_base_name
+            port = ui_port or mock_ephemeral_port_reserve_range
+            time_int = int(TIME_RETURN_VALUE)
+            expected_output = f'{base_name}_{port}_{time_int}_{mock_get_random_string}'
 
         def verify(output):
             key = 'spark.app.name'
@@ -1475,13 +1493,6 @@ class TestGetSparkConf:
         assert result_dict['spark.executor.memory'] == expected_memory
         assert int(result_dict['spark.executor.instances']) == 1
         assert int(result_dict['spark.task.cpus']) == 1
-
-
-def test_stringify_spark_env():
-    conf = {'spark.mesos.leader': '1234', 'spark.mesos.principal': 'spark'}
-    assert spark_config.stringify_spark_env(conf) == (
-        '--conf spark.mesos.leader=1234 --conf spark.mesos.principal=spark'
-    )
 
 
 @pytest.mark.parametrize(
