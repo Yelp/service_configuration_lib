@@ -6,9 +6,7 @@ import json
 import logging
 import math
 import os
-import random
 import re
-import string
 import time
 from typing import Any
 from typing import Dict
@@ -1080,6 +1078,7 @@ class SparkConfBuilder:
         )
 
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
+        random_postfix = utils.get_random_string(4)
 
         if aws_creds[2] is not None:
             spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
@@ -1087,9 +1086,7 @@ class SparkConfBuilder:
         # app_name from env is already appended port and time to make it unique
         app_name = (spark_opts_from_env or {}).get('spark.app.name')
         if not app_name:
-            # We want to make the app name more unique so that we can search it
-            # from history server.
-            app_name = f'{app_base_name}_{ui_port}_{int(time.time())}'
+            app_name = f'{app_base_name}_{ui_port}_{int(time.time())}_{random_postfix}'
         is_jupyter = _is_jupyterhub_job(app_name)
 
         # Explicitly setting app id: replace special characters to '_' to make it consistent
@@ -1099,7 +1096,6 @@ class SparkConfBuilder:
         if is_jupyter:
             raw_app_id = app_name
         else:
-            random_postfix = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(4))
             raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
         app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 

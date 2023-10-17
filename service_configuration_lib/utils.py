@@ -1,6 +1,8 @@
 import contextlib
 import errno
 import logging
+import random
+import string
 from socket import error as SocketError
 from socket import SO_REUSEADDR
 from socket import socket
@@ -79,3 +81,7 @@ def ephemeral_port_reserve_range(preferred_port_start: int, preferred_port_end: 
             sock, _ = s.accept()
             with contextlib.closing(sock):
                 return sockname[1]
+
+
+def get_random_string(length: int) -> str:
+    return ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(length))
