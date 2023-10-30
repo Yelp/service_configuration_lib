@@ -1099,6 +1099,9 @@ class SparkConfBuilder:
             raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
         app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 
+        # Starting Spark 3.4+, spark-app-name label has been added. Limiting to 63 characters
+        app_name = _get_k8s_resource_name_limit_size_with_hash(app_name)
+
         spark_conf.update({
             'spark.app.name': app_name,
             'spark.app.id': app_id,

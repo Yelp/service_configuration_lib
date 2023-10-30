@@ -1144,6 +1144,7 @@ class TestGetSparkConf:
         def verify(output):
             key = 'spark.app.name'
             assert output[key] == expected_output
+            assert len(output[key]) <= 63
             return [key]
         return verify
 
