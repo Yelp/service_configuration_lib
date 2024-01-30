@@ -114,7 +114,7 @@ def get_aws_credentials(
     assume_aws_role_arn: Optional[str] = None,
     session_duration: int = 3600,
     assume_role_user_creds_file: str = '/nail/etc/spark_role_assumer/spark_role_assumer.yaml',
-    use_default_session=False,
+    use_web_identity=False,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
     if no_aws_credentials:
@@ -133,8 +133,27 @@ def get_aws_credentials(
             log.warning(
                 'Tried to assume role with web identity but something went wrong ',
             )
-    elif use_default_session:
-        session = Session()
+    elif use_web_identity:
+        token_path = os.environ.get('AWS_WEB_IDENTITY_TOKEN_FILE')
+        role_arn = os.environ.get('AWS_ROLE_ARN')
+        if not token_path or not role_arn:
+            log.warning('No web identity token file found.')
+            return None, None, None
+        with open(token_path) as token_file:
+            token = token_file.read()
+        sts_client = boto3.client('sts')
+        timestamp = int(time.time())
+        session = sts_client.assume_role_with_web_identity(
+            RoleArn=role_arn,
+            RoleSessionName=f'{service}-session-{timestamp}',
+            WebIdentityToken=token,
+            DurationSeconds=session_duration,
+        )
+        return (
+            session['Credentials']['AccessKeyId'],
+            session['Credentials']['SecretAccessKey'],
+            session['Credentials']['SessionToken'],
+        )
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
