@@ -114,6 +114,7 @@ def get_aws_credentials(
     assume_aws_role_arn: Optional[str] = None,
     session_duration: int = 3600,
     assume_role_user_creds_file: str = '/nail/etc/spark_role_assumer/spark_role_assumer.yaml',
+    use_default_session=False,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
     if no_aws_credentials:
@@ -132,6 +133,8 @@ def get_aws_credentials(
             log.warning(
                 'Tried to assume role with web identity but something went wrong ',
             )
+    elif use_default_session:
+        session = Session()
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
