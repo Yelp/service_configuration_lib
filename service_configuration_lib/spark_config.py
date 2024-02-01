@@ -137,8 +137,7 @@ def get_aws_credentials(
         token_path = os.environ.get('AWS_WEB_IDENTITY_TOKEN_FILE')
         role_arn = os.environ.get('AWS_ROLE_ARN')
         if not token_path or not role_arn:
-            log.warning('No web identity token file found.')
-            return None, None, None
+            raise Exception('Expected AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN to be set.')
         with open(token_path) as token_file:
             token = token_file.read()
         sts_client = boto3.client('sts')
