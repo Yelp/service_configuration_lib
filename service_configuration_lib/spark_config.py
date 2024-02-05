@@ -980,7 +980,7 @@ class SparkConfBuilder:
                 spark_conf.get('spark.dynamicAllocation.minExecutors', min_cores),
             ))
 
-        cost_factor = self.spark_costs.get(paasta_cluster, dict())[paasta_pool]
+        cost_factor = self.spark_costs.get(paasta_cluster, dict()).get(paasta_pool, 0)
 
         min_dollars = round(min_cores * cost_factor, 5)
         max_dollars = round(max_cores * cost_factor, 5)
