@@ -1,6 +1,4 @@
-import base64
 import functools
-import hashlib
 import itertools
 import json
 import logging
@@ -265,6 +263,7 @@ def _get_k8s_spark_env(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
+    pod_template_path: str,
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
     driver_ui_port: int,
@@ -275,9 +274,9 @@ def _get_k8s_spark_env(
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
     # NOTE: this affects only k8s labels, not the pod names.
-    _paasta_cluster = _get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
-    _paasta_service = _get_k8s_resource_name_limit_size_with_hash(paasta_service)
-    _paasta_instance = _get_k8s_resource_name_limit_size_with_hash(paasta_instance)
+    _paasta_cluster = utils.get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
+    _paasta_service = utils.get_k8s_resource_name_limit_size_with_hash(paasta_service)
+    _paasta_instance = utils.get_k8s_resource_name_limit_size_with_hash(paasta_instance)
     user = os.environ.get('USER', '_unspecified_')
 
     spark_env = {
@@ -302,6 +301,7 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.paasta.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
+        'spark.kubernetes.executor.podTemplateFile': pod_template_path,
         **_get_k8s_docker_volumes_conf(volumes),
     }
     if service_account_name is not None:
@@ -345,24 +345,6 @@ def _get_local_spark_env(
         # and so we are borrowing the spark k8s configs.
         **_get_k8s_docker_volumes_conf(volumes),
     }
-
-
-def _get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffix: int = 4) -> str:
-    """ Returns `name` unchanged if it's length does not exceed the `limit`.
-        Otherwise, returns truncated `name` with it's hash of size `suffix`
-        appended.
-
-        base32 encoding is chosen as it satisfies the common requirement in
-        various k8s names to be alphanumeric.
-
-        NOTE: This function is the same as paasta/paasta_tools/kubernetes_tools.py
-    """
-    if len(name) > limit:
-        digest = hashlib.md5(name.encode()).digest()
-        hash = base64.b32encode(digest).decode().replace('=', '').lower()
-        return f'{name[:(limit-suffix-1)]}-{hash[:suffix]}'
-    else:
-        return name
 
 
 def stringify_spark_env(spark_env: Mapping[str, str]) -> str:
@@ -929,31 +911,44 @@ class SparkConfBuilder:
 
         if len(self.spark_srv_conf.items()) == 0:
             log.warning('spark_srv_conf is empty, disable event log')
+            spark_opts.update({"spark.eventLog.enabled": "false"})
             return spark_opts
 
-        try:
-            account_id = (
-                boto3.client(
-                    'sts',
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    aws_session_token=session_token,
+        if access_key:
+            try:
+                account_id = (
+                    boto3.client(
+                        'sts',
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        aws_session_token=session_token,
+                    )
+                    .get_caller_identity()
+                    .get('Account')
                 )
-                .get_caller_identity()
-                .get('Account')
-            )
-        except Exception as e:
-            log.warning('Failed to identify account ID, error: {}'.format(str(e)))
-            spark_opts['spark.eventLog.enabled'] = 'false'
-            return spark_opts
-
-        for conf in self.spark_srv_conf.get('environments', {}).values():
-            if account_id == conf['account_id']:
-                spark_opts['spark.eventLog.enabled'] = 'true'
-                spark_opts['spark.eventLog.dir'] = conf['default_event_log_dir']
+            except Exception as e:
+                log.warning('Failed to identify account ID, error: {}'.format(str(e)))
+                spark_opts['spark.eventLog.enabled'] = 'false'
                 return spark_opts
 
-        log.warning(f'Disable event log because No preset event log dir for account: {account_id}')
+            for conf in self.spark_srv_conf.get('environments', {}).values():
+                if account_id == conf['account_id']:
+                    spark_opts['spark.eventLog.enabled'] = 'true'
+                    spark_opts['spark.eventLog.dir'] = conf['default_event_log_dir']
+                    return spark_opts
+
+        else:
+            environment_config = self.spark_srv_conf.get("environments", {}).get(
+                utils.get_runtimeenv()
+            )
+            if environment_config:
+                spark_opts.update({
+                    "spark.eventLog.enabled": "true",
+                    "spark.eventLog.dir": environment_config["default_event_log_dir"],
+                })
+                return spark_opts
+
+        log.warning('Disable event log because No preset event log dir')
         spark_opts['spark.eventLog.enabled'] = 'false'
         return spark_opts
 
@@ -1014,7 +1009,7 @@ class SparkConfBuilder:
         paasta_service: str,
         paasta_instance: str,
         docker_img: str,
-        aws_creds: Tuple[Optional[str], Optional[str], Optional[str]],
+        aws_creds: Optional[Tuple[Optional[str], Optional[str], Optional[str]]] = None,
         extra_volumes: Optional[List[Mapping[str, str]]] = None,
         use_eks: bool = False,
         k8s_server_address: Optional[str] = None,
@@ -1080,10 +1075,10 @@ class SparkConfBuilder:
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
         random_postfix = utils.get_random_string(4)
 
-        if aws_creds[2] is not None:
+        if aws_creds is not None and aws_creds[2] is not None:
             spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
 
-        # app_name from env is already appended port and time to make it unique
+        # app_name from env is already appended with port and time to make it unique
         app_name = (spark_opts_from_env or {}).get('spark.app.name')
         if not app_name:
             app_name = f'{app_base_name}_{ui_port}_{int(time.time())}_{random_postfix}'
@@ -1097,10 +1092,10 @@ class SparkConfBuilder:
             raw_app_id = app_name
         else:
             raw_app_id = f'{paasta_service}__{paasta_instance}__{random_postfix}'
-        app_id = re.sub(r'[\.,-]', '_', _get_k8s_resource_name_limit_size_with_hash(raw_app_id))
+        app_id = re.sub(r'[\.,-]', '_', utils.get_k8s_resource_name_limit_size_with_hash(raw_app_id))
 
         # Starting Spark 3.4+, spark-app-name label has been added. Limiting to 63 characters
-        app_name = _get_k8s_resource_name_limit_size_with_hash(app_name)
+        app_name = utils.get_k8s_resource_name_limit_size_with_hash(app_name)
 
         spark_conf.update({
             'spark.app.name': app_name,
@@ -1113,15 +1108,19 @@ class SparkConfBuilder:
             spark_conf, cluster_manager, paasta_pool, force_spark_resource_configs,
         )
 
+        pod_template_path = utils.generate_pod_template_path()
+        utils.create_pod_template(pod_template_path, app_base_name)
+
         if cluster_manager == 'kubernetes':
             spark_conf.update(_get_k8s_spark_env(
-                paasta_cluster,
-                paasta_service,
-                paasta_instance,
-                docker_img,
-                extra_volumes,
-                paasta_pool,
-                ui_port,
+                paasta_cluster=paasta_cluster,
+                paasta_service=paasta_service,
+                paasta_instance=paasta_instance,
+                docker_img=docker_img,
+                pod_template_path=pod_template_path,
+                volumes=extra_volumes,
+                paasta_pool=paasta_pool,
+                driver_ui_port=ui_port,
                 service_account_name=service_account_name,
                 include_self_managed_configs=not use_eks,
                 k8s_server_address=k8s_server_address,
@@ -1158,7 +1157,9 @@ class SparkConfBuilder:
         if is_jupyter:
             spark_conf = _append_spark_config(spark_conf, 'spark.ui.showConsoleProgress', 'true')
 
-        spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
+        if aws_creds:
+            spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
+
         return spark_conf
 
 
