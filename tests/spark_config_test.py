@@ -167,6 +167,7 @@ class TestGetSparkConf:
     executor_cores = '10'
     spark_app_base_name = 'test_app_base_name'
     aws_provider_key = 'spark.hadoop.fs.s3a.aws.credentials.provider'
+    pod_template_path = 'test_pod_template_path'
 
     @pytest.fixture
     def mock_spark_srv_conf_file(self, tmpdir, monkeypatch):
@@ -1073,6 +1074,18 @@ class TestGetSparkConf:
             yield m
 
     @pytest.fixture
+    def mock_generate_pod_template_path(self):
+        return_value = self.pod_template_path
+        with mock.patch.object(utils, 'generate_pod_template_path', return_value=return_value) as m:
+            yield m
+
+    @pytest.fixture
+    def mock_create_pod_template(self):
+        return_value = None
+        with mock.patch.object(utils, 'create_pod_template', return_value=return_value) as m:
+            yield m
+
+    @pytest.fixture
     def mock_secret(self, tmpdir, monkeypatch):
         secret = 'secret'
         fp = tmpdir.join('mesos_secret')
@@ -1228,6 +1241,7 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.paasta.yelp.com/pool': self.pool,
             'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
+            'spark.kubernetes.executor.podTemplateFile': self.pod_template_path,
         }
         for i, volume in enumerate(base_volumes + self._get_k8s_base_volumes()):
             expected_output[f'spark.kubernetes.executor.volumes.hostPath.{i}.mount.path'] = volume['containerPath']
@@ -1257,6 +1271,8 @@ class TestGetSparkConf:
         mock_update_spark_srv_configs,
         mock_spark_srv_conf_file,
         mock_ephemeral_port_reserve_range,
+        mock_generate_pod_template_path,
+        mock_create_pod_template,
         mock_time,
         assert_ui_port,
         assert_app_name,
@@ -1735,4 +1751,4 @@ def test_send_and_calculate_resources_cost(
     ),
 )
 def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_instance_label):
-    assert expected_instance_label == spark_config._get_k8s_resource_name_limit_size_with_hash(instance_name)
+    assert expected_instance_label == utils.get_k8s_resource_name_limit_size_with_hash(instance_name)

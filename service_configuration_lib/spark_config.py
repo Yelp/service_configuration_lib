@@ -895,8 +895,8 @@ class SparkConfBuilder:
     def _append_event_log_conf(
             self,
             spark_opts: Dict[str, str],
-            access_key: Optional[str],
-            secret_key: Optional[str],
+            access_key: Optional[str] = None,
+            secret_key: Optional[str] = None,
             session_token: Optional[str] = None,
     ) -> Dict[str, str]:
         enabled = spark_opts.setdefault('spark.eventLog.enabled', 'true').lower()
@@ -911,7 +911,7 @@ class SparkConfBuilder:
 
         if len(self.spark_srv_conf.items()) == 0:
             log.warning('spark_srv_conf is empty, disable event log')
-            spark_opts.update({"spark.eventLog.enabled": "false"})
+            spark_opts.update({'spark.eventLog.enabled': 'false'})
             return spark_opts
 
         if access_key:
@@ -938,13 +938,13 @@ class SparkConfBuilder:
                     return spark_opts
 
         else:
-            environment_config = self.spark_srv_conf.get("environments", {}).get(
-                utils.get_runtimeenv()
+            environment_config = self.spark_srv_conf.get('environments', {}).get(
+                utils.get_runtimeenv(),
             )
             if environment_config:
                 spark_opts.update({
-                    "spark.eventLog.enabled": "true",
-                    "spark.eventLog.dir": environment_config["default_event_log_dir"],
+                    'spark.eventLog.enabled': 'true',
+                    'spark.eventLog.dir': environment_config['default_event_log_dir'],
                 })
                 return spark_opts
 
@@ -1108,6 +1108,7 @@ class SparkConfBuilder:
             spark_conf, cluster_manager, paasta_pool, force_spark_resource_configs,
         )
 
+        # Add pod template file
         pod_template_path = utils.generate_pod_template_path()
         utils.create_pod_template(pod_template_path, app_base_name)
 
@@ -1145,7 +1146,10 @@ class SparkConfBuilder:
         spark_conf = self._append_spark_prometheus_conf(spark_conf)
 
         # configure spark_event_log
-        spark_conf = self._append_event_log_conf(spark_conf, *aws_creds)
+        if aws_creds:
+            spark_conf = self._append_event_log_conf(spark_conf, *aws_creds)
+        else:
+            spark_conf = self._append_event_log_conf(spark_conf)
 
         # configure sql shuffle partitions
         spark_conf = self._append_sql_partitions_conf(spark_conf)
