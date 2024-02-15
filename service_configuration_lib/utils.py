@@ -1,8 +1,12 @@
+import base64
 import contextlib
 import errno
+import hashlib
 import logging
 import random
 import string
+import uuid
+from functools import lru_cache
 from socket import error as SocketError
 from socket import SO_REUSEADDR
 from socket import socket
@@ -12,8 +16,11 @@ from typing import Tuple
 
 import yaml
 
-
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
+
+POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
+
+SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -85,3 +92,52 @@ def ephemeral_port_reserve_range(preferred_port_start: int, preferred_port_end: 
 
 def get_random_string(length: int) -> str:
     return ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(length))
+
+
+def generate_pod_template_path() -> str:
+    return POD_TEMPLATE_PATH.format(file_uuid=uuid.uuid4().hex)
+
+
+def create_pod_template(pod_template_path: str, app_base_name: str) -> None:
+    try:
+        with open(SPARK_EXECUTOR_POD_TEMPLATE, 'r') as fp:
+            parsed_pod_template = fp.read()
+        parsed_pod_template = parsed_pod_template.format(spark_pod_label=get_k8s_resource_name_limit_size_with_hash(
+            f'exec-{app_base_name}',
+        ))
+        parsed_pod_template = yaml.safe_load(parsed_pod_template)
+        with open(pod_template_path, 'w') as f:
+            yaml.dump(parsed_pod_template, f)
+    except Exception as e:
+        log.warning(f'Failed to read and process {SPARK_EXECUTOR_POD_TEMPLATE}: {e}')
+        raise e
+
+
+def get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffix: int = 4) -> str:
+    """ Returns `name` unchanged if it's length does not exceed the `limit`.
+        Otherwise, returns truncated `name` with its hash of size `suffix`
+        appended.
+
+        base32 encoding is chosen as it satisfies the common requirement in
+        various k8s names to be alphanumeric.
+
+        NOTE: This function is the same as paasta/paasta_tools/kubernetes_tools.py
+    """
+    if len(name) > limit:
+        digest = hashlib.md5(name.encode()).digest()
+        hashed = base64.b32encode(digest).decode().replace('=', '').lower()
+        return f'{name[:(limit-suffix-1)]}-{hashed[:suffix]}'
+    else:
+        return name
+
+
+@lru_cache(maxsize=1)
+def get_runtime_env() -> str:
+    try:
+        with open('/nail/etc/runtimeenv', mode='r') as f:
+            return f.read()
+    except OSError:
+        log.error('Unable to read runtimeenv - this is not expected if inside Yelp.')
+        # we could also just crash or return None, but this seems a little easier to find
+        # should we somehow run into this at Yelp
+        return 'unknown'
