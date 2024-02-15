@@ -1110,7 +1110,11 @@ class SparkConfBuilder:
 
         # Add pod template file
         pod_template_path = utils.generate_pod_template_path()
-        utils.create_pod_template(pod_template_path, app_base_name)
+        try:
+            utils.create_pod_template(pod_template_path, app_base_name)
+        except Exception as e:
+            log.error(f'Failed to generate Spark executor pod template: {e}')
+            pod_template_path = ''
 
         if cluster_manager == 'kubernetes':
             spark_conf.update(_get_k8s_spark_env(

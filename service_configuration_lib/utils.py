@@ -18,30 +18,9 @@ import yaml
 
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 
-POD_TEMPLATE_DIR = '/nail/tmp'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
 
-POD_TEMPLATE = """
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    spark: {spark_pod_label}
-spec:
-  dnsPolicy: Default
-  affinity:
-    podAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 95
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-            - key: spark
-              operator: In
-              values:
-              - {spark_pod_label}
-          topologyKey: topology.kubernetes.io/hostname
-"""
+SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -120,12 +99,15 @@ def generate_pod_template_path() -> str:
 
 
 def create_pod_template(pod_template_path: str, app_base_name: str) -> None:
-    document = POD_TEMPLATE.format(
-        spark_pod_label=get_k8s_resource_name_limit_size_with_hash(f'exec-{app_base_name}'),
-    )
-    parsed_pod_template = yaml.safe_load(document)
-    with open(pod_template_path, 'w') as f:
-        yaml.dump(parsed_pod_template, f)
+    try:
+        with open(SPARK_EXECUTOR_POD_TEMPLATE, 'r') as fp:
+            parsed_pod_template = yaml.safe_load(fp.read())
+        parsed_pod_template['metadata']['labels']['spark'] = get_k8s_resource_name_limit_size_with_hash(f'exec-{app_base_name}')
+        with open(pod_template_path, 'w') as f:
+            yaml.dump(parsed_pod_template, f)
+    except Exception as e:
+        log.warning(f'Failed to read and process {SPARK_EXECUTOR_POD_TEMPLATE}: {e}')
+        raise e
 
 
 def get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffix: int = 4) -> str:
