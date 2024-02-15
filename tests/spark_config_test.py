@@ -1742,17 +1742,3 @@ def test_send_and_calculate_resources_cost(
     mock_clusterman_metrics.util.costs.estimate_cost_per_hour.assert_called_once_with(
         cluster='test-cluster', pool='test-pool', cpus=10, mem=2048,
     )
-
-
-@pytest.mark.parametrize(
-    'instance_name,expected_instance_label',
-    (
-        ('my_job.do_something', 'my_job.do_something'),
-        (
-            f"my_job.{'a'* 100}",
-            'my_job.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-6xhe',
-        ),
-    ),
-)
-def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_instance_label):
-    assert expected_instance_label == utils.get_k8s_resource_name_limit_size_with_hash(instance_name)

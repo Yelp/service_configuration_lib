@@ -131,7 +131,7 @@ def get_k8s_resource_name_limit_size_with_hash(name: str, limit: int = 63, suffi
 
 
 @lru_cache(maxsize=1)
-def get_runtimeenv() -> str:
+def get_runtime_env() -> str:
     try:
         with open('/nail/etc/runtimeenv', mode='r') as f:
             return f.read()

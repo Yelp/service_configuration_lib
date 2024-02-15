@@ -939,7 +939,7 @@ class SparkConfBuilder:
 
         else:
             environment_config = self.spark_srv_conf.get('environments', {}).get(
-                utils.get_runtimeenv(),
+                utils.get_runtime_env(),
             )
             if environment_config:
                 spark_opts.update({
