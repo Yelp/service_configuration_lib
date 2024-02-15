@@ -1,6 +1,8 @@
-import pytest
 import uuid
 from unittest import mock
+
+import pytest
+
 from service_configuration_lib import utils
 
 
@@ -20,8 +22,8 @@ def test_get_k8s_resource_name_limit_size_with_hash(instance_name, expected_inst
 
 @pytest.mark.parametrize(
     'hex_value', [
-        'ml_compute_test_string',
-        'random_string',
+        '656bf9032f014bc0a5e8a7be9e25d414',
+        '4185e3acdb4b4317af2659f6dd16ffb2',
     ],
 )
 def test_generate_pod_template_path(hex_value):

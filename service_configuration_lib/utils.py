@@ -103,7 +103,7 @@ def create_pod_template(pod_template_path: str, app_base_name: str) -> None:
         with open(SPARK_EXECUTOR_POD_TEMPLATE, 'r') as fp:
             parsed_pod_template = yaml.safe_load(fp.read())
         parsed_pod_template['metadata']['labels']['spark'] = get_k8s_resource_name_limit_size_with_hash(
-            f'exec-{app_base_name}'
+            f'exec-{app_base_name}',
         )
         with open(pod_template_path, 'w') as f:
             yaml.dump(parsed_pod_template, f)
