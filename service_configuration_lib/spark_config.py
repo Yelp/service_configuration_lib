@@ -270,6 +270,7 @@ def _get_k8s_spark_env(
     service_account_name: Optional[str] = None,
     include_self_managed_configs: bool = True,
     k8s_server_address: Optional[str] = None,
+    user: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -277,7 +278,8 @@ def _get_k8s_spark_env(
     _paasta_cluster = utils.get_k8s_resource_name_limit_size_with_hash(paasta_cluster)
     _paasta_service = utils.get_k8s_resource_name_limit_size_with_hash(paasta_service)
     _paasta_instance = utils.get_k8s_resource_name_limit_size_with_hash(paasta_instance)
-    user = os.environ.get('USER', '_unspecified_')
+    if not user:
+        user = os.environ.get('USER', 'UNSPECIFIED')
 
     spark_env = {
         'spark.master': f'k8s://https://k8s.{paasta_cluster}.paasta:6443',
@@ -1017,6 +1019,7 @@ class SparkConfBuilder:
         aws_region: Optional[str] = None,
         service_account_name: Optional[str] = None,
         force_spark_resource_configs: bool = True,
+        user: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build spark config dict to run with spark on paasta
 
@@ -1129,6 +1132,7 @@ class SparkConfBuilder:
                 service_account_name=service_account_name,
                 include_self_managed_configs=not use_eks,
                 k8s_server_address=k8s_server_address,
+                user=user,
             ))
         elif cluster_manager == 'local':
             spark_conf.update(_get_local_spark_env(
