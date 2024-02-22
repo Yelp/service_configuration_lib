@@ -17,10 +17,13 @@ from typing import Tuple
 import yaml
 
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
-
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
-
 SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
+
+LOCALHOST = '127.0.0.1'
+EPHEMERAL_PORT_START = 49152
+EPHEMERAL_PORT_END = 65535
+
 
 log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
@@ -46,7 +49,11 @@ def load_spark_srv_conf(preset_values=None) -> Tuple[Mapping, Mapping, Mapping, 
         raise e
 
 
-def ephemeral_port_reserve_range(preferred_port_start: int, preferred_port_end: int, ip='127.0.0.1') -> int:
+def ephemeral_port_reserve_range(
+    preferred_port_start: int = EPHEMERAL_PORT_START,
+    preferred_port_end: int = EPHEMERAL_PORT_END,
+    ip: str = LOCALHOST,
+) -> int:
     """
     Pick an available from the preferred port range. If all ports from the port range are unavailable,
     pick a random available ephemeral port.
