@@ -186,10 +186,11 @@ def assume_aws_role(
             creds_dict = yaml.load(creds_file.read(), Loader=yaml.SafeLoader)
             access_key = creds_dict['AccessKeyId']
             secret_key = creds_dict['SecretAccessKey']
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         log.warning(
-            'If using spark-run as a human, you must manually export '
-            'AWS session credentials first. See y/spark-run-aws-role',
+            f'Tried to use {key_file} but it is not available. --assume-aws-role '
+            'can only be used with ssh executor. If using spark-run as a human, '
+            'you must manually export AWS session credentials first. See y/spark-run-aws-role',
         )
         raise
     timestamp = int(time.time())
