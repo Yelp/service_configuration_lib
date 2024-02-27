@@ -396,7 +396,7 @@ class SparkConfBuilder:
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
             # should fail because Spark config calculation depends on values in srv-configs
-            sys.exit(1)
+            raise e
 
     def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts['spark.ui.prometheus.enabled'] = 'true'
