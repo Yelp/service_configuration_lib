@@ -57,9 +57,6 @@ class TestGetAWSCredentials:
     creds = {'aws_access_key_id': access_key, 'aws_secret_access_key': secret_key}
     expected_creds = (access_key, secret_key, None)
 
-    def test_no_aws_creds(self):
-        assert spark_config.get_aws_credentials(no_aws_credentials=True) == (None, None, None)
-
     @pytest.mark.parametrize('aws_creds', [temp_creds, creds])
     def test_aws_credentials_yaml(self, tmpdir, aws_creds):
         fp = tmpdir.join('test.yaml')

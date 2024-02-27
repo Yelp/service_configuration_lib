@@ -2,11 +2,10 @@ import functools
 import itertools
 import json
 import logging
-import sys
-
 import math
 import os
 import re
+import sys
 import time
 from typing import Any
 from typing import Dict
@@ -1076,7 +1075,7 @@ class SparkConfBuilder:
                     self.spark_constants.get('preferred_spark_ui_port_end'),
                 ),
             )
-        except Exception as e:
+        except Exception:
             ui_port = utils.ephemeral_port_reserve_range()
 
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
