@@ -104,7 +104,6 @@ def _load_aws_credentials_from_yaml(yaml_file_path) -> Tuple[str, str, Optional[
 
 def get_aws_credentials(
     service: Optional[str] = DEFAULT_SPARK_SERVICE,
-    no_aws_credentials: bool = False,
     aws_credentials_yaml: Optional[str] = None,
     profile_name: Optional[str] = None,
     session: Optional[boto3.Session] = None,
@@ -114,9 +113,7 @@ def get_aws_credentials(
     assume_role_user_creds_file: str = '/nail/etc/spark_role_assumer/spark_role_assumer.yaml',
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """load aws creds using different method/file"""
-    if no_aws_credentials:
-        return None, None, None
-    elif aws_credentials_yaml:
+    if aws_credentials_yaml:
         return _load_aws_credentials_from_yaml(aws_credentials_yaml)
     elif aws_credentials_json:
         with open(aws_credentials_json, 'r') as f:
@@ -397,6 +394,8 @@ class SparkConfBuilder:
             ) = utils.load_spark_srv_conf()
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
+            # should fail because Spark config calculation depends on values in srv-configs
+            raise e
 
     def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts['spark.ui.prometheus.enabled'] = 'true'
@@ -1067,13 +1066,20 @@ class SparkConfBuilder:
         # Pick a port from a pre-defined port range, which will then be used by our Jupyter
         # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
         # Spark sessions and exposes them through a single endpoint.
-        ui_port = int(
-            (spark_opts_from_env or {}).get('spark.ui.port') or
-            utils.ephemeral_port_reserve_range(
-                self.spark_constants.get('preferred_spark_ui_port_start'),
-                self.spark_constants.get('preferred_spark_ui_port_end'),
-            ),
-        )
+        try:
+            ui_port = int(
+                (spark_opts_from_env or {}).get('spark.ui.port') or
+                utils.ephemeral_port_reserve_range(
+                    self.spark_constants.get('preferred_spark_ui_port_start'),
+                    self.spark_constants.get('preferred_spark_ui_port_end'),
+                ),
+            )
+        except Exception as e:
+            log.warning(
+                f'Could not get an available port using srv-config port range: {e}. '
+                'Using default port range to get an available port.',
+            )
+            ui_port = utils.ephemeral_port_reserve_range()
 
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
         random_postfix = utils.get_random_string(4)
