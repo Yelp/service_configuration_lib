@@ -1209,18 +1209,6 @@ def get_grafana_url(spark_conf: Mapping[str, str]) -> str:
     )
 
 
-def get_signalfx_url(spark_conf: Mapping[str, str]) -> str:
-    return (
-        'https://app.signalfx.com/#/dashboard/FOjL2yRAcAA?density=4'
-        '&variables%5B%5D=Instance%3Dinstance_name:'
-        '&variables%5B%5D=Service%3Dservice_name:%5B%22spark%22%5D'
-        f"&variables%5B%5D=PaaSTA%20Cluster%3Dpaasta_cluster:{spark_conf['spark.executorEnv.PAASTA_CLUSTER']}"
-        f"&variables%5B%5D=PaaSTA%20Service%3Dpaasta_service:{spark_conf['spark.executorEnv.PAASTA_SERVICE']}"
-        f"&variables%5B%5D=PaaSTA%20Instance%3Dpaasta_instance:{spark_conf['spark.executorEnv.PAASTA_INSTANCE']}"
-        '&startTime=-1h&endTime=Now'
-    )
-
-
 def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
     num_executors = (
         # spark on k8s directly configure num instances
