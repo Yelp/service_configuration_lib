@@ -148,6 +148,8 @@ def get_aws_credentials(
             session['Credentials']['SecretAccessKey'],
             session['Credentials']['SessionToken'],
         )
+    elif profile_name:
+        return use_aws_profile(profile_name=profile_name, session=session)
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
@@ -158,6 +160,13 @@ def get_aws_credentials(
                 'Falling back to user credentials.',
             )
 
+    return use_aws_profile(session=session)
+
+
+def use_aws_profile(
+    profile_name: str = 'default',
+    session: Optional[boto3.Session] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     session = session or Session(profile_name=profile_name)
     creds = session.get_credentials()
     return (

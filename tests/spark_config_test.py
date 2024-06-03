@@ -100,8 +100,20 @@ class TestGetAWSCredentials:
         fp.write(json.dumps({'accessKeyId': self.access_key, 'secretAccessKey': self.secret_key}))
         assert spark_config.get_aws_credentials(aws_credentials_json=str(fp)) == self.expected_creds
 
+    def test_use_profile_and_service(self, mock_session):
+        profile = 'test_profile'
+        service = 'test_service'
+        assert spark_config.get_aws_credentials(profile_name=profile, service=service) == self.expected_temp_creds
+
     def test_use_profile(self, mock_session):
         assert spark_config.get_aws_credentials(profile_name='test_profile') == self.expected_temp_creds
+
+    def test_use_default_profile(self, mock_session):
+        assert spark_config.get_aws_credentials(service=spark_config.DEFAULT_SPARK_SERVICE) == self.expected_temp_creds
+
+    def test_no_service_specified(self, mock_session):
+        # should default to using the `default` user profile if no other credentials specified
+        assert spark_config.get_aws_credentials() == self.expected_temp_creds
 
     @pytest.fixture
     def mock_client(self):
