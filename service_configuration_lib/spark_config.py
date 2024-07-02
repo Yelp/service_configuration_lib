@@ -148,8 +148,13 @@ def get_aws_credentials(
             session['Credentials']['SecretAccessKey'],
             session['Credentials']['SessionToken'],
         )
+    # use the boto3 session if provided
+    elif session:
+        return use_aws_profile(session=session)
+    # use the aws profile if provided
     elif profile_name:
-        return use_aws_profile(profile_name=profile_name, session=session)
+        return use_aws_profile(profile_name=profile_name)
+    # use the service specific boto creds if boto3 session or aws profile is not provided
     elif service != DEFAULT_SPARK_SERVICE:
         service_credentials_path = os.path.join(AWS_CREDENTIALS_DIR, f'{service}.yaml')
         if os.path.exists(service_credentials_path):
@@ -159,8 +164,8 @@ def get_aws_credentials(
                 f'Did not find service AWS credentials at {service_credentials_path}. '
                 'Falling back to user credentials.',
             )
-
-    return use_aws_profile(session=session)
+    # try to get default aws profile creds if nothing else is provided
+    return use_aws_profile()
 
 
 def use_aws_profile(
