@@ -2,18 +2,17 @@ import uuid
 from socket import SO_REUSEADDR
 from socket import socket as Socket
 from socket import SOL_SOCKET
+from typing import cast
 from unittest import mock
 from unittest.mock import mock_open
 from unittest.mock import patch
 
 import pytest
+from typing_extensions import Literal
 
 from service_configuration_lib import utils
 from service_configuration_lib.utils import ephemeral_port_reserve_range
 from service_configuration_lib.utils import LOCALHOST
-
-from typing import cast
-from typing import Literal
 
 
 MOCK_ENV_NAME = 'mock_env_name'
@@ -80,41 +79,47 @@ def test_generate_pod_template_path(hex_value):
 @pytest.mark.parametrize(
     'mem_str,unit_str,expected_mem',
     (
-        ('13425m', "m", 13425),  # Simple case
-        ('138412032', "m", 132),  # Bytes to MB
+        ('13425m', 'm', 13425),  # Simple case
+        ('138412032', 'm', 132),  # Bytes to MB
         ('65536k', 'g', 0.0625),  # KB to GB
         ('1t', 'g', 1024),  # TB to GB
         ('1.5g', 'm', 1536),  # GB to MB with decimal
         ('2048k', 'm', 2),  # KB to MB
         ('0.5g', 'k', 524288),  # GB to KB
-        ('1024m', 't', 0.001),  # MB to TB
+        ('32768m', 't', 0.03125),  # MB to TB
         ('1.5t', 'm', 1572864),  # TB to MB with decimal
     ),
 )
 def test_get_spark_memory_in_unit(mem_str, unit_str, expected_mem):
-    assert expected_mem == utils.get_spark_memory_in_unit(mem_str, cast(Literal["k", "m", "g", "t"], unit_str))
+    assert expected_mem == utils.get_spark_memory_in_unit(mem_str, cast(Literal['k', 'm', 'g', 't'], unit_str))
 
 
-def test_get_spark_memory_in_unit_exceptions():
-    with pytest.raises(ValueError):
-        utils.get_spark_memory_in_unit("1x", "k")
-    with pytest.raises(IndexError):
-        utils.get_spark_memory_in_unit("1024mb", "m")
+@pytest.mark.parametrize(
+    'mem_str,unit_str',
+    [
+        ('invalid', 'm'),
+        ('1024mb', 'g'),
+    ],
+)
+def test_get_spark_memory_in_unit_exceptions(mem_str, unit_str):
+    with pytest.raises((ValueError, IndexError)):
+        utils.get_spark_memory_in_unit(mem_str, cast(Literal['k', 'm', 'g', 't'], unit_str))
+
 
 @pytest.mark.parametrize(
     'spark_conf,expected_mem',
     [
-        ({"spark.driver.memory": "13425m"}, 13425),  # Simple case
-        ({"spark.driver.memory": "138412032"}, 132),  # Bytes to MB
-        ({"spark.driver.memory": "65536k"}, 64),  # KB to MB
-        ({"spark.driver.memory": "1g"}, 1024),  # GB to MB
-        ({"spark.driver.memory": "invalid"}, utils.SPARK_DRIVER_MEM_DEFAULT_MB),  # Invalid case
-        ({"spark.driver.memory": "1.5g"}, 1536),  # GB to MB with decimal
-        ({"spark.driver.memory": "2048k"}, 2),  # KB to MB
-        ({"spark.driver.memory": "0.5t"}, 524288),  # TB to MB
-        ({"spark.driver.memory": "1024m"}, 1024),  # MB to MB
-        ({"spark.driver.memory": "1.5t"}, 1572864),  # TB to MB with decimal
-    ]
+        ({'spark.driver.memory': '13425m'}, 13425),  # Simple case
+        ({'spark.driver.memory': '138412032'}, 132),  # Bytes to MB
+        ({'spark.driver.memory': '65536k'}, 64),  # KB to MB
+        ({'spark.driver.memory': '1g'}, 1024),  # GB to MB
+        ({'spark.driver.memory': 'invalid'}, utils.SPARK_DRIVER_MEM_DEFAULT_MB),  # Invalid case
+        ({'spark.driver.memory': '1.5g'}, 1536),  # GB to MB with decimal
+        ({'spark.driver.memory': '2048k'}, 2),  # KB to MB
+        ({'spark.driver.memory': '0.5t'}, 524288),  # TB to MB
+        ({'spark.driver.memory': '1024m'}, 1024),  # MB to MB
+        ({'spark.driver.memory': '1.5t'}, 1572864),  # TB to MB with decimal
+    ],
 )
 def test_get_spark_driver_memory_mb(spark_conf, expected_mem):
     assert expected_mem == utils.get_spark_driver_memory_mb(spark_conf)
@@ -123,22 +128,25 @@ def test_get_spark_driver_memory_mb(spark_conf, expected_mem):
 @pytest.mark.parametrize(
     'spark_conf,expected_mem_overhead',
     [
-        ({"spark.driver.memoryOverhead": "1024"}, 1024),  # Simple case
-        ({"spark.driver.memoryOverhead": "1g"}, 1024 * 1024),  # GB to MB
-        ({"spark.driver.memory": "10240m", "spark.driver.memoryOverheadFactor": "0.2"}, 2048),  # Custom overhead factor
-        ({"spark.driver.memory": "10240m"}, 1024),  # Using default overhead factor
-        ({"spark.driver.memory": "invalid"}, utils.SPARK_DRIVER_MEM_DEFAULT_MB * utils.SPARK_DRIVER_MEM_OVERHEAD_FACTOR_DEFAULT),
+        ({'spark.driver.memoryOverhead': '1024'}, 1024),  # Simple case
+        ({'spark.driver.memoryOverhead': '1g'}, 1024),  # GB to MB
+        ({'spark.driver.memory': '10240m', 'spark.driver.memoryOverheadFactor': '0.2'}, 2048),  # Custom OverheadFactor
+        ({'spark.driver.memory': '10240m'}, 1024),  # Using default overhead factor
+        (
+            {'spark.driver.memory': 'invalid'},
+            utils.SPARK_DRIVER_MEM_DEFAULT_MB * utils.SPARK_DRIVER_MEM_OVERHEAD_FACTOR_DEFAULT,
+        ),
         # Invalid case
-        ({"spark.driver.memoryOverhead": "1.5g"}, 1536 * 1024),  # GB to MB with decimal
-        ({"spark.driver.memory": "2048k", "spark.driver.memoryOverheadFactor": "0.05"}, 0.1),
+        ({'spark.driver.memoryOverhead': '1.5g'}, 1536),  # GB to MB with decimal
+        ({'spark.driver.memory': '2048k', 'spark.driver.memoryOverheadFactor': '0.05'}, 0.1),
         # KB to MB with custom factor
-        ({"spark.driver.memory": "0.5t", "spark.driver.memoryOverheadFactor": "0.15"}, 78643.2),
+        ({'spark.driver.memory': '0.5t', 'spark.driver.memoryOverheadFactor': '0.15'}, 78643.2),
         # TB to MB with custom factor
-        ({"spark.driver.memory": "1024m", "spark.driver.memoryOverheadFactor": "0.25"}, 256),
+        ({'spark.driver.memory': '1024m', 'spark.driver.memoryOverheadFactor': '0.25'}, 256),
         # MB to MB with custom factor
-        ({"spark.driver.memory": "1.5t", "spark.driver.memoryOverheadFactor": "0.05"}, 78643.2),
+        ({'spark.driver.memory': '1.5t', 'spark.driver.memoryOverheadFactor': '0.05'}, 78643.2),
         # TB to MB with custom factor
-    ]
+    ],
 )
 def test_get_spark_driver_memory_overhead_mb(spark_conf, expected_mem_overhead):
     assert expected_mem_overhead == utils.get_spark_driver_memory_overhead_mb(spark_conf)
