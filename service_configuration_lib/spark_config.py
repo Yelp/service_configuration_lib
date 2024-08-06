@@ -414,6 +414,10 @@ def _filter_user_spark_opts(user_spark_opts: Mapping[str, str]) -> MutableMappin
     }
 
 
+def get_total_driver_memory_mb(spark_conf: Dict[str, str]) -> int:
+    return int(utils.get_spark_driver_memory_mb(spark_conf) + utils.get_spark_driver_memory_overhead_mb(spark_conf))
+
+
 class SparkConfBuilder:
 
     def __init__(self):

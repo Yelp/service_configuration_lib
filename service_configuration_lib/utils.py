@@ -11,10 +11,12 @@ from socket import error as SocketError
 from socket import SO_REUSEADDR
 from socket import socket
 from socket import SOL_SOCKET
+from typing import Dict
 from typing import Mapping
 from typing import Tuple
 
 import yaml
+from typing_extensions import Literal
 
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
@@ -23,6 +25,11 @@ SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yam
 LOCALHOST = '127.0.0.1'
 EPHEMERAL_PORT_START = 49152
 EPHEMERAL_PORT_END = 65535
+
+MEM_MULTIPLIER = {'k': 1024, 'm': 1024**2, 'g': 1024**3, 't': 1024**4}
+
+SPARK_DRIVER_MEM_DEFAULT_MB = 2048
+SPARK_DRIVER_MEM_OVERHEAD_FACTOR_DEFAULT = 0.1
 
 
 log = logging.Logger(__name__)
@@ -148,3 +155,56 @@ def get_runtime_env() -> str:
         # we could also just crash or return None, but this seems a little easier to find
         # should we somehow run into this at Yelp
         return 'unknown'
+
+
+def get_spark_memory_in_unit(mem: str, unit: Literal['k', 'm', 'g', 't']) -> float:
+    """
+    Converts Spark memory to the desired unit.
+    mem is the same format as JVM memory strings: just number or number followed by 'k', 'm', 'g' or 't'.
+    unit can be 'k', 'm', 'g' or 't'.
+    Returns memory as a float converted to the desired unit.
+    """
+    try:
+        memory_bytes = float(mem)
+    except ValueError:
+        try:
+            memory_bytes = float(mem[:-1]) * MEM_MULTIPLIER[mem[-1]]
+        except (ValueError, IndexError):
+            print(f'Unable to parse memory value {mem}.')
+            raise
+    memory_unit = memory_bytes / MEM_MULTIPLIER[unit]
+    return round(memory_unit, 5)
+
+
+def get_spark_driver_memory_mb(spark_conf: Dict[str, str]) -> float:
+    """
+    Returns the Spark driver memory in MB.
+    """
+    # spark_conf is expected to have "spark.driver.memory" since it is a mandatory default from srv-configs.
+    driver_mem = spark_conf['spark.driver.memory']
+    try:
+        return get_spark_memory_in_unit(str(driver_mem), 'm')
+    except (ValueError, IndexError):
+        return SPARK_DRIVER_MEM_DEFAULT_MB
+
+
+def get_spark_driver_memory_overhead_mb(spark_conf: Dict[str, str]) -> float:
+    """
+    Returns the Spark driver memory overhead in bytes.
+    """
+    # Use spark.driver.memoryOverhead if it is set.
+    try:
+        driver_mem_overhead = spark_conf['spark.driver.memoryOverhead']
+        try:
+            # spark.driver.memoryOverhead default unit is MB
+            driver_mem_overhead_mb = float(driver_mem_overhead)
+        except ValueError:
+            driver_mem_overhead_mb = get_spark_memory_in_unit(str(driver_mem_overhead), 'm')
+    # Calculate spark.driver.memoryOverhead based on spark.driver.memory and spark.driver.memoryOverheadFactor.
+    except Exception:
+        driver_mem_mb = get_spark_driver_memory_mb(spark_conf)
+        driver_mem_overhead_factor = float(
+            spark_conf.get('spark.driver.memoryOverheadFactor', SPARK_DRIVER_MEM_OVERHEAD_FACTOR_DEFAULT),
+        )
+        driver_mem_overhead_mb = driver_mem_mb * driver_mem_overhead_factor
+    return round(driver_mem_overhead_mb, 5)
