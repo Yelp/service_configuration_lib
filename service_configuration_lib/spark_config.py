@@ -76,7 +76,7 @@ SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 
 log = logging.Logger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.WARN)
 
 
 class UnsupportedClusterManagerException(Exception):
@@ -455,7 +455,7 @@ class SparkConfBuilder:
 
         spark_app_name = spark_opts.get('spark.app.name', '')
 
-        log.warning(
+        log.info(
             TextColors.yellow(
                 '\nSpark Dynamic Resource Allocation (DRA) enabled for this batch. More info: y/spark-dra.\n',
             ),
@@ -473,7 +473,7 @@ class SparkConfBuilder:
             if _is_jupyterhub_job(spark_app_name):
                 # increase cachedExecutorIdleTimeout by 15 minutes in case of Jupyterhub
                 cached_executor_idle_timeout = str(int(cached_executor_idle_timeout[:-1]) + 900) + 's'
-            log.warning(
+            log.info(
                 f'\nSetting {TextColors.yellow("spark.dynamicAllocation.cachedExecutorIdleTimeout")} as '
                 f'{cached_executor_idle_timeout}. Executor with cached data block will be released '
                 f'if it has been idle for this duration. If you wish to change the value of '
@@ -524,7 +524,7 @@ class SparkConfBuilder:
                 warn_msg = f'{warn_msg} {min_executors}'
 
             spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
-            log.warning(
+            log.info(
                 f'\n{warn_msg}. If you wish to change the value of minimum executors, please provide '
                 f'the exact value of spark.dynamicAllocation.minExecutors in your spark args\n',
             )
@@ -550,7 +550,7 @@ class SparkConfBuilder:
                 max_executors = max(max_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
 
             spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
-            log.warning(
+            log.info(
                 f'\nSetting {TextColors.yellow("spark.dynamicAllocation.maxExecutors")} as {max_executors}. '
                 f'If you wish to change the value of maximum executors, please provide the exact value of '
                 f'spark.dynamicAllocation.maxExecutors in your spark args\n',
@@ -567,7 +567,7 @@ class SparkConfBuilder:
                 initial_executors = int(spark_opts['spark.dynamicAllocation.minExecutors'])
 
             spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
-            log.warning(
+            log.info(
                 f'\nSetting {TextColors.yellow("spark.dynamicAllocation.initialExecutors")} as {initial_executors}. '
                 f'If you wish to change the value of initial executors, please provide the exact value of '
                 f'spark.dynamicAllocation.initialExecutors in your spark args\n',
@@ -590,16 +590,16 @@ class SparkConfBuilder:
 
         if memory_mb > max_memory_gb * 1024:
             executor_memory = f'{max_memory_gb}g'
-            log.warning(warning_title)
-            log.warning(
+            log.info(warning_title)
+            log.info(
                 f'  - spark.executor.memory:    {int(memory_mb / 1024):3}g  → {executor_memory}',
             )
             warning_title_printed = True
 
         if executor_cores > max_cores:
             if not warning_title_printed:
-                log.warning(warning_title)
-            log.warning(
+                log.info(warning_title)
+            log.info(
                 f'  - spark.executor.cores:     {executor_cores:3}c  → {max_cores}c\n',
             )
             executor_cores = max_cores
@@ -706,7 +706,7 @@ class SparkConfBuilder:
                 new_memory = new_cpu * target_mem_cpu_ratio
 
             if cpu != new_cpu or memory != new_memory or instances != new_instances:
-                log.warning(
+                log.info(
                     f'Adjust Executor Resources based on recommended mem:core:: 7:1 and Bucket: '
                     f'{new_memory}g, {new_cpu}cores to better fit aws nodes\n'
                     f'  - spark.executor.cores:     {cpu:3}c  → {new_cpu}c\n'
@@ -718,7 +718,7 @@ class SparkConfBuilder:
                 )
 
             if new_cpu < task_cpus:
-                log.warning(
+                log.info(
                     f'Given spark.task.cpus is {task_cpus}, '
                     f'=> adjusted to {new_cpu} to keep it within the limits of adjust spark.executor.cores.\n',
                 )
@@ -740,7 +740,7 @@ class SparkConfBuilder:
         elif memory_gb > max_memory_gb or executor_cores > max_cores:
             executor_cores, executor_memory = self._cap_executor_resources(executor_cores, executor_memory, memory_mb)
         elif force_spark_resource_configs:
-            log.warning(
+            log.info(
                 '--force-spark-resource-configs is set to true: this can result in non-optimal bin-packing '
                 'of executors on aws nodes or can lead to wastage the resources. '
                 "Please use this flag only if you have tested that standard memory/cpu configs won't work for "
@@ -900,7 +900,7 @@ class SparkConfBuilder:
         total_cpus = cpus_per_gpu * num_gpus
         num_cpus = int(executor_instances) * int(executor_cores)
         if num_cpus != total_cpus:
-            log.warning(
+            log.info(
                 f'spark.cores.max has been adjusted to {total_cpus}. '
                 'See y/horovod for sizing of GPU pools.',
             )
@@ -1021,14 +1021,14 @@ class SparkConfBuilder:
         min_dollars = round(min_cores * cost_factor, 5)
         max_dollars = round(max_cores * cost_factor, 5)
         if max_dollars * 24 > self.spark_constants['high_cost_threshold_daily']:
-            log.warning(
+            log.info(
                 TextColors.red(
                     TextColors.bold(
                         '\n!!!!! HIGH COST ALERT !!!!!',
                     ),
                 ),
             )
-        log.warning(
+        log.info(
             TextColors.magenta(
                 TextColors.bold(
                     f'\nExpected {"maximum" if min_dollars != max_dollars else ""} cost based on requested resources: '
