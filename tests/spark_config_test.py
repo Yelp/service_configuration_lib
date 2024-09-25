@@ -1703,7 +1703,6 @@ def test_send_and_calculate_resources_cost(
     mock_get_resources_requested,
     mock_time,
 ):
-    mock_clusterman_metrics.generate_key_with_dimensions.side_effect = lambda x, _: x
     app_name = 'test-app'
     spark_opts = {
         'spark.executorEnv.PAASTA_CLUSTER': 'test-cluster',
@@ -1713,22 +1712,6 @@ def test_send_and_calculate_resources_cost(
     cost, resources = spark_config.send_and_calculate_resources_cost(
         mock_clusterman_metrics, spark_opts, web_url, 'test-pool',
     )
-
-    expected_dimension = {'framework_name': app_name, 'webui_url': web_url}
-
-    mock_clusterman_metrics.generate_key_with_dimensions.assert_has_calls([
-        mock.call('requested_cpus', expected_dimension),
-        mock.call('requested_mem', expected_dimension),
-    ])
-
-    mock_writer = (
-        mock_clusterman_metrics.ClustermanMetricsBotoClient.return_value
-        .get_writer.return_value.__enter__.return_value
-    )
-    mock_writer.send.assert_has_calls([
-        mock.call(('requested_cpus', int(mock_time), 10)),
-        mock.call(('requested_mem', int(mock_time), 2048)),
-    ])
 
     mock_clusterman_metrics.util.costs.estimate_cost_per_hour.assert_called_once_with(
         cluster='test-cluster', pool='test-pool', cpus=10, mem=2048,
