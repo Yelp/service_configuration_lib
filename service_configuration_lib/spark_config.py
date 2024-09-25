@@ -1317,35 +1317,6 @@ def generate_clusterman_metrics_entries(
     }
 
 
-def _emit_resource_requirements(
-    clusterman_metrics,
-    resources: Mapping[str, int],
-    app_name: str,
-    spark_web_url: str,
-    cluster: str,
-    pool: str,
-) -> None:
-
-    with open(CLUSTERMAN_YAML_FILE_PATH, 'r') as clusterman_yaml_file:
-        clusterman_yaml = yaml.safe_load(clusterman_yaml_file.read())
-    aws_region = clusterman_yaml['clusters'][cluster]['aws_region']
-
-    client = clusterman_metrics.ClustermanMetricsBotoClient(
-        region_name=aws_region, app_identifier=pool,
-    )
-    metrics_entries = generate_clusterman_metrics_entries(
-        clusterman_metrics,
-        resources,
-        app_name,
-        spark_web_url,
-    )
-    with client.get_writer(
-        clusterman_metrics.APP_METRICS, aggregate_meteorite_dims=True,
-    ) as writer:
-        for metric_key, required_quantity in metrics_entries.items():
-            writer.send((metric_key, int(time.time()), required_quantity))
-
-
 def get_spark_hourly_cost(
     clusterman_metrics,
     resources: Mapping[str, int],
@@ -1387,10 +1358,6 @@ def send_and_calculate_resources_cost(
         is the requested resources.
     """
     cluster = spark_conf['spark.executorEnv.PAASTA_CLUSTER']
-    app_name = spark_conf['spark.app.name']
     resources = get_resources_requested(spark_conf)
     hourly_cost = get_spark_hourly_cost(clusterman_metrics, resources, cluster, pool)
-    _emit_resource_requirements(
-        clusterman_metrics, resources, app_name, spark_web_url, cluster, pool,
-    )
     return hourly_cost, resources
