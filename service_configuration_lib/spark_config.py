@@ -22,6 +22,8 @@ from boto3 import Session
 
 from service_configuration_lib import utils
 from service_configuration_lib.text_colors import TextColors
+from service_configuration_lib.utils import EPHEMERAL_PORT_END
+from service_configuration_lib.utils import EPHEMERAL_PORT_START
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -425,11 +427,11 @@ class SparkConfBuilder:
 
     def __init__(self, is_driver_on_k8s_tron: bool = False):
         self.is_driver_on_k8s_tron = is_driver_on_k8s_tron
-        self.spark_srv_conf = dict()
-        self.spark_constants = dict()
-        self.default_spark_srv_conf = dict()
-        self.mandatory_default_spark_srv_conf = dict()
-        self.spark_costs = dict()
+        self.spark_srv_conf: Dict[str, Any] = dict()
+        self.spark_constants: Dict[str, Any] = dict()
+        self.default_spark_srv_conf: Dict[str, Any] = dict()
+        self.mandatory_default_spark_srv_conf: Dict[str, Any] = dict()
+        self.spark_costs: Dict[str, Dict[str, float]] = dict()
 
         try:
             (
@@ -1110,14 +1112,14 @@ class SparkConfBuilder:
         # Pick a port from a pre-defined port range, which will then be used by our Jupyter
         # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
         # Spark sessions and exposes them through a single endpoint.
-        ui_port = self.spark_constants.get('preferred_spark_ui_port_start')
+        ui_port: int = self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START)
         if not self.is_driver_on_k8s_tron:
             try:
                 ui_port = int(
                     (spark_opts_from_env or {}).get('spark.ui.port') or
                     utils.ephemeral_port_reserve_range(
-                        self.spark_constants.get('preferred_spark_ui_port_start'),
-                        self.spark_constants.get('preferred_spark_ui_port_end'),
+                        self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START),
+                        self.spark_constants.get('preferred_spark_ui_port_end', EPHEMERAL_PORT_END),
                     ),
                 )
             except Exception as e:
