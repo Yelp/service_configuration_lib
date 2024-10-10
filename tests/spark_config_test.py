@@ -267,9 +267,7 @@ class TestGetSparkConf:
 
     @pytest.fixture
     def mock_existed_files(self, mock_paasta_volumes):
-        existed_files = [v.split(':')[0] for v in mock_paasta_volumes] + [
-            '/host/file1', '/host/file2', '/host/file3', '/etc/pki/spark', '/etc/group', '/etc/passwd',
-        ]
+        existed_files = [v.split(':')[0] for v in mock_paasta_volumes]
         with mock.patch('os.path.exists', side_effect=lambda f: f in existed_files):
             yield existed_files
 
@@ -321,7 +319,6 @@ class TestGetSparkConf:
                 )
 
         expected_volumes.update({
-            **_get_k8s_volume('/etc/pki/spark', '/etc/pki/spark', 'ro'),
             **_get_k8s_volume('/etc/passwd', '/etc/passwd', 'ro'),
             **_get_k8s_volume('/etc/group', '/etc/group', 'ro'),
         })
@@ -1232,11 +1229,6 @@ class TestGetSparkConf:
             'spark.kubernetes.pyspark.pythonVersion': '3',
             'spark.kubernetes.container.image': self.docker_image,
             'spark.kubernetes.namespace': 'paasta-spark',
-            'spark.kubernetes.authenticate.caCertFile': f'{spark_config.K8S_AUTH_FOLDER}/{self.cluster}-ca.crt',
-            'spark.kubernetes.authenticate.clientKeyFile': f'{spark_config.K8S_AUTH_FOLDER}/{self.cluster}-client.key',
-            'spark.kubernetes.authenticate.clientCertFile': (
-                f'{spark_config.K8S_AUTH_FOLDER}/{self.cluster}-client.crt'
-            ),
             'spark.kubernetes.executor.label.yelp.com/paasta_service': self.service,
             'spark.kubernetes.executor.label.yelp.com/paasta_instance': self.instance,
             'spark.kubernetes.executor.label.yelp.com/paasta_cluster': self.cluster,

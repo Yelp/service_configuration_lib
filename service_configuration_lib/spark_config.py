@@ -68,9 +68,7 @@ NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.kubernetes.executor.label.spark.yelp.com/user',
 }
 
-K8S_AUTH_FOLDER = '/etc/pki/spark'
 K8S_BASE_VOLUMES: List[Dict[str, str]] = [
-    {'containerPath': K8S_AUTH_FOLDER, 'hostPath': K8S_AUTH_FOLDER, 'mode': 'RO'},
     {'containerPath': '/etc/passwd', 'hostPath': '/etc/passwd', 'mode': 'RO'},
     {'containerPath': '/etc/group', 'hostPath': '/etc/group', 'mode': 'RO'},
 ]
@@ -354,14 +352,6 @@ def _get_k8s_spark_env(
         spark_env.update({
             'spark.master': f'k8s://{k8s_server_address}',
         })
-    elif include_self_managed_configs:
-        spark_env.update(
-            {
-                'spark.kubernetes.authenticate.caCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-ca.crt',
-                'spark.kubernetes.authenticate.clientKeyFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.key',
-                'spark.kubernetes.authenticate.clientCertFile': f'{K8S_AUTH_FOLDER}/{paasta_cluster}-client.crt',
-            },
-        )
 
     return spark_env
 
@@ -1090,7 +1080,6 @@ class SparkConfBuilder:
             spark session.
         :param aws_region: The default aws region to use
         :param service_account_name: The k8s service account to use for spark k8s authentication.
-            If not provided, it uses cert files at {K8S_AUTH_FOLDER} to authenticate.
         :param force_spark_resource_configs: skip the resource/instances recalculation.
             This is strongly not recommended.
         :returns: spark opts in a dict.
