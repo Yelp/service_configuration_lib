@@ -22,6 +22,8 @@ from boto3 import Session
 
 from service_configuration_lib import utils
 from service_configuration_lib.text_colors import TextColors
+from service_configuration_lib.utils import EPHEMERAL_PORT_END
+from service_configuration_lib.utils import EPHEMERAL_PORT_START
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -32,6 +34,7 @@ DEFAULT_SPARK_SERVICE = 'spark'
 GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
+SPARK_TRON_JOB_USER = 'TRON'
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
@@ -295,7 +298,7 @@ def _get_k8s_spark_env(
     paasta_service: str,
     paasta_instance: str,
     docker_img: str,
-    pod_template_path: str,
+    pod_template_path: Optional[str],
     volumes: Optional[List[Mapping[str, str]]],
     paasta_pool: str,
     driver_ui_port: int,
@@ -335,9 +338,12 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.paasta.yelp.com/pool': paasta_pool,
         'spark.kubernetes.executor.label.yelp.com/owner': 'core_ml',
-        'spark.kubernetes.executor.podTemplateFile': pod_template_path,
         **_get_k8s_docker_volumes_conf(volumes),
     }
+
+    if pod_template_path is not None:
+        spark_env['spark.kubernetes.executor.podTemplateFile'] = pod_template_path
+
     if service_account_name is not None:
         spark_env.update(
             {
@@ -419,12 +425,13 @@ def get_total_driver_memory_mb(spark_conf: Dict[str, str]) -> int:
 
 class SparkConfBuilder:
 
-    def __init__(self):
-        self.spark_srv_conf = dict()
-        self.spark_constants = dict()
-        self.default_spark_srv_conf = dict()
-        self.mandatory_default_spark_srv_conf = dict()
-        self.spark_costs = dict()
+    def __init__(self, is_driver_on_k8s_tron: bool = False):
+        self.is_driver_on_k8s_tron = is_driver_on_k8s_tron
+        self.spark_srv_conf: Dict[str, Any] = dict()
+        self.spark_constants: Dict[str, Any] = dict()
+        self.default_spark_srv_conf: Dict[str, Any] = dict()
+        self.mandatory_default_spark_srv_conf: Dict[str, Any] = dict()
+        self.spark_costs: Dict[str, Dict[str, float]] = dict()
 
         try:
             (
@@ -628,7 +635,7 @@ class SparkConfBuilder:
             )
 
         # Deprecation message
-        if 'spark.cores.max' in user_spark_opts:
+        if not self.is_driver_on_k8s_tron and 'spark.cores.max' in user_spark_opts:
             log.warning(
                 f'spark.cores.max is DEPRECATED. Replace with '
                 f'spark.executor.instances={executor_instances} in --spark-args and in your service code '
@@ -1102,23 +1109,27 @@ class SparkConfBuilder:
             spark_app_base_name
         )
 
-        # Pick a port from a pre-defined port range, which will then be used by our Jupyter
-        # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
-        # Spark sessions and exposes them through a single endpoint.
-        try:
-            ui_port = int(
-                (spark_opts_from_env or {}).get('spark.ui.port') or
-                utils.ephemeral_port_reserve_range(
-                    self.spark_constants.get('preferred_spark_ui_port_start'),
-                    self.spark_constants.get('preferred_spark_ui_port_end'),
-                ),
-            )
-        except Exception as e:
-            log.warning(
-                f'Could not get an available port using srv-config port range: {e}. '
-                'Using default port range to get an available port.',
-            )
-            ui_port = utils.ephemeral_port_reserve_range()
+        if self.is_driver_on_k8s_tron:
+            # For Tron-launched driver on k8s, we use a static Spark UI port
+            ui_port: int = self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START)
+        else:
+            # Pick a port from a pre-defined port range, which will then be used by our Jupyter
+            # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
+            # Spark sessions and exposes them through a single endpoint.
+            try:
+                ui_port = int(
+                    (spark_opts_from_env or {}).get('spark.ui.port') or
+                    utils.ephemeral_port_reserve_range(
+                        self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START),
+                        self.spark_constants.get('preferred_spark_ui_port_end', EPHEMERAL_PORT_END),
+                    ),
+                )
+            except Exception as e:
+                log.warning(
+                    f'Could not get an available port using srv-config port range: {e}. '
+                    'Using default port range to get an available port.',
+                )
+                ui_port = utils.ephemeral_port_reserve_range()
 
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
         random_postfix = utils.get_random_string(4)
@@ -1157,12 +1168,14 @@ class SparkConfBuilder:
         )
 
         # Add pod template file
-        pod_template_path = utils.generate_pod_template_path()
-        try:
-            utils.create_pod_template(pod_template_path, app_base_name)
-        except Exception as e:
-            log.error(f'Failed to generate Spark executor pod template: {e}')
-            pod_template_path = ''
+        pod_template_path: Optional[str] = None
+        if not self.is_driver_on_k8s_tron:
+            pod_template_path = utils.generate_pod_template_path()
+            try:
+                utils.create_pod_template(pod_template_path, app_base_name)
+            except Exception as e:
+                log.error(f'Failed to generate Spark executor pod template: {e}')
+                pod_template_path = None
 
         if cluster_manager == 'kubernetes':
             spark_conf.update(_get_k8s_spark_env(

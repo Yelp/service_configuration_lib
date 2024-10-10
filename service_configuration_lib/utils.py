@@ -11,8 +11,8 @@ from socket import error as SocketError
 from socket import SO_REUSEADDR
 from socket import socket
 from socket import SOL_SOCKET
+from typing import Any
 from typing import Dict
-from typing import Mapping
 from typing import Tuple
 
 import yaml
@@ -36,7 +36,13 @@ log = logging.Logger(__name__)
 log.setLevel(logging.INFO)
 
 
-def load_spark_srv_conf(preset_values=None) -> Tuple[Mapping, Mapping, Mapping, Mapping, Mapping]:
+def load_spark_srv_conf(preset_values=None) -> Tuple[
+    Dict[str, Any],
+    Dict[str, Any],
+    Dict[str, Any],
+    Dict[str, Any],
+    Dict[str, Dict[str, float]],
+]:
     if preset_values is None:
         preset_values = dict()
     try:
