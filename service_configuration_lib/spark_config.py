@@ -1109,11 +1109,13 @@ class SparkConfBuilder:
             spark_app_base_name
         )
 
-        # Pick a port from a pre-defined port range, which will then be used by our Jupyter
-        # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
-        # Spark sessions and exposes them through a single endpoint.
-        ui_port: int = self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START)
-        if not self.is_driver_on_k8s_tron:
+        if self.is_driver_on_k8s_tron:
+            # For Tron-launched driver on k8s, we use a static Spark UI port
+            ui_port: int = self.spark_constants.get('preferred_spark_ui_port_start', EPHEMERAL_PORT_START)
+        else:
+            # Pick a port from a pre-defined port range, which will then be used by our Jupyter
+            # server metric aggregator API. The aggregator API collects Prometheus metrics from multiple
+            # Spark sessions and exposes them through a single endpoint.
             try:
                 ui_port = int(
                     (spark_opts_from_env or {}).get('spark.ui.port') or
