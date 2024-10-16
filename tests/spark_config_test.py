@@ -1216,6 +1216,7 @@ class TestGetSparkConf:
         """Helper needed to allow tests to pass in github CI checks."""
         return [
             volume for volume in spark_config.K8S_BASE_VOLUMES
+            if os.path.exists(volume['containerPath'])
         ]
 
     @pytest.fixture

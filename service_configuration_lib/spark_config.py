@@ -226,12 +226,13 @@ def _get_k8s_docker_volumes_conf(
 
     for volume in k8s_volumes:
         host_path, container_path, mode = volume['hostPath'], volume['containerPath'], volume['mode']
-        if host_path not in mounted_volumes:
+        if os.path.exists(host_path) and host_path not in mounted_volumes:
             env.update(_get_k8s_volume(host_path, container_path, mode))
             mounted_volumes.add(host_path)
         else:
             log.warning(
-                f'Path {host_path} has already been mounted. Skipping this binding.',
+                f'Path {host_path} does not exist on this host or it has already been mounted.'
+                ' Skipping this bindings.',
             )
     return env
 
