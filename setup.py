@@ -24,6 +24,9 @@ setup(
     author='Yelp Compute Infrastructure Team',
     author_email='opensource+scl@yelp.com',
     packages=find_packages(exclude=['tests', 'scripts']),
+    package_data={
+        'service_configuration_lib': ['py.typed'],
+    },
     install_requires=[
         'ephemeral-port-reserve >= 1.1.0',
         'PyYAML >= 5.1',
