@@ -1,10 +1,7 @@
-# Coverage==5.0 fails with `Safety level may not be changed inside a transaction`
-# on python 3.6.0 (xenial) (https://github.com/nedbat/coveragepy/issues/703)
-coverage<5
+coverage
 mock
 mypy
-pre-commit==1.21.0
+pre-commit
 pytest
 types-PyYAML
-# To resolve the error: types-requests 2.31.0.6 has requirement urllib3>=2, but you'll have urllib3 1.26.15 which is incompatible.
-types-requests==2.31.0.5
+types-requests
