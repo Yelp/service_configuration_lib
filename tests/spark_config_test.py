@@ -1235,6 +1235,8 @@ class TestGetSparkConf:
             'spark.kubernetes.executor.label.paasta.yelp.com/service': self.service,
             'spark.kubernetes.executor.label.paasta.yelp.com/instance': self.instance,
             'spark.kubernetes.executor.label.paasta.yelp.com/cluster': self.cluster,
+            'spark.kubernetes.executor.annotation.paasta.yelp.com/service': self.service,
+            'spark.kubernetes.executor.annotation.paasta.yelp.com/instance': self.instance,
             'spark.kubernetes.executor.label.spark.yelp.com/user': TEST_USER,
             'spark.kubernetes.executor.label.spark.yelp.com/driver_ui_port': str(expected_ui_port),
             'spark.kubernetes.node.selector.yelp.com/pool': self.pool,
