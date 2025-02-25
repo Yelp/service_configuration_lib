@@ -330,6 +330,8 @@ def _get_k8s_spark_env(
         'spark.kubernetes.executor.label.paasta.yelp.com/service': _paasta_service,
         'spark.kubernetes.executor.label.paasta.yelp.com/instance': _paasta_instance,
         'spark.kubernetes.executor.label.paasta.yelp.com/cluster': _paasta_cluster,
+        'spark.kubernetes.executor.annotation.paasta.yelp.com/service': paasta_service,
+        'spark.kubernetes.executor.annotation.paasta.yelp.com/instance': paasta_instance,
         'spark.kubernetes.executor.label.spark.yelp.com/user': user,
         'spark.kubernetes.executor.label.spark.yelp.com/driver_ui_port': str(driver_ui_port),
         'spark.kubernetes.node.selector.yelp.com/pool': paasta_pool,
