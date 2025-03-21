@@ -163,6 +163,7 @@ def get_runtime_env() -> str:
         return 'unknown'
 
 
+# TODO: merge with spark_config.parse_memory_string
 def get_spark_memory_in_unit(mem: str, unit: Literal['k', 'm', 'g', 't']) -> float:
     """
     Converts Spark memory to the desired unit.
@@ -182,6 +183,7 @@ def get_spark_memory_in_unit(mem: str, unit: Literal['k', 'm', 'g', 't']) -> flo
     return round(memory_unit, 5)
 
 
+# TODO: use spark_config.parse_memory_string
 def get_spark_driver_memory_mb(spark_conf: Dict[str, str]) -> float:
     """
     Returns the Spark driver memory in MB.
@@ -194,6 +196,7 @@ def get_spark_driver_memory_mb(spark_conf: Dict[str, str]) -> float:
         return SPARK_DRIVER_MEM_DEFAULT_MB
 
 
+# TODO: merge with spark_config.compute_requested_memory_overhead
 def get_spark_driver_memory_overhead_mb(spark_conf: Dict[str, str]) -> float:
     """
     Returns the Spark driver memory overhead in bytes.

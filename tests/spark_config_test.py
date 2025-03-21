@@ -1528,6 +1528,48 @@ def test_parse_memory_string(memory_string, expected_output):
     assert spark_config.parse_memory_string(memory_string) == expected_output
 
 
+@pytest.mark.parametrize(
+    'spark_opts,executor_memory,expected_output',
+    [
+        # min_memory_overhead
+        ({}, 1024, 384),
+        # default_memory_overhead_factor
+        ({}, 4096, 409.6),
+        # executor_memoryOverhead_configured
+        ({'spark.executor.memoryOverhead': '1024'}, 4096, 1024),
+        # mesos_memoryOverhead_configured
+        ({'spark.mesos.executor.memoryOverhead': '2048'}, 4096, 2048),
+        # kubernetes_memoryOverheadFactor_configured
+        ({'spark.kubernetes.memoryOverheadFactor': '0.2'}, 4096, int(4096 * 0.2)),
+        # multiple_configs_highest_selected
+        (
+            {
+                'spark.executor.memoryOverhead': '1024',
+                'spark.mesos.executor.memoryOverhead': '2048',
+                'spark.kubernetes.memoryOverheadFactor': '0.2',
+            },
+            4096,
+            2048,
+        ),
+        # default_memory_overhead_small_executor
+        ({}, 1024, 384),
+    ],
+    ids=[
+        'min_memory_overhead',
+        'default_memory_overhead_factor',
+        'executor_memoryOverhead_configured',
+        'mesos_memoryOverhead_configured',
+        'kubernetes_memoryOverheadFactor_configured',
+        'multiple_configs_highest_selected',
+        'default_memory_overhead_small_executor',
+    ],
+)
+def test_compute_requested_memory_overhead(spark_opts, executor_memory, expected_output):
+    result = spark_config.get_spark_executor_memory_overhead_mb(spark_opts, executor_memory)
+    assert isinstance(result, float)
+    assert int(result) == int(expected_output)
+
+
 def test_get_grafana_url():
     spark_conf = {
         'spark.executorEnv.PAASTA_CLUSTER': 'test-cluster',
@@ -1544,81 +1586,7 @@ def test_get_grafana_url():
 
 @pytest.mark.parametrize(
     'spark_opts,expected_output', [
-        # mesos ( 2 instances, not configure memory overhead, default: 384m )
-        (
-            {
-                'spark.cores.max': '10',
-                'spark.executor.cores': '5',
-                'spark.executor.memory': '2g',
-            },
-            {
-                'cpus': 10,
-                'mem': (384 + 2048) * 2,
-                'disk': (384 + 2048) * 2,
-                'gpus': 0,
-            },
-        ),
-        # mesos ( 2 instances, not configure memory overhead, default: 409m )
-        (
-            {
-                'spark.cores.max': '10',
-                'spark.executor.cores': '5',
-                'spark.executor.memory': '4g',
-            },
-            {
-                'cpus': 10,
-                'mem': (409 + 4096) * 2,
-                'disk': (409 + 4096) * 2,
-                'gpus': 0,
-            },
-        ),
-        # mesos ( 2 instances, configure memory overhead)
-        (
-            {
-                'spark.cores.max': '10',
-                'spark.executor.cores': '5',
-                'spark.executor.memory': '4g',
-                'spark.executor.memoryOverhead': '3072',
-            },
-            {
-                'cpus': 10,
-                'mem': (3072 + 4096) * 2,
-                'disk': (3072 + 4096) * 2,
-                'gpus': 0,
-            },
-        ),
-        # mesos ( 2 instances, Duplicate config, choose the higher memory overhead)
-        (
-            {
-                'spark.cores.max': '10',
-                'spark.executor.cores': '5',
-                'spark.executor.memory': '4g',
-                'spark.executor.memoryOverhead': '3072',
-                'spark.mesos.executor.memoryOverhead': '4096',
-            },
-            {
-                'cpus': 10,
-                'mem': (4096 + 4096) * 2,
-                'disk': (4096 + 4096) * 2,
-                'gpus': 0,
-            },
-        ),
-        # mesos ( 2 instances, configure memory overhead)
-        (
-            {
-                'spark.cores.max': '10',
-                'spark.executor.cores': '5',
-                'spark.executor.memory': '4g',
-                'spark.mesos.executor.memoryOverhead': '3072',
-            },
-            {
-                'cpus': 10,
-                'mem': (3072 + 4096) * 2,
-                'disk': (3072 + 4096) * 2,
-                'gpus': 0,
-            },
-        ),
-        # k8s
+        # basic_config
         (
             {
                 'spark.executor.instances': '2',
@@ -1633,7 +1601,7 @@ def test_get_grafana_url():
                 'gpus': 0,
             },
         ),
-        # k8s
+        # kubernetes_memory_overhead
         (
             {
                 'spark.executor.instances': '2',
@@ -1648,10 +1616,25 @@ def test_get_grafana_url():
                 'gpus': 0,
             },
         ),
-        # gpu
+        # mesos_memory_overhead
         (
             {
-                'spark.cores.max': '10',
+                'spark.executor.instances': '2',
+                'spark.executor.cores': '5',
+                'spark.executor.memory': '4g',
+                'spark.mesos.executor.memoryOverhead': '3072',
+            },
+            {
+                'cpus': 10,
+                'mem': (3072 + 4096) * 2,
+                'disk': (3072 + 4096) * 2,
+                'gpus': 0,
+            },
+        ),
+        # gpu_enabled
+        (
+            {
+                'spark.executor.instances': '2',
                 'spark.mesos.gpus.max': '2',
                 'spark.executor.cores': '5',
                 'spark.executor.memory': '4g',
@@ -1663,8 +1646,31 @@ def test_get_grafana_url():
                 'disk': (3072 + 4096) * 2,
                 'gpus': 2,
             },
-
         ),
+        # dynamic_allocation_enabled
+        (
+            {
+                'spark.executor.instances': '0',
+                'spark.dynamicAllocation.enabled': 'true',
+                'spark.dynamicAllocation.maxExecutors': '2',
+                'spark.executor.cores': '5',
+                'spark.executor.memory': '4g',
+                'spark.kubernetes.memoryOverheadFactor': '0.5',
+            },
+            {
+                'cpus': 10,
+                'mem': (4096 * 1.5) * 2,
+                'disk': (4096 * 1.5) * 2,
+                'gpus': 0,
+            },
+        ),
+    ],
+    ids=[
+        'basic_config',
+        'kubernetes_memory_overhead',
+        'mesos_memory_overhead',
+        'gpu_enabled',
+        'dynamic_allocation_enabled',
     ],
 )
 def test_get_resources_requested(spark_opts, expected_output):
