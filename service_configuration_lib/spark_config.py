@@ -17,10 +17,10 @@ from urllib.parse import urlparse
 
 import boto3
 import requests
-import yaml
 from boto3 import Session
 
 from service_configuration_lib import utils
+from service_configuration_lib import yaml_tools as yaml
 from service_configuration_lib.text_colors import TextColors
 from service_configuration_lib.utils import EPHEMERAL_PORT_END
 from service_configuration_lib.utils import EPHEMERAL_PORT_START
@@ -193,7 +193,7 @@ def assume_aws_role(
     """
     try:
         with open(key_file) as creds_file:
-            creds_dict = yaml.load(creds_file.read(), Loader=yaml.SafeLoader)
+            creds_dict = yaml.safe_load(creds_file.read())
             access_key = creds_dict['AccessKeyId']
             secret_key = creds_dict['SecretAccessKey']
     except (PermissionError, FileNotFoundError):

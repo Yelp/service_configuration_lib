@@ -7,10 +7,10 @@ import sys
 from unittest import mock
 
 import pytest
-import yaml
 
 from service_configuration_lib import spark_config
 from service_configuration_lib import utils
+from service_configuration_lib import yaml_tools as yaml
 
 
 TEST_ACCOUNT_ID = '123456789'
