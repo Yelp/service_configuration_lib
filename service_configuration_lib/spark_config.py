@@ -1235,12 +1235,28 @@ def parse_memory_string(memory_string: Optional[str]) -> int:
         )
 
 
-def compute_requested_memory_overhead(spark_opts: Mapping[str, str], executor_memory):
-    return max(
+def get_spark_executor_memory_overhead_mb(spark_opts: Mapping[str, str], executor_memory) -> float:
+    """Return memory overhead in MB."""
+    # By default, Spark adds an overhead of 10% of the executor memory, with a
+    # minimum of 384mb
+    min_mem_overhead = 384
+    default_overhead_factor = 0.1
+
+    memory_overhead = max(
         parse_memory_string(spark_opts.get('spark.executor.memoryOverhead')),
         parse_memory_string(spark_opts.get('spark.mesos.executor.memoryOverhead')),
-        float(spark_opts.get('spark.kubernetes.memoryOverheadFactor', 0)) * executor_memory,
     )
+    if memory_overhead:
+        return float(max(memory_overhead, min_mem_overhead))
+    else:
+        memory_overhead_factor = (
+            spark_opts.get('spark.executor.memoryOverheadFactor') or
+            spark_opts.get('spark.kubernetes.memoryOverheadFactor') or
+            spark_opts.get('spark.mesos.executor.memoryOverheadFactor') or
+            default_overhead_factor
+        )
+        calculated_overhead = float(memory_overhead_factor) * executor_memory
+        return float(max(calculated_overhead, min_mem_overhead))
 
 
 def get_grafana_url(spark_conf: Mapping[str, str]) -> str:
@@ -1253,32 +1269,21 @@ def get_grafana_url(spark_conf: Mapping[str, str]) -> str:
 
 
 def get_resources_requested(spark_opts: Mapping[str, str]) -> Mapping[str, int]:
+    dra_enabled = str(spark_opts.get('spark.dynamicAllocation.enabled')).lower() == 'true'
     num_executors = (
-        # spark on k8s directly configure num instances
-        int(spark_opts.get('spark.executor.instances', 0)) or
-        # spark on mesos use cores.max and executor.core to calculate number of
-        # executors.
-        int(spark_opts.get('spark.cores.max', 0)) // int(spark_opts.get('spark.executor.cores', 0))
+        int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) if dra_enabled
+        else
+        int(spark_opts.get('spark.executor.instances', 0))
     )
-    num_cpus = (
-        # spark on k8s
-        int(spark_opts.get('spark.executor.instances', 0)) * int(spark_opts.get('spark.executor.cores', 0)) or
-        # spark on mesos
-        int(spark_opts.get('spark.cores.max', 0))
-    )
+    num_cpus = num_executors * int(spark_opts.get('spark.executor.cores', 0))
     num_gpus = int(spark_opts.get('spark.mesos.gpus.max', 0))
 
     executor_memory = parse_memory_string(spark_opts.get('spark.executor.memory', ''))
-    requested_memory = compute_requested_memory_overhead(spark_opts, executor_memory)
-    # by default, spark adds an overhead of 10% of the executor memory, with a
-    # minimum of 384mb
-    memory_overhead: int = (
-        requested_memory
-        if requested_memory > 0
-        else max(384, int(0.1 * executor_memory))
-    )
-    total_memory = (executor_memory + memory_overhead) * num_executors
-    log.info(f'Requested total memory of {total_memory} MiB')
+    executor_memory_overhead = get_spark_executor_memory_overhead_mb(spark_opts, executor_memory)
+    total_memory = int((executor_memory + executor_memory_overhead) * num_executors)
+    dra_enabled_string = '(DRA enabled)' if dra_enabled else ''
+
+    log.info(f'Requested total memory of {total_memory} MiB {dra_enabled_string}')
     return {
         'cpus': num_cpus,
         'mem': total_memory,
