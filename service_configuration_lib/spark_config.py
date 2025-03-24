@@ -27,6 +27,7 @@ from service_configuration_lib.utils import EPHEMERAL_PORT_START
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
+AWS_DEFAULT_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.DefaultAWSCredentialsProviderChain'
 GPU_POOLS_YAML_FILE_PATH = '/nail/srv/configs/gpu_pools.yaml'
 DEFAULT_PAASTA_VOLUME_PATH = '/etc/paasta/volumes.json'
 DEFAULT_SPARK_MESOS_SECRET_FILE = '/nail/etc/paasta_spark_secret'
@@ -348,9 +349,10 @@ def _get_k8s_spark_env(
         spark_env.update(
             {
                 'spark.kubernetes.authenticate.serviceAccountName': service_account_name,
+                'spark.kubernetes.authenticate.executor.serviceAccountName': service_account_name,
             },
         )
-    elif not include_self_managed_configs:
+    if not include_self_managed_configs:
         spark_env.update({
             'spark.master': f'k8s://{k8s_server_address}',
         })
@@ -1125,8 +1127,8 @@ class SparkConfBuilder:
         spark_conf = {**(spark_opts_from_env or {}), **_filter_user_spark_opts(user_spark_opts)}
         random_postfix = utils.get_random_string(4)
 
-        if aws_creds is not None and aws_creds[2] is not None:
-            spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_ENV_CREDENTIALS_PROVIDER
+        if (aws_creds is not None and aws_creds[2] is not None) or service_account_name is not None:
+            spark_conf['spark.hadoop.fs.s3a.aws.credentials.provider'] = AWS_DEFAULT_CREDENTIALS_PROVIDER
 
         # app_name from env is already appended with port and time to make it unique
         app_name = (spark_opts_from_env or {}).get('spark.app.name')
