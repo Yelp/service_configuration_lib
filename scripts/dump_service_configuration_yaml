@@ -14,9 +14,8 @@
 # limitations under the License.
 import sys
 
-import yaml
-
 import service_configuration_lib
+from service_configuration_lib import yaml_tools as yaml
 sys.path.append('/nail/sys/srv-deploy/lib/')
 
 print(yaml.dump(service_configuration_lib.read_services_configuration(), default_flow_style=False))
