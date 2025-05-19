@@ -454,6 +454,7 @@ class SparkConfBuilder:
             return spark_opts
 
         spark_app_name = spark_opts.get('spark.app.name', '')
+        is_jupyterhub = _is_jupyterhub_job(spark_app_name)
 
         log.info(
             TextColors.yellow(
@@ -470,7 +471,7 @@ class SparkConfBuilder:
         )
         cached_executor_idle_timeout = self.default_spark_srv_conf['spark.dynamicAllocation.cachedExecutorIdleTimeout']
         if 'spark.dynamicAllocation.cachedExecutorIdleTimeout' not in spark_opts:
-            if _is_jupyterhub_job(spark_app_name):
+            if is_jupyterhub:
                 # increase cachedExecutorIdleTimeout by 15 minutes in case of Jupyterhub
                 cached_executor_idle_timeout = str(int(cached_executor_idle_timeout[:-1]) + 900) + 's'
             log.info(
@@ -486,57 +487,21 @@ class SparkConfBuilder:
             cached_executor_idle_timeout,
         )
 
-        min_ratio_executors = None
-        default_dra_min_executor_ratio = self.default_spark_srv_conf['spark.yelp.dra.minExecutorRatio']
-        if 'spark.dynamicAllocation.minExecutors' not in spark_opts:
-            # the ratio of total executors to be used as minExecutors
-            min_executor_ratio = spark_opts.get('spark.yelp.dra.minExecutorRatio', default_dra_min_executor_ratio)
-            # set minExecutors default as a ratio of spark.executor.instances
-            num_instances = int(
-                spark_opts.get(
-                    'spark.executor.instances',
-                    self.default_spark_srv_conf['spark.executor.instances'],
-                ),
-            )
-            min_executors = int(num_instances * float(min_executor_ratio))
-            # minExecutors should not be more than initialExecutors
-            if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
-                min_executors = min(min_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
-            # minExecutors should not be more than maxExecutors
-            if 'spark.dynamicAllocation.maxExecutors' in spark_opts:
-                min_executors = min(
-                    min_executors, int(int(spark_opts['spark.dynamicAllocation.maxExecutors']) *
-                                       float(min_executor_ratio)),
-                )
+        # Min executors
+        min_executors = int(spark_opts.get('spark.dynamicAllocation.minExecutors', 0))
 
-            min_ratio_executors = min_executors
-
-            warn_msg = f'\nSetting {TextColors.yellow("spark.dynamicAllocation.minExecutors")} as'
-
-            # set minExecutors equal to 0 for Jupyter Spark sessions
-            if _is_jupyterhub_job(spark_app_name):
-                min_executors = 0
-                warn_msg = (
-                    f'Looks like you are launching Spark session from a Jupyter notebook. '
-                    f'{warn_msg} {min_executors} to save spark costs when any spark action is not running'
-                )
-            else:
-                warn_msg = f'{warn_msg} {min_executors}'
-
-            spark_opts['spark.dynamicAllocation.minExecutors'] = str(min_executors)
+        # Initial executors for Jupyter
+        initial_executors = int(spark_opts.get('spark.dynamicAllocation.initialExecutors', min_executors))
+        if is_jupyterhub and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
+            initial_executors = int(spark_opts.get('spark.dynamicAllocation.minExecutors', 0))
+            spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
             log.info(
-                f'\n{warn_msg}. If you wish to change the value of minimum executors, please provide '
-                f'the exact value of spark.dynamicAllocation.minExecutors in your spark args\n',
+                f'\nSetting {TextColors.yellow("spark.dynamicAllocation.initialExecutors")} as {initial_executors}. '
+                f'If you wish to change the value of initial executors, please provide the exact value of '
+                f'spark.dynamicAllocation.initialExecutors in your spark args\n',
             )
 
-            if not _is_jupyterhub_job(spark_app_name) and 'spark.yelp.dra.minExecutorRatio' not in spark_opts:
-                log.debug(
-                    f'\nspark.yelp.dra.minExecutorRatio not provided. This specifies the ratio of total executors '
-                    f'to be used as minimum executors for Dynamic Resource Allocation. More info: y/spark-dra. '
-                    f'Using default ratio: {default_dra_min_executor_ratio}. If you wish to change this value, '
-                    f'please provide the desired spark.yelp.dra.minExecutorRatio in your spark args\n',
-                )
-
+        # Max executors
         if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
             # set maxExecutors default equal to spark.executor.instances
             max_executors = int(
@@ -546,9 +511,7 @@ class SparkConfBuilder:
                 ),
             )
             # maxExecutors should not be less than initialExecutors
-            if 'spark.dynamicAllocation.initialExecutors' in spark_opts:
-                max_executors = max(max_executors, int(spark_opts['spark.dynamicAllocation.initialExecutors']))
-
+            max_executors = max(max_executors, initial_executors)
             spark_opts['spark.dynamicAllocation.maxExecutors'] = str(max_executors)
             log.info(
                 f'\nSetting {TextColors.yellow("spark.dynamicAllocation.maxExecutors")} as {max_executors}. '
@@ -556,24 +519,10 @@ class SparkConfBuilder:
                 f'spark.dynamicAllocation.maxExecutors in your spark args\n',
             )
 
-        # TODO: add regex to better match Jupyterhub Spark session app name
-        if 'jupyterhub' in spark_app_name and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
-            if min_ratio_executors is not None:
-                # set initialExecutors default equal to minimum executors calculated above using
-                # 'spark.yelp.dra.minExecutorRatio' and `default_dra_min_executor_ratio` for Jupyter Spark sessions
-                initial_executors = min_ratio_executors
-            else:
-                # otherwise set initial executors equal to minimum executors
-                initial_executors = int(spark_opts['spark.dynamicAllocation.minExecutors'])
-
-            spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
-            log.info(
-                f'\nSetting {TextColors.yellow("spark.dynamicAllocation.initialExecutors")} as {initial_executors}. '
-                f'If you wish to change the value of initial executors, please provide the exact value of '
-                f'spark.dynamicAllocation.initialExecutors in your spark args\n',
-            )
-
-        spark_opts['spark.executor.instances'] = spark_opts['spark.dynamicAllocation.minExecutors']
+        # We uses spark.executor.instances to define maxExecutors, however
+        # In Saprk: if 'spark.executor.instances' > initialExecutors, it'll be used as the initialExecutors
+        # Set 'spark.executor.instances' to initialExecutors to avoid this
+        spark_opts['spark.executor.instances'] = str(initial_executors)
         return spark_opts
 
     def _cap_executor_resources(
