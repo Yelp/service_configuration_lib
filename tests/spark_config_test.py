@@ -683,7 +683,6 @@ class TestGetSparkConf:
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
                     'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-                    'spark.dynamicAllocation.minExecutors': '0',
                     'spark.dynamicAllocation.maxExecutors': '2',
                     'spark.executor.instances': '0',
                 },
@@ -714,11 +713,10 @@ class TestGetSparkConf:
                 {
                     'spark.dynamicAllocation.enabled': 'true',
                     'spark.dynamicAllocation.maxExecutors': '821',
-                    'spark.dynamicAllocation.minExecutors': '205',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
                     'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-                    'spark.executor.instances': '205',
+                    'spark.executor.instances': '0',
                 },
             ),
             # dynamic resource allocation enabled with Jupyterhub
@@ -731,7 +729,6 @@ class TestGetSparkConf:
                 {
                     'spark.dynamicAllocation.enabled': 'true',
                     'spark.dynamicAllocation.maxExecutors': '821',
-                    'spark.dynamicAllocation.minExecutors': '0',
                     'spark.dynamicAllocation.shuffleTracking.enabled': 'true',
                     'spark.dynamicAllocation.executorAllocationRatio': '0.8',
                     'spark.dynamicAllocation.cachedExecutorIdleTimeout': '2400s',
@@ -755,7 +752,7 @@ class TestGetSparkConf:
                     'spark.executor.instances': '606',
                 },
                 {
-                    'spark.executor.instances': '151',  # enabled by default, 606/4
+                    'spark.executor.instances': '0',  # DRA enabled by default, initialExecutors = minExecutors = 0
                 },
             ),
         ],
