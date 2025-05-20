@@ -7,6 +7,8 @@ omit =
     venv/*
     /usr/*
     setup.py
+    # this file has no real logic
+    service_configuration_lib/yaml_tools.py
 
 [report]
 show_missing = True

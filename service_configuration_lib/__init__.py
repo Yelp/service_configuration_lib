@@ -24,12 +24,8 @@ import sys
 from typing import Mapping
 
 import ephemeral_port_reserve
-import yaml
 
-try:
-    from yaml.cyaml import CSafeLoader as Loader
-except ImportError:  # pragma: no cover (no libyaml-dev / pypy)
-    Loader = yaml.SafeLoader  # type: ignore
+from service_configuration_lib import yaml_tools as yaml
 
 DEFAULT_SOA_DIR = '/nail/etc/services'
 log = logging.getLogger(__name__)
@@ -60,7 +56,7 @@ def read_port(port_file):
 
 
 def load_yaml(fd):
-    return yaml.load(fd, Loader=Loader)
+    return yaml.safe_load(fd)
 
 
 def read_monitoring(monitoring_file):

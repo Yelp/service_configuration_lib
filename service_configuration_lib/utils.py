@@ -15,8 +15,9 @@ from typing import Any
 from typing import Dict
 from typing import Tuple
 
-import yaml
 from typing_extensions import Literal
+
+from service_configuration_lib import yaml_tools as yaml
 
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
