@@ -1713,3 +1713,136 @@ def test_send_and_calculate_resources_cost(
     mock_clusterman_metrics.util.costs.estimate_cost_per_hour.assert_called_once_with(
         cluster='test-cluster', pool='test-pool', cpus=10, mem=2048,
     )
+
+
+class TestGetValidJiraTicket:
+    """Tests for the _get_valid_jira_ticket function."""
+
+    @pytest.fixture
+    def mock_spark_srv_conf_file(self):
+        pass
+
+    @pytest.mark.parametrize(
+        'ticket,expected_result', [
+            ('CLOUD-123', 'CLOUD-123'),
+            ('PROJ-456', 'PROJ-456'),
+            ('ABC-789', 'ABC-789'),
+            ('LONGPROJECT-1234', 'LONGPROJECT-1234'),
+        ],
+    )
+    def test_valid_jira_tickets(self, ticket, expected_result, mock_spark_srv_conf_file, mock_log):
+        """Test that valid Jira tickets are accepted and returned as is."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
+        assert result == expected_result
+        mock_log.info.assert_called_once_with(f'Valid Jira ticket provided: {ticket}')
+
+    @pytest.mark.parametrize(
+        'ticket', [
+            'cloud-123',
+            'proj-456',
+            'PROJ-ABC',
+            'CLOUD-ABC-1234',
+            '123-456',
+            'PROJ123',
+            'PROJ-',
+            '-123',
+            '',
+        ],
+    )
+    def test_invalid_jira_ticket_formats(self, ticket, mock_spark_srv_conf_file, mock_log):
+        """Test that invalid Jira ticket formats are rejected."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
+        assert result is None
+        mock_log.warning.assert_called_once_with(f'Jira ticket missing or invalid format: {ticket}')
+
+    @pytest.mark.parametrize(
+        'ticket', [
+            None,
+            123,
+            True,
+            ['PROJ-123'],
+            {'ticket': 'PROJ-123'},
+        ],
+    )
+    def test_invalid_jira_ticket_types(self, ticket, mock_spark_srv_conf_file, mock_log):
+        """Test that non-string Jira tickets are rejected."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
+        assert result is None
+        mock_log.warning.assert_called_once_with(f'Jira ticket missing or invalid format: {ticket}')
+
+    def test_missing_jira_ticket(self, mock_spark_srv_conf_file, mock_log):
+        """Test that missing Jira ticket key is handled correctly."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._get_valid_jira_ticket({})  # Empty dict, no jira_ticket key
+        assert result is None
+        mock_log.warning.assert_called_once_with('Jira ticket missing or invalid format: None')
+
+    @pytest.mark.parametrize(
+        'mandatory_config,user,expected_exception', [
+            ({'spark.jira_ticket.enabled': 'true'}, 'regular_user', True),
+            ({'spark.jira_ticket.enabled': 'true'}, 'batch', False),
+            ({'spark.jira_ticket.enabled': 'true'}, 'TRON', False),
+            ({'spark.jira_ticket.enabled': 'true'}, '', False),
+            ({'spark.jira_ticket.enabled': 'false'}, 'regular_user', False),
+        ],
+    )
+    def test_jira_ticket_enforcement(
+        self, mandatory_config, user, expected_exception,
+        mock_spark_srv_conf_file, monkeypatch,
+    ):
+        """Test that Jira ticket enforcement works correctly based on configuration and user."""
+        monkeypatch.setenv('USER', user)
+        with mock.patch.object(spark_config.SparkConfBuilder, '__init__', return_value=None):
+            spark_conf_builder = spark_config.SparkConfBuilder()
+            spark_conf_builder.mandatory_default_spark_srv_conf = mandatory_config
+
+            spark_conf_builder.spark_srv_conf = {}
+            spark_conf_builder.spark_constants = {}
+            spark_conf_builder.default_spark_srv_conf = {}
+            spark_conf_builder.spark_costs = {}
+            spark_conf_builder.is_driver_on_k8s_tron = False
+
+            with mock.patch.object(spark_conf_builder, '_get_valid_jira_ticket') as mock_get_valid_jira_ticket:
+                mock_get_valid_jira_ticket.return_value = None
+
+                if expected_exception:
+                    with pytest.raises(RuntimeError, match='Job requires a valid Jira ticket'):
+                        spark_conf_builder.get_spark_conf(
+                            cluster_manager='kubernetes',
+                            spark_app_base_name='test_app',
+                            user_spark_opts={},
+                            paasta_cluster='test-cluster',
+                            paasta_pool='test-pool',
+                            paasta_service='test-service',
+                            paasta_instance='test-instance',
+                            docker_img='test-image',
+                        )
+                else:
+                    # Should not raise an exception
+                    with mock.patch.multiple(
+                        spark_conf_builder,
+                        _adjust_spark_requested_resources=mock.DEFAULT,
+                        get_dra_configs=mock.DEFAULT,
+                        compute_approx_hourly_cost_dollars=mock.DEFAULT,
+                        _append_spark_prometheus_conf=mock.DEFAULT,
+                        _append_event_log_conf=mock.DEFAULT,
+                        _append_sql_partitions_conf=mock.DEFAULT,
+                        update_spark_srv_configs=mock.DEFAULT,
+                    ) as mocks:
+                        # Set return values for mocked methods
+                        for mock_method in mocks.values():
+                            mock_method.return_value = {}
+
+                        spark_conf_builder.get_spark_conf(
+                            cluster_manager='kubernetes',
+                            spark_app_base_name='test_app',
+                            user_spark_opts={},
+                            paasta_cluster='test-cluster',
+                            paasta_pool='test-pool',
+                            paasta_service='test-service',
+                            paasta_instance='test-instance',
+                            docker_img='test-image',
+                        )
