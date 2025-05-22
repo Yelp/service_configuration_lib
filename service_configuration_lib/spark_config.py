@@ -36,6 +36,7 @@ GPUS_HARD_LIMIT = 15
 CLUSTERMAN_METRICS_YAML_FILE_PATH = '/nail/srv/configs/clusterman_metrics.yaml'
 CLUSTERMAN_YAML_FILE_PATH = '/nail/srv/configs/clusterman.yaml'
 SPARK_TRON_JOB_USER = 'TRON'
+JIRA_TICKET_PATTERN = re.compile(r'^[A-Z]+-[0-9]+$')
 
 NON_CONFIGURABLE_SPARK_OPTS = {
     'spark.master',
@@ -989,6 +990,15 @@ class SparkConfBuilder:
         )
         return min_dollars, max_dollars
 
+    def _get_valid_jira_ticket(self, user_spark_opts: Mapping[str, str]) -> Optional[str]:
+        """Checks for and validates the 'jira_ticket' format."""
+        ticket = user_spark_opts.get('jira_ticket')
+        if ticket and isinstance(ticket, str) and JIRA_TICKET_PATTERN.match(ticket):
+            log.info(f'Valid Jira ticket provided: {ticket}')
+            return ticket
+        log.warning(f'Jira ticket missing or invalid format: {ticket}')
+        return None
+
     def get_spark_conf(
         self,
         cluster_manager: str,
@@ -1045,6 +1055,22 @@ class SparkConfBuilder:
         # for simplicity, all the following computation are assuming spark opts values
         # is str type.
         user_spark_opts = _convert_user_spark_opts_value_to_str(user_spark_opts)
+
+        if self.mandatory_default_spark_srv_conf.get('spark.jira_ticket.enabled') == 'true':
+            needs_jira_check = os.environ.get('USER', '') not in ['batch', 'TRON', '']
+            if needs_jira_check:
+                valid_ticket = self._get_valid_jira_ticket(user_spark_opts)
+                if valid_ticket is None:
+                    is_jupyter = _is_jupyterhub_job(user_spark_opts.get('spark.app.name', spark_app_base_name))
+                    error_msg = (
+                        'Job requires a valid Jira ticket (format PROJ-1234) provided via spark-args.\n'
+                        'Reason: https://yelpwiki.yelpcorp.com/spaces/AML/pages/402885641/jira_ticket+in+spark-args \n'
+                        'Please add jira_ticket=YOUR-TICKET to your spark-args. \n'
+                        'For questions please reach out to #spark on slack. \n'
+                    )
+                    raise RuntimeError(error_msg)
+            else:
+                log.debug('Jira ticket check not required for this job configuration.')
 
         app_base_name = (
             user_spark_opts.get('spark.app.name') or
