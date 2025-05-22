@@ -1719,8 +1719,60 @@ class TestGetValidJiraTicket:
     """Tests for the _get_valid_jira_ticket function."""
 
     @pytest.fixture
-    def mock_spark_srv_conf_file(self):
-        pass
+    def mock_spark_srv_conf_file(self, tmpdir, monkeypatch):
+        spark_run_conf = {
+            'environments': {
+                'testing': {
+                    'account_id': TEST_ACCOUNT_ID,
+                    'default_event_log_dir': 's3a://test/eventlog',
+                    'history_server': 'https://spark-history-testing',
+                },
+            },
+            'spark_constants': {
+                'target_mem_cpu_ratio': 7,
+                'resource_configs': {
+                    'recommended': {
+                        'cpu': 4,
+                        'mem': 28,
+                    },
+                    'medium': {
+                        'cpu': 8,
+                        'mem': 56,
+                    },
+                    'max': {
+                        'cpu': 12,
+                        'mem': 110,
+                    },
+                },
+                'cost_factor': {
+                    'test-cluster': {
+                        'test-pool': 100,
+                    },
+                },
+                'adjust_executor_res_ratio_thresh': 99999,
+                'default_resources_waiting_time_per_executor': 2,
+                'default_clusterman_observed_scaling_time': 15,
+                'high_cost_threshold_daily': 500,
+                'defaults': {
+                    'spark.executor.cores': 4,
+                    'spark.executor.instances': 2,
+                    'spark.executor.memory': 28,
+                    'spark.task.cpus': 1,
+                    'spark.sql.shuffle.partitions': 128,
+                    'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+                    'spark.yelp.dra.minExecutorRatio': 0.25,
+                },
+                'mandatory_defaults': {
+                    'spark.kubernetes.allocation.batch.size': 512,
+                    'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+                    'spark.logConf': 'true',
+                },
+            },
+        }
+        fp = tmpdir.join('tmp_spark_srv_config.yaml')
+        fp.write(yaml.dump(spark_run_conf))
+        monkeypatch.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
 
     @pytest.mark.parametrize(
         'ticket,expected_result', [
