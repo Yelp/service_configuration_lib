@@ -306,6 +306,7 @@ def _get_k8s_spark_env(
     include_self_managed_configs: bool = True,
     k8s_server_address: Optional[str] = None,
     user: Optional[str] = None,
+    jira_ticket: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
     # technically only paasta instance can be longer than 63 chars. But we apply the normalization regardless.
@@ -357,6 +358,9 @@ def _get_k8s_spark_env(
         spark_env.update({
             'spark.master': f'k8s://{k8s_server_address}',
         })
+
+    if jira_ticket is not None:
+        spark_env['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] = jira_ticket
 
     return spark_env
 
@@ -990,10 +994,10 @@ class SparkConfBuilder:
         )
         return min_dollars, max_dollars
 
-    def _get_valid_jira_ticket(self, user_spark_opts: Mapping[str, str]) -> Optional[str]:
+    def _get_valid_jira_ticket(self, jira_ticket: Optional[str]) -> Optional[str]:
         """Checks for and validates the 'jira_ticket' format."""
-        ticket = user_spark_opts.get('jira_ticket')
-        if ticket and isinstance(ticket, str) and JIRA_TICKET_PATTERN.match(ticket):
+        ticket = jira_ticket
+        if ticket and JIRA_TICKET_PATTERN.match(ticket):
             log.info(f'Valid Jira ticket provided: {ticket}')
             return ticket
         log.warning(f'Jira ticket missing or invalid format: {ticket}')
@@ -1016,6 +1020,7 @@ class SparkConfBuilder:
         spark_opts_from_env: Optional[Mapping[str, str]] = None,
         aws_region: Optional[str] = None,
         service_account_name: Optional[str] = None,
+        jira_ticket: Optional[str] = None,
         force_spark_resource_configs: bool = True,
         user: Optional[str] = None,
     ) -> Dict[str, str]:
@@ -1056,17 +1061,16 @@ class SparkConfBuilder:
         # is str type.
         user_spark_opts = _convert_user_spark_opts_value_to_str(user_spark_opts)
 
-        if self.mandatory_default_spark_srv_conf.get('spark.jira_ticket.enabled') == 'true':
+        if self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled') == 'true':
             needs_jira_check = os.environ.get('USER', '') not in ['batch', 'TRON', '']
             if needs_jira_check:
-                valid_ticket = self._get_valid_jira_ticket(user_spark_opts)
+                valid_ticket = self._get_valid_jira_ticket(jira_ticket)
                 if valid_ticket is None:
-                    is_jupyter = _is_jupyterhub_job(user_spark_opts.get('spark.app.name', spark_app_base_name))
                     error_msg = (
-                        'Job requires a valid Jira ticket (format PROJ-1234) provided via spark-args.\n'
-                        'Reason: https://yelpwiki.yelpcorp.com/spaces/AML/pages/402885641/jira_ticket+in+spark-args \n'
-                        'Please add jira_ticket=YOUR-TICKET to your spark-args. \n'
-                        'For questions please reach out to #spark on slack. \n'
+                        'Job requires a valid Jira ticket (format PROJ-1234).\n'
+                        'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
+                        'For more information: https://yelpwiki.yelpcorp.com/spaces/AML/pages/402885641 \n'
+                        'If you have questions, please reach out to #spark on Slack.\n'
                     )
                     raise RuntimeError(error_msg)
             else:
@@ -1159,6 +1163,7 @@ class SparkConfBuilder:
                 include_self_managed_configs=not use_eks,
                 k8s_server_address=k8s_server_address,
                 user=user,
+                jira_ticket=jira_ticket,
             ))
         elif cluster_manager == 'local':
             spark_conf.update(_get_local_spark_env(

@@ -12,7 +12,6 @@ import yaml
 from service_configuration_lib import spark_config
 from service_configuration_lib import utils
 
-
 TEST_ACCOUNT_ID = '123456789'
 TEST_USER = 'UNIT_TEST_USER'
 
@@ -20,6 +19,61 @@ UI_PORT_RETURN_VALUE = 65432
 EPHEMERAL_PORT_RETURN_VALUE = '12345'
 TIME_RETURN_VALUE = 123.456
 RANDOM_STRING_RETURN_VALUE = 'do1re2mi3fa4sol4'
+
+BASE_SPARK_RUN_CONF = {
+    'environments': {
+        'testing': {
+            'account_id': TEST_ACCOUNT_ID,
+            'default_event_log_dir': 's3a://test/eventlog',
+            'history_server': 'https://spark-history-testing',
+        },
+    },
+    'spark_constants': {
+        'target_mem_cpu_ratio': 7,
+        'resource_configs': {
+            'recommended': {
+                'cpu': 4,
+                'mem': 28,
+            },
+            'medium': {
+                'cpu': 8,
+                'mem': 56,
+            },
+            'max': {
+                'cpu': 12,
+                'mem': 110,
+            },
+        },
+        'cost_factor': {
+            'test-cluster': {
+                'test-pool': 100,
+            },
+            'spark-pnw-prod': {
+                'batch': 0.041,
+                'stable_batch': 0.142,
+            },
+        },
+        'adjust_executor_res_ratio_thresh': 99999,
+        'default_resources_waiting_time_per_executor': 2,
+        'default_clusterman_observed_scaling_time': 15,
+        'high_cost_threshold_daily': 500,
+        'defaults': {
+            'spark.executor.cores': 4,
+            'spark.executor.instances': 2,
+            'spark.executor.memory': 28,
+            'spark.task.cpus': 1,
+            'spark.sql.shuffle.partitions': 128,
+            'spark.dynamicAllocation.executorAllocationRatio': 0.8,
+            'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
+            'spark.yelp.dra.minExecutorRatio': 0.25,
+        },
+        'mandatory_defaults': {
+            'spark.kubernetes.allocation.batch.size': 512,
+            'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
+            'spark.logConf': 'true',
+        },
+    },
+}
 
 
 @pytest.fixture
@@ -180,60 +234,8 @@ class TestGetSparkConf:
 
     @pytest.fixture
     def mock_spark_srv_conf_file(self, tmpdir, monkeypatch):
-        spark_run_conf = {
-            'environments': {
-                'testing': {
-                    'account_id': TEST_ACCOUNT_ID,
-                    'default_event_log_dir': 's3a://test/eventlog',
-                    'history_server': 'https://spark-history-testing',
-                },
-            },
-            'spark_constants': {
-                'target_mem_cpu_ratio': 7,
-                'resource_configs': {
-                    'recommended': {
-                        'cpu': 4,
-                        'mem': 28,
-                    },
-                    'medium': {
-                        'cpu': 8,
-                        'mem': 56,
-                    },
-                    'max': {
-                        'cpu': 12,
-                        'mem': 110,
-                    },
-                },
-                'cost_factor': {
-                    'test-cluster': {
-                        'test-pool': 100,
-                    },
-                    'spark-pnw-prod': {
-                        'batch': 0.041,
-                        'stable_batch': 0.142,
-                    },
-                },
-                'adjust_executor_res_ratio_thresh': 99999,
-                'default_resources_waiting_time_per_executor': 2,
-                'default_clusterman_observed_scaling_time': 15,
-                'high_cost_threshold_daily': 500,
-                'defaults': {
-                    'spark.executor.cores': 4,
-                    'spark.executor.instances': 2,
-                    'spark.executor.memory': 28,
-                    'spark.task.cpus': 1,
-                    'spark.sql.shuffle.partitions': 128,
-                    'spark.dynamicAllocation.executorAllocationRatio': 0.8,
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-                    'spark.yelp.dra.minExecutorRatio': 0.25,
-                },
-                'mandatory_defaults': {
-                    'spark.kubernetes.allocation.batch.size': 512,
-                    'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
-                    'spark.logConf': 'true',
-                },
-            },
-        }
+        # Use the base configuration
+        spark_run_conf = dict(BASE_SPARK_RUN_CONF)
         fp = tmpdir.join('tmp_spark_srv_config.yaml')
         fp.write(yaml.dump(spark_run_conf))
         monkeypatch.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
@@ -1715,186 +1717,211 @@ def test_send_and_calculate_resources_cost(
     )
 
 
-class TestGetValidJiraTicket:
-    """Tests for the _get_valid_jira_ticket function."""
+class TestJiraTicketFunctionality:
+    """Tests for the Jira ticket functionality in SparkConfBuilder."""
 
     @pytest.fixture
-    def mock_spark_srv_conf_file(self, tmpdir, monkeypatch):
-        spark_run_conf = {
-            'environments': {
-                'testing': {
-                    'account_id': TEST_ACCOUNT_ID,
-                    'default_event_log_dir': 's3a://test/eventlog',
-                    'history_server': 'https://spark-history-testing',
-                },
-            },
-            'spark_constants': {
-                'target_mem_cpu_ratio': 7,
-                'resource_configs': {
-                    'recommended': {
-                        'cpu': 4,
-                        'mem': 28,
-                    },
-                    'medium': {
-                        'cpu': 8,
-                        'mem': 56,
-                    },
-                    'max': {
-                        'cpu': 12,
-                        'mem': 110,
-                    },
-                },
-                'cost_factor': {
-                    'test-cluster': {
-                        'test-pool': 100,
-                    },
-                },
-                'adjust_executor_res_ratio_thresh': 99999,
-                'default_resources_waiting_time_per_executor': 2,
-                'default_clusterman_observed_scaling_time': 15,
-                'high_cost_threshold_daily': 500,
-                'defaults': {
-                    'spark.executor.cores': 4,
-                    'spark.executor.instances': 2,
-                    'spark.executor.memory': 28,
-                    'spark.task.cpus': 1,
-                    'spark.sql.shuffle.partitions': 128,
-                    'spark.dynamicAllocation.executorAllocationRatio': 0.8,
-                    'spark.dynamicAllocation.cachedExecutorIdleTimeout': '1500s',
-                    'spark.yelp.dra.minExecutorRatio': 0.25,
-                },
-                'mandatory_defaults': {
-                    'spark.kubernetes.allocation.batch.size': 512,
-                    'spark.kubernetes.decommission.script': '/opt/spark/kubernetes/dockerfiles/spark/decom.sh',
-                    'spark.logConf': 'true',
-                },
-            },
-        }
+    def mock_spark_srv_conf_file_with_jira_enabled(self, tmpdir, monkeypatch):
+        """Create a mock spark service config file with Jira ticket validation enabled."""
+        # Use the base configuration and modify the jira ticket setting
+        spark_run_conf = dict(BASE_SPARK_RUN_CONF)
+        spark_run_conf['spark_constants']['mandatory_defaults']['spark.yelp.jira_ticket.enabled'] = 'true'
+        fp = tmpdir.join('tmp_spark_srv_config.yaml')
+        fp.write(yaml.dump(spark_run_conf))
+        monkeypatch.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
+
+    @pytest.fixture
+    def mock_spark_srv_conf_file_with_jira_disabled(self, tmpdir, monkeypatch):
+        """Create a mock spark service config file with Jira ticket validation disabled."""
+        # Use the base configuration and modify the jira ticket setting
+        spark_run_conf = dict(BASE_SPARK_RUN_CONF)
+        spark_run_conf['spark_constants']['mandatory_defaults']['spark.yelp.jira_ticket.enabled'] = 'false'
         fp = tmpdir.join('tmp_spark_srv_config.yaml')
         fp.write(yaml.dump(spark_run_conf))
         monkeypatch.setattr(utils, 'DEFAULT_SPARK_RUN_CONFIG', str(fp))
 
     @pytest.mark.parametrize(
-        'ticket,expected_result', [
-            ('CLOUD-123', 'CLOUD-123'),
-            ('PROJ-456', 'PROJ-456'),
-            ('ABC-789', 'ABC-789'),
-            ('LONGPROJECT-1234', 'LONGPROJECT-1234'),
+        'jira_ticket,expected_result', [
+            ('PROJ-1234', 'PROJ-1234'),  # Valid format
+            ('ABC-123', 'ABC-123'),      # Valid format
+            ('LONGPROJ-9876', 'LONGPROJ-9876'),  # Valid format with longer project name
+            ('proj-1234', None),         # Invalid: lowercase project
+            ('PROJ1234', None),          # Invalid: missing hyphen
+            ('PROJ-abc', None),          # Invalid: non-numeric issue number
+            ('1234-PROJ', None),         # Invalid: wrong order
+            ('', None),                  # Invalid: empty string
+            (None, None),                # Invalid: None value
         ],
     )
-    def test_valid_jira_tickets(self, ticket, expected_result, mock_spark_srv_conf_file, mock_log):
-        """Test that valid Jira tickets are accepted and returned as is."""
+    def test_get_valid_jira_ticket(self, jira_ticket, expected_result, mock_log):
+        """Test the _get_valid_jira_ticket method with various inputs."""
         spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
+        result = spark_conf_builder._get_valid_jira_ticket(jira_ticket)
         assert result == expected_result
-        mock_log.info.assert_called_once_with(f'Valid Jira ticket provided: {ticket}')
+
+        if expected_result:
+            mock_log.info.assert_called_with(f'Valid Jira ticket provided: {jira_ticket}')
+        else:
+            mock_log.warning.assert_called_with(f'Jira ticket missing or invalid format: {jira_ticket}')
+
+    def test_k8s_spark_env_with_jira_ticket(self):
+        """Test that _get_k8s_spark_env adds the Jira ticket label when provided."""
+        jira_ticket = 'PROJ-1234'
+        result = spark_config._get_k8s_spark_env(
+            paasta_cluster='test-cluster',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            pod_template_path=None,
+            volumes=None,
+            paasta_pool='test-pool',
+            driver_ui_port=12345,
+            jira_ticket=jira_ticket,
+        )
+
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' in result
+        assert result['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] == jira_ticket
+
+    def test_k8s_spark_env_without_jira_ticket(self):
+        """Test that _get_k8s_spark_env doesn't add the Jira ticket label when not provided."""
+        result = spark_config._get_k8s_spark_env(
+            paasta_cluster='test-cluster',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            pod_template_path=None,
+            volumes=None,
+            paasta_pool='test-pool',
+            driver_ui_port=12345,
+            jira_ticket=None,
+        )
+
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_with_valid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+        """Test get_spark_conf with a valid Jira ticket when validation is enabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # This should not raise an exception
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket='PROJ-1234',
+        )
+
+        # Verify the Jira ticket is passed to _get_k8s_spark_env
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' in result
+        assert result['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] == 'PROJ-1234'
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_with_invalid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+        """Test get_spark_conf with an invalid Jira ticket when validation is enabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # This should raise a RuntimeError
+        with pytest.raises(RuntimeError) as excinfo:
+            spark_conf_builder.get_spark_conf(
+                cluster_manager='kubernetes',
+                spark_app_base_name='test-app',
+                user_spark_opts={},
+                paasta_cluster='test-cluster',
+                paasta_pool='test-pool',
+                paasta_service='test-service',
+                paasta_instance='test-instance',
+                docker_img='test-image',
+                jira_ticket='invalid-ticket',
+            )
+
+        # Verify the error message
+        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
+        assert 'paasta spark-run --jira-ticket=PROJ-1234' in str(excinfo.value)
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+        """Test get_spark_conf without a Jira ticket when validation is enabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # This should raise a RuntimeError
+        with pytest.raises(RuntimeError) as excinfo:
+            spark_conf_builder.get_spark_conf(
+                cluster_manager='kubernetes',
+                spark_app_base_name='test-app',
+                user_spark_opts={},
+                paasta_cluster='test-cluster',
+                paasta_pool='test-pool',
+                paasta_service='test-service',
+                paasta_instance='test-instance',
+                docker_img='test-image',
+            )
+
+        # Verify the error message
+        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_with_jira_validation_disabled(self, mock_spark_srv_conf_file_with_jira_disabled):
+        """Test get_spark_conf without a Jira ticket when validation is disabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # This should not raise an exception
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+        )
+
+        # Verify no Jira ticket label is added
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
 
     @pytest.mark.parametrize(
-        'ticket', [
-            'cloud-123',
-            'proj-456',
-            'PROJ-ABC',
-            'CLOUD-ABC-1234',
-            '123-456',
-            'PROJ123',
-            'PROJ-',
-            '-123',
-            '',
+        'user_env,should_check', [
+            ('regular_user', True),
+            ('batch', False),
+            ('TRON', False),
+            ('', False),
         ],
     )
-    def test_invalid_jira_ticket_formats(self, ticket, mock_spark_srv_conf_file, mock_log):
-        """Test that invalid Jira ticket formats are rejected."""
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
-        assert result is None
-        mock_log.warning.assert_called_once_with(f'Jira ticket missing or invalid format: {ticket}')
-
-    @pytest.mark.parametrize(
-        'ticket', [
-            None,
-            123,
-            True,
-            ['PROJ-123'],
-            {'ticket': 'PROJ-123'},
-        ],
-    )
-    def test_invalid_jira_ticket_types(self, ticket, mock_spark_srv_conf_file, mock_log):
-        """Test that non-string Jira tickets are rejected."""
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._get_valid_jira_ticket({'jira_ticket': ticket})
-        assert result is None
-        mock_log.warning.assert_called_once_with(f'Jira ticket missing or invalid format: {ticket}')
-
-    def test_missing_jira_ticket(self, mock_spark_srv_conf_file, mock_log):
-        """Test that missing Jira ticket key is handled correctly."""
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._get_valid_jira_ticket({})  # Empty dict, no jira_ticket key
-        assert result is None
-        mock_log.warning.assert_called_once_with('Jira ticket missing or invalid format: None')
-
-    @pytest.mark.parametrize(
-        'mandatory_config,user,expected_exception', [
-            ({'spark.jira_ticket.enabled': 'true'}, 'regular_user', True),
-            ({'spark.jira_ticket.enabled': 'true'}, 'batch', False),
-            ({'spark.jira_ticket.enabled': 'true'}, 'TRON', False),
-            ({'spark.jira_ticket.enabled': 'true'}, '', False),
-            ({'spark.jira_ticket.enabled': 'false'}, 'regular_user', False),
-        ],
-    )
-    def test_jira_ticket_enforcement(
-        self, mandatory_config, user, expected_exception,
-        mock_spark_srv_conf_file, monkeypatch,
+    def test_jira_ticket_check_for_different_users(
+        self, user_env, should_check, mock_spark_srv_conf_file_with_jira_enabled, mock_log,
     ):
-        """Test that Jira ticket enforcement works correctly based on configuration and user."""
-        monkeypatch.setenv('USER', user)
-        with mock.patch.object(spark_config.SparkConfBuilder, '__init__', return_value=None):
+        """Test that Jira ticket validation is skipped for certain users."""
+        with mock.patch.dict(os.environ, {'USER': user_env}):
             spark_conf_builder = spark_config.SparkConfBuilder()
-            spark_conf_builder.mandatory_default_spark_srv_conf = mandatory_config
 
-            spark_conf_builder.spark_srv_conf = {}
-            spark_conf_builder.spark_constants = {}
-            spark_conf_builder.default_spark_srv_conf = {}
-            spark_conf_builder.spark_costs = {}
-            spark_conf_builder.is_driver_on_k8s_tron = False
-
-            with mock.patch.object(spark_conf_builder, '_get_valid_jira_ticket') as mock_get_valid_jira_ticket:
-                mock_get_valid_jira_ticket.return_value = None
-
-                if expected_exception:
-                    with pytest.raises(RuntimeError, match='Job requires a valid Jira ticket'):
-                        spark_conf_builder.get_spark_conf(
-                            cluster_manager='kubernetes',
-                            spark_app_base_name='test_app',
-                            user_spark_opts={},
-                            paasta_cluster='test-cluster',
-                            paasta_pool='test-pool',
-                            paasta_service='test-service',
-                            paasta_instance='test-instance',
-                            docker_img='test-image',
-                        )
-                else:
-                    # Should not raise an exception
-                    with mock.patch.multiple(
-                        spark_conf_builder,
-                        _adjust_spark_requested_resources=mock.DEFAULT,
-                        get_dra_configs=mock.DEFAULT,
-                        compute_approx_hourly_cost_dollars=mock.DEFAULT,
-                        _append_spark_prometheus_conf=mock.DEFAULT,
-                        _append_event_log_conf=mock.DEFAULT,
-                        _append_sql_partitions_conf=mock.DEFAULT,
-                        update_spark_srv_configs=mock.DEFAULT,
-                    ) as mocks:
-                        # Set return values for mocked methods
-                        for mock_method in mocks.values():
-                            mock_method.return_value = {}
-
-                        spark_conf_builder.get_spark_conf(
-                            cluster_manager='kubernetes',
-                            spark_app_base_name='test_app',
-                            user_spark_opts={},
-                            paasta_cluster='test-cluster',
-                            paasta_pool='test-pool',
-                            paasta_service='test-service',
-                            paasta_instance='test-instance',
-                            docker_img='test-image',
-                        )
+            if should_check:
+                # For regular users, validation should be enforced
+                with pytest.raises(RuntimeError):
+                    spark_conf_builder.get_spark_conf(
+                        cluster_manager='kubernetes',
+                        spark_app_base_name='test-app',
+                        user_spark_opts={},
+                        paasta_cluster='test-cluster',
+                        paasta_pool='test-pool',
+                        paasta_service='test-service',
+                        paasta_instance='test-instance',
+                        docker_img='test-image',
+                    )
+            else:
+                # For special users, validation should be skipped
+                spark_conf_builder.get_spark_conf(
+                    cluster_manager='kubernetes',
+                    spark_app_base_name='test-app',
+                    user_spark_opts={},
+                    paasta_cluster='test-cluster',
+                    paasta_pool='test-pool',
+                    paasta_service='test-service',
+                    paasta_instance='test-instance',
+                    docker_img='test-image',
+                )
+                mock_log.debug.assert_called_with('Jira ticket check not required for this job configuration.')
