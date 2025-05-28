@@ -487,19 +487,9 @@ class SparkConfBuilder:
             cached_executor_idle_timeout,
         )
 
-        # Min executors
+        # Spark defaults
         min_executors = int(spark_opts.get('spark.dynamicAllocation.minExecutors', 0))
-
-        # Initial executors for Jupyter
         initial_executors = int(spark_opts.get('spark.dynamicAllocation.initialExecutors', min_executors))
-        if is_jupyterhub and 'spark.dynamicAllocation.initialExecutors' not in spark_opts:
-            initial_executors = int(spark_opts.get('spark.dynamicAllocation.minExecutors', 0))
-            spark_opts['spark.dynamicAllocation.initialExecutors'] = str(initial_executors)
-            log.info(
-                f'\nSetting {TextColors.yellow("spark.dynamicAllocation.initialExecutors")} as {initial_executors}. '
-                f'If you wish to change the value of initial executors, please provide the exact value of '
-                f'spark.dynamicAllocation.initialExecutors in your spark args\n',
-            )
 
         # Max executors
         if 'spark.dynamicAllocation.maxExecutors' not in spark_opts:
