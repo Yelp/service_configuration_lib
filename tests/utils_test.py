@@ -154,6 +154,8 @@ def test_get_spark_driver_memory_overhead_mb(spark_conf, expected_mem_overhead):
 
 @pytest.fixture
 def mock_runtimeenv():
+    # Clear the lru_cache before applying the mock
+    utils.get_runtime_env.cache_clear()
     with patch('builtins.open', mock_open(read_data=MOCK_ENV_NAME)) as m:
         yield m
 

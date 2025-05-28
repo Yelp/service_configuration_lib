@@ -1753,7 +1753,9 @@ class TestJiraTicketFunctionality:
             (None, None),                # Invalid: None value
         ],
     )
-    def test_get_valid_jira_ticket(self, jira_ticket, expected_result, mock_log):
+    def test_get_valid_jira_ticket(
+        self, jira_ticket, expected_result, mock_log, mock_spark_srv_conf_file_with_jira_disabled,
+    ):
         """Test the _get_valid_jira_ticket method with various inputs."""
         spark_conf_builder = spark_config.SparkConfBuilder()
         result = spark_conf_builder._get_valid_jira_ticket(jira_ticket)
