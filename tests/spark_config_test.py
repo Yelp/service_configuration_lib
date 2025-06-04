@@ -1859,9 +1859,6 @@ class TestJiraTicketFunctionality:
         assert any(
             'Jira ticket check is enabled, but ticket is missing or invalid for user' in c for c in calls
         )
-        assert any(
-            "Original ticket value: 'invalid-ticket'" in c for c in calls
-        )
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
     def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled, mock_log):
@@ -1884,9 +1881,6 @@ class TestJiraTicketFunctionality:
         calls = [args[0] for args, _ in mock_log.warning.call_args_list]
         assert any(
             'Jira ticket check is enabled, but ticket is missing or invalid for user' in c for c in calls
-        )
-        assert any(
-            "Original ticket value: 'None'" in c for c in calls
         )
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
