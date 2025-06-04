@@ -1901,15 +1901,18 @@ class TestJiraTicketFunctionality:
         assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
 
     @pytest.mark.parametrize(
-        'user,should_check', [
-            ('regular_user', True),
-            ('batch', False),
-            ('TRON', False),
-            (None, False),
+        'cluster_manager,user,should_check', [
+            ('kubernetes', 'regular_user', True),
+            ('kubernetes', 'batch', False),
+            ('kubernetes', 'TRON', False),
+            ('kubernetes', None, False),
+            ('local', 'regular_user', False),
+            ('local', 'TRON', False),
+            ('local', None, False),
         ],
     )
     def test_jira_ticket_check_for_different_users(
-        self, user, should_check, mock_spark_srv_conf_file_with_jira_enabled, mock_log,
+        self, cluster_manager, user, should_check, mock_spark_srv_conf_file_with_jira_enabled, mock_log,
     ):
         """Test that Jira ticket validation is skipped for certain users."""
         spark_conf_builder = spark_config.SparkConfBuilder()
@@ -1918,7 +1921,7 @@ class TestJiraTicketFunctionality:
             # For regular users, validation should be enforced
             with pytest.raises(RuntimeError):
                 spark_conf_builder.get_spark_conf(
-                    cluster_manager='kubernetes',
+                    cluster_manager=cluster_manager,
                     spark_app_base_name='test-app',
                     user_spark_opts={},
                     paasta_cluster='test-cluster',
@@ -1931,7 +1934,7 @@ class TestJiraTicketFunctionality:
         else:
             # For special users, validation should be skipped
             spark_conf_builder.get_spark_conf(
-                cluster_manager='kubernetes',
+                cluster_manager=cluster_manager,
                 spark_app_base_name='test-app',
                 user_spark_opts={},
                 paasta_cluster='test-cluster',

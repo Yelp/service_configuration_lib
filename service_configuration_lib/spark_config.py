@@ -1060,7 +1060,7 @@ class SparkConfBuilder:
         user = user or os.environ.get('USER', None)
 
         if self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled') == 'true':
-            needs_jira_check = user not in TICKET_NOT_REQUIRED_USERS
+            needs_jira_check = cluster_manager != 'local' and user not in TICKET_NOT_REQUIRED_USERS
             if needs_jira_check:
                 valid_ticket = self._get_valid_jira_ticket(jira_ticket)
                 if valid_ticket is None:
