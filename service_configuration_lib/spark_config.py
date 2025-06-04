@@ -80,6 +80,7 @@ DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 TICKET_NOT_REQUIRED_USERS = {
     'batch',  # non-human spark-run from batch boxes
     'TRON',  # tronjobs that run commands like paasta mark-for-deployment
+    'jenkins',  # username for jenkins pipeline jobs
     None,  # placeholder for being unable to determine user
 }
 USER_LABEL_UNSPECIFIED = 'UNSPECIFIED'
@@ -1064,13 +1065,15 @@ class SparkConfBuilder:
             if needs_jira_check:
                 valid_ticket = self._get_valid_jira_ticket(jira_ticket)
                 if valid_ticket is None:
-                    error_msg = (
-                        'Job requires a valid Jira ticket (format PROJ-1234).\n'
+                    # TODO: raise error after observing users passing this check for a week and
+                    # update TICKET_NOT_REQUIRED_USERS accordingly.
+                    log.warning(
+                        f'Jira ticket check is enabled, but ticket is missing or invalid for user "{user}".\n'
+                        f'Proceeding with job execution. Original ticket value: "{jira_ticket}".\n'
                         'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
-                        'For more information: https://yelpwiki.yelpcorp.com/spaces/AML/pages/402885641 \n'
-                        f'If you have questions, please reach out to #spark on Slack. (user={user})\n'
+                        'For more information: http://y/spark-jira-ticket-param \n'
+                        'If you have questions, please reach out to #spark on Slack.',
                     )
-                    raise RuntimeError(error_msg)
             else:
                 log.debug('Jira ticket check not required for this job configuration.')
 

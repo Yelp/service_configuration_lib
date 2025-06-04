@@ -1837,48 +1837,57 @@ class TestJiraTicketFunctionality:
         assert result['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] == 'PROJ-1234'
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
-    def test_get_spark_conf_with_invalid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+    def test_get_spark_conf_with_invalid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled, mock_log):
         """Test get_spark_conf with an invalid Jira ticket when validation is enabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
-        # This should raise a RuntimeError
-        with pytest.raises(RuntimeError) as excinfo:
-            spark_conf_builder.get_spark_conf(
-                cluster_manager='kubernetes',
-                spark_app_base_name='test-app',
-                user_spark_opts={},
-                paasta_cluster='test-cluster',
-                paasta_pool='test-pool',
-                paasta_service='test-service',
-                paasta_instance='test-instance',
-                docker_img='test-image',
-                jira_ticket='invalid-ticket',
-            )
+        # This should log a warning instead of raising an exception
+        spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket='invalid-ticket',
+        )
 
-        # Verify the error message
-        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
-        assert 'paasta spark-run --jira-ticket=PROJ-1234' in str(excinfo.value)
+        # Verify the warning message is logged
+        calls = [args[0] for args, _ in mock_log.warning.call_args_list]
+        assert any(
+            'Jira ticket check is enabled, but ticket is missing or invalid for user' in c for c in calls
+        )
+        assert any(
+            "Original ticket value: 'invalid-ticket'" in c for c in calls
+        )
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
-    def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+    def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled, mock_log):
         """Test get_spark_conf without a Jira ticket when validation is enabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
-        # This should raise a RuntimeError
-        with pytest.raises(RuntimeError) as excinfo:
-            spark_conf_builder.get_spark_conf(
-                cluster_manager='kubernetes',
-                spark_app_base_name='test-app',
-                user_spark_opts={},
-                paasta_cluster='test-cluster',
-                paasta_pool='test-pool',
-                paasta_service='test-service',
-                paasta_instance='test-instance',
-                docker_img='test-image',
-            )
+        # This should log a warning instead of raising an exception
+        spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+        )
 
-        # Verify the error message
-        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
+        # Verify the warning message is logged
+        calls = [args[0] for args, _ in mock_log.warning.call_args_list]
+        assert any(
+            'Jira ticket check is enabled, but ticket is missing or invalid for user' in c for c in calls
+        )
+        assert any(
+            "Original ticket value: 'None'" in c for c in calls
+        )
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
     def test_get_spark_conf_with_jira_validation_disabled(self, mock_spark_srv_conf_file_with_jira_disabled):
@@ -1905,9 +1914,11 @@ class TestJiraTicketFunctionality:
             ('kubernetes', 'regular_user', True),
             ('kubernetes', 'batch', False),
             ('kubernetes', 'TRON', False),
+            ('kubernetes', 'jenkins', False),
             ('kubernetes', None, False),
             ('local', 'regular_user', False),
             ('local', 'TRON', False),
+            ('local', 'jenkins', False),
             ('local', None, False),
         ],
     )
@@ -1918,19 +1929,23 @@ class TestJiraTicketFunctionality:
         spark_conf_builder = spark_config.SparkConfBuilder()
 
         if should_check:
-            # For regular users, validation should be enforced
-            with pytest.raises(RuntimeError):
-                spark_conf_builder.get_spark_conf(
-                    cluster_manager=cluster_manager,
-                    spark_app_base_name='test-app',
-                    user_spark_opts={},
-                    paasta_cluster='test-cluster',
-                    paasta_pool='test-pool',
-                    paasta_service='test-service',
-                    paasta_instance='test-instance',
-                    docker_img='test-image',
-                    user=user,
-                )
+            # For regular users, validation should log a warning
+            spark_conf_builder.get_spark_conf(
+                cluster_manager=cluster_manager,
+                spark_app_base_name='test-app',
+                user_spark_opts={},
+                paasta_cluster='test-cluster',
+                paasta_pool='test-pool',
+                paasta_service='test-service',
+                paasta_instance='test-instance',
+                docker_img='test-image',
+                user=user,
+            )
+            # Verify the warning message is logged
+            calls = [args[0] for args, _ in mock_log.warning.call_args_list]
+            assert any(
+                'Jira ticket check is enabled, but ticket is missing or invalid for user' in c for c in calls
+            )
         else:
             # For special users, validation should be skipped
             spark_conf_builder.get_spark_conf(
