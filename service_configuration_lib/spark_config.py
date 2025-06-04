@@ -77,9 +77,12 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
-USER_BATCH = 'batch'  # used by batch servers
-USER_TRON = 'TRON'  # used by Tron jobs, or other paasta CLI commands such as `paasta validate/mark-for-deployment`
-USER_UNSPECIFIED = 'UNSPECIFIED'
+TICKET_NOT_REQUIRED_USERS = {
+    'batch',  # non-human spark-run from batch boxes
+    'TRON',  # tronjobs that run commands like paasta mark-for-deployment
+    None,  # placeholder for being unable to determine user
+}
+USER_LABEL_UNSPECIFIED = 'UNSPECIFIED'
 
 log = logging.Logger(__name__)
 log.setLevel(logging.WARN)
@@ -308,7 +311,7 @@ def _get_k8s_spark_env(
     service_account_name: Optional[str] = None,
     include_self_managed_configs: bool = True,
     k8s_server_address: Optional[str] = None,
-    user: Optional[str] = USER_UNSPECIFIED,
+    user: Optional[str] = USER_LABEL_UNSPECIFIED,
     jira_ticket: Optional[str] = None,
 ) -> Dict[str, str]:
     # RFC 1123: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
@@ -1057,7 +1060,7 @@ class SparkConfBuilder:
         user = user or os.environ.get('USER', None)
 
         if self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled') == 'true':
-            needs_jira_check = user not in [USER_BATCH, USER_TRON, None]
+            needs_jira_check = user not in TICKET_NOT_REQUIRED_USERS
             if needs_jira_check:
                 valid_ticket = self._get_valid_jira_ticket(jira_ticket)
                 if valid_ticket is None:
@@ -1065,7 +1068,7 @@ class SparkConfBuilder:
                         'Job requires a valid Jira ticket (format PROJ-1234).\n'
                         'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
                         'For more information: https://yelpwiki.yelpcorp.com/spaces/AML/pages/402885641 \n'
-                        'If you have questions, please reach out to #spark on Slack.\n'
+                        f'If you have questions, please reach out to #spark on Slack. (user={user})\n'
                     )
                     raise RuntimeError(error_msg)
             else:
