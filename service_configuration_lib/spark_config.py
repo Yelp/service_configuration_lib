@@ -995,8 +995,59 @@ class SparkConfBuilder:
         if ticket and JIRA_TICKET_PATTERN.match(ticket):
             log.info(f'Valid Jira ticket provided: {ticket}')
             return ticket
-        log.warning(f'Jira ticket missing or invalid format: {ticket}')
+        log.info(f'Jira ticket missing or invalid format: {ticket}')
         return None
+
+    def _handle_jira_ticket_validation(
+        self,
+        cluster_manager: str,
+        user: Optional[str],
+        jira_ticket: Optional[str],
+    ) -> Optional[str]:
+        """
+        This method checks if Jira ticket validation is enabled, if the user needs
+        to provide a ticket, and validates the ticket if needed.
+
+        Returns:
+            The validated Jira ticket string if valid, otherwise None.
+
+        Args:
+            cluster_manager: The cluster manager being used
+            user: The user running the job
+            jira_ticket: The Jira ticket provided by the user
+        """
+        # Get the jira ticket validation setting
+        flag_enabled = self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled', 'false')
+        valid_ticket = self._get_valid_jira_ticket(jira_ticket)
+
+        # Skip validation for local cluster manager or exempt users
+        if cluster_manager == 'local' or user in TICKET_NOT_REQUIRED_USERS:
+            log.debug('Jira ticket check not required for this job configuration.')
+            # If exempt, we still pass through the original ticket if it's valid,
+            # otherwise None. This allows exempt users like tron to still have their valid tickets
+            # (if provided) attached as labels, without forcing validation.
+            return valid_ticket
+
+        if valid_ticket is None:
+            if flag_enabled == 'true':
+                error_msg = (
+                    f'Job requires a valid Jira ticket (format PROJ-1234).\n'
+                    f'Jira ticket check is enabled, but ticket "{jira_ticket}" is '
+                    f'missing or invalid for user "{user}".\n'
+                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
+                    'For more information: http://y/spark-jira-ticket-param \n'
+                    'If you have questions, please reach out to #spark on Slack.\n'
+                )
+                raise RuntimeError(error_msg)
+            else:
+                log.warning(
+                    f'Jira ticket check is configured, but ticket is missing or invalid for user "{user}".\n'
+                    f'Proceeding with job execution. Original ticket value: "{jira_ticket}".\n'
+                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
+                    'For more information: http://y/spark-jira-ticket-param \n'
+                    'If you have questions, please reach out to #spark on Slack.',
+                )
+        return valid_ticket
 
     def get_spark_conf(
         self,
@@ -1042,6 +1093,7 @@ class SparkConfBuilder:
             to launch the batch, and inside the batch use `spark_tools.paasta` to create
             spark session.
         :param aws_region: The default aws region to use
+        :param jira_ticket: The jira project that this spark job is related to.
         :param service_account_name: The k8s service account to use for spark k8s authentication.
         :param force_spark_resource_configs: skip the resource/instances recalculation.
             This is strongly not recommended.
@@ -1060,22 +1112,8 @@ class SparkConfBuilder:
         # Get user from environment variables if it's not set
         user = user or os.environ.get('USER', None)
 
-        if self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled') == 'true':
-            needs_jira_check = cluster_manager != 'local' and user not in TICKET_NOT_REQUIRED_USERS
-            if needs_jira_check:
-                valid_ticket = self._get_valid_jira_ticket(jira_ticket)
-                if valid_ticket is None:
-                    # TODO: raise error after observing users passing this check for a week and
-                    # update TICKET_NOT_REQUIRED_USERS accordingly.
-                    log.warning(
-                        f'Jira ticket check is enabled, but ticket is missing or invalid for user "{user}".\n'
-                        f'Proceeding with job execution. Original ticket value: "{jira_ticket}".\n'
-                        'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
-                        'For more information: http://y/spark-jira-ticket-param \n'
-                        'If you have questions, please reach out to #spark on Slack.',
-                    )
-            else:
-                log.debug('Jira ticket check not required for this job configuration.')
+        # Handle Jira ticket validation if enabled
+        validated_jira_ticket = self._handle_jira_ticket_validation(cluster_manager, user, jira_ticket)
 
         app_base_name = (
             user_spark_opts.get('spark.app.name') or
@@ -1164,7 +1202,7 @@ class SparkConfBuilder:
                 include_self_managed_configs=not use_eks,
                 k8s_server_address=k8s_server_address,
                 user=user,
-                jira_ticket=jira_ticket,
+                jira_ticket=validated_jira_ticket,
             ))
         elif cluster_manager == 'local':
             spark_conf.update(_get_local_spark_env(
