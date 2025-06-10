@@ -26,7 +26,7 @@ from clog.config import monk_port
 from clog.handlers import MonkHandler
 from typing_extensions import Literal
 
-DEFAULT_SPARK_RUN_CONFIG = '/nail/home/sids/repos/srv-configs/common/spark.yaml'
+DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
 SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
 
