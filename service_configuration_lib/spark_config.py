@@ -24,6 +24,7 @@ from service_configuration_lib import utils
 from service_configuration_lib.text_colors import TextColors
 from service_configuration_lib.utils import EPHEMERAL_PORT_END
 from service_configuration_lib.utils import EPHEMERAL_PORT_START
+from service_configuration_lib.utils import get_clog_handler
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -440,12 +441,15 @@ class SparkConfBuilder:
         try:
             (
                 self.spark_srv_conf, self.spark_constants, self.default_spark_srv_conf,
-                self.mandatory_default_spark_srv_conf, self.spark_costs,
+                self.mandatory_default_spark_srv_conf, self.spark_costs, _,
             ) = utils.load_spark_srv_conf()
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
             # should fail because Spark config calculation depends on values in srv-configs
             raise e
+
+        # Get a MonkHandler instance for JIRA validation warnings.
+        self.jira_monk_handler_ref = get_clog_handler(client_id='service_configuration_lib.spark_config')
 
     def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts['spark.ui.prometheus.enabled'] = 'true'
@@ -1040,13 +1044,29 @@ class SparkConfBuilder:
                 )
                 raise RuntimeError(error_msg)
             else:
-                log.warning(
-                    f'Jira ticket check is configured, but ticket is missing or invalid for user "{user}".\n'
-                    f'Proceeding with job execution. Original ticket value: "{jira_ticket}".\n'
-                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
-                    'For more information: http://y/spark-jira-ticket-param \n'
-                    'If you have questions, please reach out to #spark on Slack.',
+                warning_message = (
+                    f'Jira ticket check is configured, but ticket is missing or invalid for user "{user}". '
+                    f'Proceeding with job execution. Original ticket value: "{jira_ticket}". '
+                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+                    'For more information: http://y/spark-jira-ticket-param '
+                    'If you have questions, please reach out to #spark on Slack. '
                 )
+                if self.jira_monk_handler_ref:
+                    log_payload = {
+                        'timestamp': int(time.time()),
+                        'scribe_log': self.jira_monk_handler_ref.stream,
+                        'event': 'jira_ticket_validation_warning',
+                        'level': 'WARNING',
+                        'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
+                        'user': user,
+                        'jira_ticket_provided': jira_ticket,
+                    }
+                    self.jira_monk_handler_ref.logger.log_line(
+                        self.jira_monk_handler_ref.stream, json.dumps(log_payload),
+                    )
+                else:
+                    # Fallback to default logger if clog handler setup failed or ref is missing/invalid
+                    log.warning(warning_message)
         return valid_ticket
 
     def get_spark_conf(

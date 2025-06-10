@@ -3,6 +3,7 @@ import contextlib
 import errno
 import hashlib
 import logging
+import os
 import random
 import string
 import uuid
@@ -13,12 +14,19 @@ from socket import socket
 from socket import SOL_SOCKET
 from typing import Any
 from typing import Dict
+from typing import List
+from typing import Optional
 from typing import Tuple
 
+import clog.config
+import srv_configs
 import yaml
+from clog.config import monk_host
+from clog.config import monk_port
+from clog.handlers import MonkHandler
 from typing_extensions import Literal
 
-DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
+DEFAULT_SPARK_RUN_CONFIG = '/nail/home/sids/repos/srv-configs/common/spark.yaml'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
 SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
 
@@ -37,11 +45,12 @@ log.setLevel(logging.INFO)
 
 
 def load_spark_srv_conf(preset_values=None) -> Tuple[
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Dict[str, float]],
+    Dict[str, Any],  # spark_srv_conf
+    Dict[str, Any],  # spark_constants
+    Dict[str, Any],  # default_spark_srv_conf
+    Dict[str, Any],  # mandatory_default_spark_srv_conf
+    Dict[str, Dict[str, float]],  # spark_costs
+    List[Dict[str, Any]],  # module_configs
 ]:
     if preset_values is None:
         preset_values = dict()
@@ -53,9 +62,10 @@ def load_spark_srv_conf(preset_values=None) -> Tuple[
             default_spark_srv_conf = spark_constants['defaults']
             mandatory_default_spark_srv_conf = spark_constants['mandatory_defaults']
             spark_costs = spark_constants['cost_factor']
+            module_configs = loaded_values['module_config']
             return (
                 spark_srv_conf, spark_constants, default_spark_srv_conf,
-                mandatory_default_spark_srv_conf, spark_costs,
+                mandatory_default_spark_srv_conf, spark_costs, module_configs,
             )
     except Exception as e:
         log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
@@ -217,3 +227,161 @@ def get_spark_driver_memory_overhead_mb(spark_conf: Dict[str, str]) -> float:
         )
         driver_mem_overhead_mb = driver_mem_mb * driver_mem_overhead_factor
     return round(driver_mem_overhead_mb, 5)
+
+
+def _load_default_service_configurations_for_clog() -> Optional[Dict[str, Any]]:
+    """
+    Loads the external configuration file for the 'clog' namespace if specified in
+    DEFAULT_SPARK_RUN_CONFIG's 'module_config' section.
+    Returns the inline 'config' dictionary for the 'clog' namespace if found,
+    otherwise None.
+    """
+    clog_config_file_path = None
+    clog_inline_config = None
+    found_clog_module_config = False
+
+    try:
+        _, _, _, _, _, module_configs = load_spark_srv_conf()
+
+        for mc_item in module_configs:
+            if isinstance(mc_item, dict) and mc_item.get('namespace') == 'clog':
+                found_clog_module_config = True
+                clog_config_file_path = mc_item.get('file')
+                clog_inline_config = mc_item.get('config')
+                break
+
+        if not found_clog_module_config:
+            log.warning(
+                f"Could not find 'clog' namespace entry in 'module_config' "
+                f'section within {DEFAULT_SPARK_RUN_CONFIG}.',
+            )
+            return None
+
+        if clog_config_file_path:
+            if os.path.exists(clog_config_file_path):
+                try:
+                    srv_configs.use_file(clog_config_file_path, namespace='clog')
+                    log.info(
+                        f'Successfully loaded clog configuration file {clog_config_file_path} '
+                        f"into namespace 'clog'.",
+                    )
+                except Exception as e_use_file:
+                    log.error(
+                        f'Error loading clog configuration file {clog_config_file_path} '
+                        f'using srv_configs.use_file: {e_use_file}',
+                    )
+            else:
+                log.error(
+                    f"Clog configuration file specified in 'module_config' of {DEFAULT_SPARK_RUN_CONFIG} "
+                    f'does not exist: {clog_config_file_path}.',
+                )
+        else:
+            log.info(
+                f"No 'file' specified for 'clog' namespace in 'module_config' of {DEFAULT_SPARK_RUN_CONFIG}. "
+                'Not loading any external file for clog via module_config.',
+            )
+
+        # Return the inline config dictionary, which might be None if not present
+        if isinstance(clog_inline_config, dict):
+            return clog_inline_config
+        elif clog_inline_config is not None:
+            log.warning(f"Inline 'config' for 'clog' namespace in {DEFAULT_SPARK_RUN_CONFIG} is not a dictionary.")
+            return None
+        else:
+            return None
+
+    except FileNotFoundError:
+        log.error(
+            f'Error: Main Spark run config file {DEFAULT_SPARK_RUN_CONFIG} not found. '
+            'Cannot process clog configurations.',
+        )
+        return None
+    except yaml.YAMLError as e_yaml:
+        log.error(f'Error parsing YAML from {DEFAULT_SPARK_RUN_CONFIG}: {e_yaml}')
+        return None
+    except Exception as e_main:
+        log.error(
+            f'An unexpected error occurred in _load_default_service_configurations_for_clog: {e_main}',
+        )
+        return None
+
+
+def get_clog_handler(
+    client_id: Optional[str] = None,
+    stream_name_override: Optional[str] = None,
+) -> Optional[MonkHandler]:
+    """
+    Configures and returns a clog MonkHandler for logging.
+
+    This utility helps in setting up a MonkHandler. It ensures the external
+    clog configuration file (if specified in DEFAULT_SPARK_RUN_CONFIG) is loaded
+    into srv_configs. It then determines the log_stream_name with the following
+    priority:
+    1. `stream_name_override` argument.
+    2. `log_stream_name` from the inline 'config' of the 'clog' module_config
+       in DEFAULT_SPARK_RUN_CONFIG.
+    3. `log_stream_name` from the 'clog' namespace in srv_configs (typically
+       loaded from the external file like /nail/srv/configs/clog.yaml).
+
+    Args:
+        client_id: Optional client identifier for the log messages.
+                   Defaults to the current OS user or 'unknown_spark_user'.
+        stream_name_override: Optional explicit clog stream name to use,
+                              overriding any configured values.
+
+    Returns:
+        A configured MonkHandler instance if successful, otherwise None.
+    """
+    # Load external file (if any) and get inline config from spark.yaml's module_config
+    inline_clog_config = _load_default_service_configurations_for_clog()
+
+    actual_client_id = client_id or os.getenv('USER') or 'unknown_spark_user'
+    final_stream_name = stream_name_override
+
+    if not final_stream_name:
+        if inline_clog_config and isinstance(inline_clog_config.get('log_stream_name'), str):
+            final_stream_name = inline_clog_config['log_stream_name']
+            log.info(
+                f"Using log_stream_name '{final_stream_name}' from inline module_config in "
+                f'{DEFAULT_SPARK_RUN_CONFIG}.',
+            )
+        else:
+            try:
+                # Fallback to srv_configs (which should have data from the external file)
+                clog_srv_configs_dict = srv_configs.get_namespace_as_dict('clog')
+                final_stream_name = clog_srv_configs_dict.get('log_stream_name')
+                if final_stream_name:
+                    log.info(
+                        f"Using log_stream_name '{final_stream_name}' from srv_configs 'clog' namespace "
+                        f'(likely from external file).',
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Could not get 'clog' namespace from srv_configs or 'log_stream_name' key missing. "
+                    f'This may be okay if stream_name_override or inline config provides it. Error: {e}',
+                )
+
+    if not final_stream_name:
+        log.error(
+            'Clog stream_name could not be determined. It was not provided as an argument, '
+            'not found in the inline module_config for "clog", and not found in the '
+            '"clog" srv_configs namespace. Clog handler cannot be configured.',
+        )
+        return None
+
+    # Ensure that clog is configured to enable Monk logging.
+    # The default in clog.config.monk_disable is True.
+    clog.config.configure_from_dict({'monk_disable': False})
+    log.info('Clog has been configured to enable Monk logging (monk_disable=False).')
+
+    try:
+        handler = MonkHandler(
+            client_id=actual_client_id,
+            host=monk_host,
+            port=monk_port,
+            stream=final_stream_name,
+        )
+        return handler
+    except Exception as e:
+        log.error(f"Failed to create MonkHandler for clog with stream '{final_stream_name}'. Error: {e}")
+        return None
