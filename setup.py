@@ -12,8 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from pkg_resources import yield_lines
 from setuptools import find_packages
 from setuptools import setup
+
+
+def _read_requirements(filename):
+    with open(filename, 'r') as f:
+        return list(yield_lines(f.read()))
+
 
 setup(
     name='service-configuration-lib',
@@ -27,13 +34,10 @@ setup(
     package_data={
         'service_configuration_lib': ['py.typed'],
     },
-    install_requires=[
-        'ephemeral-port-reserve >= 1.1.0',
-        'PyYAML >= 5.1',
-        'pyinotify',
-        'requests>=2.18.4',
-        'boto3',
-    ],
+    install_requires=_read_requirements('requirements-oss.txt'),
+    extras_require={
+        'yelp': _read_requirements('requirements-yelp.txt'),
+    },
     license='Copyright Yelp 2013, All Rights Reserved',
     scripts=[
         'scripts/all_nodes_that_receive',

@@ -73,7 +73,6 @@ BASE_SPARK_RUN_CONF = {
             'spark.logConf': 'true',
         },
     },
-    'module_config': [],
 }
 
 
@@ -1736,22 +1735,6 @@ class TestJiraTicketFunctionality:
     """Tests for the Jira ticket functionality in SparkConfBuilder."""
 
     @pytest.fixture
-    def mock_clog_handler_for_jira(self, monkeypatch):
-        mock_handler_instance = mock.Mock()
-        mock_handler_instance.logger = mock.Mock()
-        mock_handler_instance.logger.log_line = mock.Mock()
-        # This stream name should match what get_clog_handler would produce
-        # or be a consistent mock value if get_clog_handler is fully mocked.
-        # For simplicity, we'll use a fixed mock stream name here.
-        mock_handler_instance.stream = 'mock_jira_validation_stream'
-
-        # Mock spark_config.get_clog_handler to return our mock_handler_instance
-        # This ensures SparkConfBuilder().jira_monk_handler_ref gets this mock.
-        mock_get_clog_handler_fn = mock.Mock(return_value=mock_handler_instance)
-        monkeypatch.setattr(spark_config, 'get_clog_handler', mock_get_clog_handler_fn)
-        return mock_handler_instance
-
-    @pytest.fixture
     def mock_spark_srv_conf_file_with_jira_enabled(self, tmpdir, monkeypatch):
         """Create a mock spark service config file with Jira ticket validation enabled."""
         # Use the base configuration and modify the jira ticket setting
@@ -1896,12 +1879,10 @@ class TestJiraTicketFunctionality:
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
     def test_get_spark_conf_with_jira_validation_disabled(
-        self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_clog_handler_for_jira, mock_time,
+        self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_time,
     ):
-        """Test get_spark_conf without a Jira ticket when validation is disabled and clog handler is present."""
+        """Test get_spark_conf without a Jira ticket when validation is disabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
-        # Ensure the mocked handler is used
-        assert spark_conf_builder.jira_monk_handler_ref == mock_clog_handler_for_jira
 
         # This should not raise an exception
         result = spark_conf_builder.get_spark_conf(
@@ -1921,29 +1902,15 @@ class TestJiraTicketFunctionality:
 
         # Verify the specific warning messages are logged
         mock_log.info.assert_any_call('Jira ticket missing or invalid format: None')  # From _get_valid_jira_ticket
-
-        # Assert clog call
-        expected_user = 'regular_user'
-        expected_jira_ticket_provided = None
-        expected_log_payload = {
-            'timestamp': int(TIME_RETURN_VALUE),
-            'scribe_log': mock_clog_handler_for_jira.stream,
-            'event': 'jira_ticket_validation_warning',
-            'level': 'WARNING',
-            'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
-            'user': expected_user,
-            'jira_ticket_provided': expected_jira_ticket_provided,
-        }
-        mock_clog_handler_for_jira.logger.log_line.assert_called_once()
-        call_args, _ = mock_clog_handler_for_jira.logger.log_line.call_args
-        assert call_args[0] == mock_clog_handler_for_jira.stream
-        actual_payload = json.loads(call_args[1])
-        assert actual_payload == expected_log_payload
-
-        # Ensure the fallback log.warning for the detailed message was NOT called
-        for call_args_list in mock_log.warning.call_args_list:
-            warning_msg = call_args_list[0][0]  # First arg of the first call arg tuple
-            assert 'Jira ticket check is configured, but ticket is missing or invalid' not in warning_msg
+        # Check for the warning that would have been sent to clog
+        expected_warning_msg = (
+            'Jira ticket check is configured, but ticket is missing or invalid for user "regular_user". '
+            'Proceeding with job execution. Original ticket value: "None". '
+            'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+            'For more information: http://y/spark-jira-ticket-param '
+            'If you have questions, please reach out to #spark on Slack. '
+        )
+        mock_log.warning.assert_any_call(expected_warning_msg)
 
     @pytest.mark.parametrize(
         'cluster_manager,user,should_check', [
@@ -1997,12 +1964,10 @@ class TestJiraTicketFunctionality:
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
     def test_get_spark_conf_jira_disabled_invalid_ticket(
-        self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_clog_handler_for_jira, mock_time,
+        self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_time,
     ):
-        """Test get_spark_conf with an invalid Jira ticket when validation is disabled and clog handler is present."""
+        """Test get_spark_conf with an invalid Jira ticket when validation is disabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
-        # Ensure the mocked handler is used
-        assert spark_conf_builder.jira_monk_handler_ref == mock_clog_handler_for_jira
         invalid_ticket = 'INVALID-TICKET'
 
         result = spark_conf_builder.get_spark_conf(
@@ -2022,29 +1987,15 @@ class TestJiraTicketFunctionality:
 
         # Verify the specific warning messages are logged
         mock_log.info.assert_any_call(f'Jira ticket missing or invalid format: {invalid_ticket}')  # From _get_valid_jira_ticket # noqa E501
-
-        # Assert clog call
-        expected_user = 'regular_user'
-        expected_jira_ticket_provided = invalid_ticket
-        expected_log_payload = {
-            'timestamp': int(TIME_RETURN_VALUE),
-            'scribe_log': mock_clog_handler_for_jira.stream,
-            'event': 'jira_ticket_validation_warning',
-            'level': 'WARNING',
-            'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
-            'user': expected_user,
-            'jira_ticket_provided': expected_jira_ticket_provided,
-        }
-        mock_clog_handler_for_jira.logger.log_line.assert_called_once()
-        call_args, _ = mock_clog_handler_for_jira.logger.log_line.call_args
-        assert call_args[0] == mock_clog_handler_for_jira.stream
-        actual_payload = json.loads(call_args[1])
-        assert actual_payload == expected_log_payload
-
-        # Ensure the fallback log.warning for the detailed message was NOT called
-        for call_args_list in mock_log.warning.call_args_list:
-            warning_msg = call_args_list[0][0]
-            assert 'Jira ticket check is configured, but ticket is missing or invalid' not in warning_msg
+        # Check for the warning that would have been sent to clog
+        expected_warning_msg = (
+            f'Jira ticket check is configured, but ticket is missing or invalid for user "regular_user". '
+            f'Proceeding with job execution. Original ticket value: "{invalid_ticket}". '
+            'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+            'For more information: http://y/spark-jira-ticket-param '
+            'If you have questions, please reach out to #spark on Slack. '
+        )
+        mock_log.warning.assert_any_call(expected_warning_msg)
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
     def test_get_spark_conf_jira_disabled_valid_ticket(self, mock_spark_srv_conf_file_with_jira_disabled, mock_log):
@@ -2074,3 +2025,50 @@ class TestJiraTicketFunctionality:
         # Verify the "Proceeding with job execution..." warning is NOT logged
         for call_args, _ in mock_log.warning.call_args_list:
             assert 'Proceeding with job execution' not in call_args[0]
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    @mock.patch('service_configuration_lib.spark_config.clog')  # Ensure clog is mocked
+    def test_get_spark_conf_jira_disabled_clog_fails(
+        self,
+        mock_clog,
+        mock_spark_srv_conf_file_with_jira_disabled,
+        mock_log,
+        mock_time,
+    ):
+        """Test get_spark_conf with Jira disabled and clog.log_line failing."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        invalid_ticket = 'NO-TICKET'
+        clog_error_message = 'Test Clog Error'
+        mock_clog.log_line.side_effect = Exception(clog_error_message)
+        # Mock clog.config.configure to do nothing if it's called
+        mock_clog.config.configure = mock.Mock()
+
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket=invalid_ticket,
+        )
+
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
+        mock_log.info.assert_any_call(f'Jira ticket missing or invalid format: {invalid_ticket}')
+
+        expected_warning_msg_part1 = (
+            f'Jira ticket check is configured, but ticket is missing or invalid for user "regular_user". '
+            f'Proceeding with job execution. Original ticket value: "{invalid_ticket}". '
+            'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+            'For more information: http://y/spark-jira-ticket-param '
+            'If you have questions, please reach out to #spark on Slack. '
+        )
+        # Check that the warning contains both the original message and the clog error
+        # We check for parts because the exact formatting of the exception string can vary.
+        called_args = [call[0][0] for call in mock_log.warning.call_args_list]
+        assert any(
+            expected_warning_msg_part1 in arg and f'Clog operation failed with: {clog_error_message}' in arg
+            for arg in called_args
+        ), f'Expected warning with clog failure not found in {called_args}'

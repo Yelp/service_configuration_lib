@@ -15,13 +15,33 @@ UID:=`id -u`
 GID:=`id -g`
 ITERATION=yelp1
 
-.PHONY: test tests coverage clean
+# Determine environment (YELP or OSS)
+# Set SCL_ENV to 'YELP' if FQDN ends in '.yelpcorp.com'
+# Otherwise, set SCL_ENV to 'OSS'
+ifneq ($(findstring .yelpcorp.com,$(shell hostname -f)),)
+	SCL_ENV ?= YELP
+else
+	SCL_ENV ?= OSS
+endif
+
+.PHONY: test tests-yelp tests-oss coverage clean venv venv-yelp venv-oss
 
 
+# Main test target dispatches to environment-specific test target
 test:
-	tox
+ifeq ($(SCL_ENV),YELP)
+	$(MAKE) tests-yelp
+else
+	$(MAKE) tests-oss
+endif
 
-tests: test
+tests-yelp: venv-yelp
+	tox -e py3-yelp # Assumes py3-yelp will be the tox env for yelp
+
+tests-oss: venv-oss
+	tox -e py3 # Assumes py3 will be the default/OSS tox env
+
+tests: test # Alias for backward compatibility or general use
 coverage: test
 
 itest_%: package_%
@@ -51,8 +71,19 @@ package_%:
 		'
 	docker run -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp chown -R $(UID):$(GID) /work
 
-venv: requirements.txt setup.py tox.ini
-	tox -e venv
+# Main venv target dispatches to environment-specific target
+venv:
+ifeq ($(SCL_ENV),YELP)
+	$(MAKE) venv-yelp
+else
+	$(MAKE) venv-oss
+endif
+
+venv-yelp: requirements-yelp.txt requirements-oss.txt setup.py tox.ini
+	tox -e venv-yelp # This tox env should install .[yelp]
+
+venv-oss: requirements-oss.txt setup.py tox.ini
+	tox -e venv-oss # This tox env should install normally
 
 clean:
 	rm -rf .cache

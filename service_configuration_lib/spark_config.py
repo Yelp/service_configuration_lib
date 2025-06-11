@@ -24,7 +24,12 @@ from service_configuration_lib import utils
 from service_configuration_lib.text_colors import TextColors
 from service_configuration_lib.utils import EPHEMERAL_PORT_END
 from service_configuration_lib.utils import EPHEMERAL_PORT_START
-from service_configuration_lib.utils import get_clog_handler
+
+# Only works inside yelpy environments
+try:
+    import clog
+except ImportError:
+    clog = None
 
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
@@ -441,15 +446,12 @@ class SparkConfBuilder:
         try:
             (
                 self.spark_srv_conf, self.spark_constants, self.default_spark_srv_conf,
-                self.mandatory_default_spark_srv_conf, self.spark_costs, _,
+                self.mandatory_default_spark_srv_conf, self.spark_costs,
             ) = utils.load_spark_srv_conf()
         except Exception as e:
             log.error(f'Failed to load Spark srv configs: {e}')
             # should fail because Spark config calculation depends on values in srv-configs
             raise e
-
-        # Get a MonkHandler instance for JIRA validation warnings.
-        self.jira_monk_handler_ref = get_clog_handler(client_id='service_configuration_lib.spark_config')
 
     def _append_spark_prometheus_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
         spark_opts['spark.ui.prometheus.enabled'] = 'true'
@@ -1020,7 +1022,6 @@ class SparkConfBuilder:
             user: The user running the job
             jira_ticket: The Jira ticket provided by the user
         """
-        # Get the jira ticket validation setting
         flag_enabled = self.mandatory_default_spark_srv_conf.get('spark.yelp.jira_ticket.enabled', 'false')
         valid_ticket = self._get_valid_jira_ticket(jira_ticket)
 
@@ -1051,21 +1052,26 @@ class SparkConfBuilder:
                     'For more information: http://y/spark-jira-ticket-param '
                     'If you have questions, please reach out to #spark on Slack. '
                 )
-                if self.jira_monk_handler_ref:
-                    log_payload = {
-                        'timestamp': int(time.time()),
-                        'scribe_log': self.jira_monk_handler_ref.stream,
-                        'event': 'jira_ticket_validation_warning',
-                        'level': 'WARNING',
-                        'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
-                        'user': user,
-                        'jira_ticket_provided': jira_ticket,
-                    }
-                    self.jira_monk_handler_ref.logger.log_line(
-                        self.jira_monk_handler_ref.stream, json.dumps(log_payload),
-                    )
+                if clog:
+                    try:
+                        clog.config.configure(
+                            scribe_host='169.254.255.254',  # Standard Scribe host
+                            scribe_port=1463,             # Standard Scribe port
+                            monk_disable=False,           # Ensure Monk (for clog) is enabled
+                            scribe_disable=False,         # Ensure Scribe is enabled
+                        )
+                        log_payload = {
+                            'timestamp': int(time.time()),
+                            'event': 'jira_ticket_validation_warning',
+                            'level': 'WARNING',
+                            'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
+                            'user': user,
+                            'jira_ticket_provided': jira_ticket,
+                        }
+                        clog.log_line('spark_jira_ticket', json.dumps(log_payload))
+                    except Exception as e:
+                        log.warning(f'{warning_message} Clog operation failed with: {e}')
                 else:
-                    # Fallback to default logger if clog handler setup failed or ref is missing/invalid
                     log.warning(warning_message)
         return valid_ticket
 
