@@ -76,7 +76,6 @@ K8S_BASE_VOLUMES: List[Dict[str, str]] = [
 ]
 
 SUPPORTED_CLUSTER_MANAGERS = ['kubernetes', 'local']
-DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 TICKET_NOT_REQUIRED_USERS = {
     'batch',  # non-human spark-run from batch boxes
     'TRON',  # tronjobs that run commands like paasta mark-for-deployment
