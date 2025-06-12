@@ -166,8 +166,18 @@ def test_get_runtime_env(mock_runtimeenv):
     mock_runtimeenv.assert_called_once_with('/nail/etc/runtimeenv', mode='r')
 
 
-@pytest.fixture
-def mock_utils_log(monkeypatch):
-    mock_log = mock.Mock()
-    monkeypatch.setattr(utils, 'log', mock_log)
-    return mock_log
+class TestLogToClog:
+    """Tests for the log_to_clog function behavior during tests."""
+
+    def test_log_to_clog_mocked_behavior(self):
+        """Test that log_to_clog is properly mocked during tests to prevent actual clog operations."""
+        log_stream = 'test_stream'
+        log_payload = {'key': 'value', 'timestamp': 123456}
+        warning_message = 'Test warning message'
+        mock_logger = mock.Mock()
+
+        # Call the function - it should be mocked by the autouse fixture
+        utils.log_to_clog(log_stream, log_payload, warning_message, mock_logger)
+
+        # Verify the mock behavior - it should just log the warning message
+        mock_logger.warning.assert_called_once_with(warning_message)

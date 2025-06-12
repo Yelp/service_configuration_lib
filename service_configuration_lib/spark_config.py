@@ -1009,6 +1009,9 @@ class SparkConfBuilder:
         cluster_manager: str,
         user: Optional[str],
         jira_ticket: Optional[str],
+        paasta_cluster: str,
+        paasta_service: str,
+        paasta_instance: str,
     ) -> Optional[str]:
         """
         This method checks if Jira ticket validation is enabled, if the user needs
@@ -1042,6 +1045,8 @@ class SparkConfBuilder:
                     'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
                     'For more information: http://y/spark-jira-ticket-param \n'
                     'If you have questions, please reach out to #spark on Slack.\n'
+                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
+                    f'paasta_instance={paasta_instance}'
                 )
                 raise RuntimeError(error_msg)
             else:
@@ -1051,28 +1056,21 @@ class SparkConfBuilder:
                     'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
                     'For more information: http://y/spark-jira-ticket-param '
                     'If you have questions, please reach out to #spark on Slack. '
+                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
+                    f'paasta_instance={paasta_instance}'
                 )
-                if clog:
-                    try:
-                        clog.config.configure(
-                            scribe_host='169.254.255.254',  # Standard Scribe host
-                            scribe_port='1463',             # Standard Scribe port
-                            monk_disable=False,           # Ensure Monk (for clog) is enabled
-                            scribe_disable=False,         # Ensure Scribe is enabled
-                        )
-                        log_payload = {
-                            'timestamp': int(time.time()),
-                            'event': 'jira_ticket_validation_warning',
-                            'level': 'WARNING',
-                            'reason': 'Ticket missing or invalid. See http://y/spark-jira-ticket-param',
-                            'user': user,
-                            'jira_ticket_provided': jira_ticket,
-                        }
-                        clog.log_line('spark_jira_ticket', json.dumps(log_payload))
-                    except Exception as e:
-                        log.warning(f'{warning_message} Clog operation failed with: {e}')
-                else:
-                    log.warning(warning_message)
+                log_payload = {
+                    'timestamp': int(time.time()),
+                    'event': 'jira_ticket_validation_warning',
+                    'level': 'WARNING',
+                    'reason': 'Ticket missing or invalid',
+                    'user': user,
+                    'jira_ticket_provided': jira_ticket,
+                    'paasta_cluster': paasta_cluster,
+                    'paasta_service': paasta_service,
+                    'paasta_instance': paasta_instance,
+                }
+                utils.log_to_clog('spark_jira_ticket', log_payload, warning_message, log)
         return valid_ticket
 
     def get_spark_conf(
@@ -1139,7 +1137,9 @@ class SparkConfBuilder:
         user = user or os.environ.get('USER', None)
 
         # Handle Jira ticket validation if enabled
-        validated_jira_ticket = self._handle_jira_ticket_validation(cluster_manager, user, jira_ticket)
+        validated_jira_ticket = self._handle_jira_ticket_validation(
+            cluster_manager, user, jira_ticket, paasta_cluster, paasta_service, paasta_instance,
+        )
 
         app_base_name = (
             user_spark_opts.get('spark.app.name') or

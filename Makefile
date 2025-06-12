@@ -14,46 +14,15 @@
 UID:=`id -u`
 GID:=`id -g`
 ITERATION=yelp1
-VENV_DIR=venv
-VENV_BIN=$(VENV_DIR)/bin
 
-# Determine environment (YELP or OSS)
-# Set SCL_ENV to 'YELP' if FQDN ends in '.yelpcorp.com'
-# Otherwise, set SCL_ENV to 'OSS'
-ifneq ($(findstring .yelpcorp.com,$(shell hostname -f)),)
-	SCL_ENV ?= YELP
-else
-	SCL_ENV ?= OSS
-endif
-
-.PHONY: test tests-yelp tests-oss coverage clean venv
+.PHONY: test tests coverage clean
 
 
-# Main test target dispatches to environment-specific test target
 test:
-ifeq ($(SCL_ENV),YELP)
-	$(MAKE) tests-yelp
-else
-	$(MAKE) tests-oss
-endif
+	tox
 
-tests-yelp: venv
-	. $(VENV_BIN)/activate && $(VENV_BIN)/tox -e tests-yelp
-
-tests-oss: venv
-	. $(VENV_BIN)/activate && $(VENV_BIN)/tox -e tests-oss
-
-tests: test # Alias for backward compatibility or general use
+tests: test
 coverage: test
-
-# Main venv target, creates venv with tox
-$(VENV_BIN)/activate: setup.py tox.ini requirements-dev.txt
-	test -d $(VENV_DIR) || virtualenv -p python3.8 $(VENV_DIR)
-	$(VENV_BIN)/pip install -U pip
-	$(VENV_BIN)/pip install -U tox
-	touch $(VENV_BIN)/activate
-
-venv: $(VENV_BIN)/activate
 
 itest_%: package_%
 	docker run -h fake.docker.hostname -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp /bin/bash -c "/work/tests/ubuntu.sh"
@@ -82,12 +51,15 @@ package_%:
 		'
 	docker run -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp chown -R $(UID):$(GID) /work
 
+venv: requirements.txt setup.py tox.ini
+	tox -e venv
+
 clean:
 	rm -rf .cache
 	rm -rf dist/
 	rm -rf build/
 	rm -rf .tox
 	rm -rf service_configuration_lib.egg-info/
-	rm -rf $(VENV_DIR)
+	rm -rf venv
 	find . -name '*.pyc' -delete
 	find . -name '__pycache__' -delete
