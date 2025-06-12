@@ -3,6 +3,7 @@ import contextlib
 import errno
 import hashlib
 import logging
+import os
 import random
 import string
 import uuid
@@ -45,8 +46,10 @@ def load_spark_srv_conf(preset_values=None) -> Tuple[
 ]:
     if preset_values is None:
         preset_values = dict()
+
+    config_path = os.environ.get('SPARK_RUN_CONFIG_PATH', DEFAULT_SPARK_RUN_CONFIG)
     try:
-        with open(DEFAULT_SPARK_RUN_CONFIG, 'r') as fp:
+        with open(config_path, 'r') as fp:
             loaded_values = yaml.safe_load(fp.read())
             spark_srv_conf = {**preset_values, **loaded_values}
             spark_constants = spark_srv_conf['spark_constants']
@@ -58,7 +61,7 @@ def load_spark_srv_conf(preset_values=None) -> Tuple[
                 mandatory_default_spark_srv_conf, spark_costs,
             )
     except Exception as e:
-        log.warning(f'Failed to load {DEFAULT_SPARK_RUN_CONFIG}: {e}')
+        log.warning(f'Failed to load {config_path}: {e}')
         raise e
 
 
