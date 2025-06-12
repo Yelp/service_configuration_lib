@@ -14,6 +14,8 @@
 UID:=`id -u`
 GID:=`id -g`
 ITERATION=yelp1
+VENV_DIR=venv
+VENV_BIN=$(VENV_DIR)/bin
 
 # Determine environment (YELP or OSS)
 # Set SCL_ENV to 'YELP' if FQDN ends in '.yelpcorp.com'
@@ -24,7 +26,7 @@ else
 	SCL_ENV ?= OSS
 endif
 
-.PHONY: test tests-yelp tests-oss coverage clean venv venv-yelp venv-oss
+.PHONY: test tests-yelp tests-oss coverage clean venv
 
 
 # Main test target dispatches to environment-specific test target
@@ -35,14 +37,23 @@ else
 	$(MAKE) tests-oss
 endif
 
-tests-yelp: venv-yelp
-	tox -e py3-yelp # Assumes py3-yelp will be the tox env for yelp
+tests-yelp: venv
+	. $(VENV_BIN)/activate && $(VENV_BIN)/tox -e tests-yelp
 
-tests-oss: venv-oss
-	tox -e py3 # Assumes py3 will be the default/OSS tox env
+tests-oss: venv
+	. $(VENV_BIN)/activate && $(VENV_BIN)/tox -e tests-oss
 
 tests: test # Alias for backward compatibility or general use
 coverage: test
+
+# Main venv target, creates venv with tox
+$(VENV_BIN)/activate: setup.py tox.ini requirements-dev.txt
+	test -d $(VENV_DIR) || virtualenv -p python3.8 $(VENV_DIR)
+	$(VENV_BIN)/pip install -U pip
+	$(VENV_BIN)/pip install -U tox
+	touch $(VENV_BIN)/activate
+
+venv: $(VENV_BIN)/activate
 
 itest_%: package_%
 	docker run -h fake.docker.hostname -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp /bin/bash -c "/work/tests/ubuntu.sh"
@@ -71,26 +82,12 @@ package_%:
 		'
 	docker run -v $(CURDIR):/work:rw docker-dev.yelpcorp.com/$*_yelp chown -R $(UID):$(GID) /work
 
-# Main venv target dispatches to environment-specific target
-venv:
-ifeq ($(SCL_ENV),YELP)
-	$(MAKE) venv-yelp
-else
-	$(MAKE) venv-oss
-endif
-
-venv-yelp: requirements-yelp.txt requirements-oss.txt setup.py tox.ini
-	tox -e venv-yelp # This tox env should install .[yelp]
-
-venv-oss: requirements-oss.txt setup.py tox.ini
-	tox -e venv-oss # This tox env should install normally
-
 clean:
 	rm -rf .cache
 	rm -rf dist/
 	rm -rf build/
 	rm -rf .tox
 	rm -rf service_configuration_lib.egg-info/
-	rm -rf venv
+	rm -rf $(VENV_DIR)
 	find . -name '*.pyc' -delete
 	find . -name '__pycache__' -delete

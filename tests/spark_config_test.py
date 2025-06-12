@@ -1878,6 +1878,7 @@ class TestJiraTicketFunctionality:
         assert 'ticket "None" is missing or invalid for user "regular_user"' in str(excinfo.value)
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    @mock.patch('service_configuration_lib.spark_config.clog', None)
     def test_get_spark_conf_with_jira_validation_disabled(
         self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_time,
     ):
@@ -1963,6 +1964,7 @@ class TestJiraTicketFunctionality:
             mock_log.debug.assert_called_with('Jira ticket check not required for this job configuration.')
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    @mock.patch('service_configuration_lib.spark_config.clog', None)
     def test_get_spark_conf_jira_disabled_invalid_ticket(
         self, mock_spark_srv_conf_file_with_jira_disabled, mock_log, mock_time,
     ):

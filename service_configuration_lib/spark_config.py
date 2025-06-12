@@ -1056,7 +1056,7 @@ class SparkConfBuilder:
                     try:
                         clog.config.configure(
                             scribe_host='169.254.255.254',  # Standard Scribe host
-                            scribe_port=1463,             # Standard Scribe port
+                            scribe_port='1463',             # Standard Scribe port
                             monk_disable=False,           # Ensure Monk (for clog) is enabled
                             scribe_disable=False,         # Ensure Scribe is enabled
                         )
