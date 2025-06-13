@@ -25,12 +25,6 @@ from service_configuration_lib.text_colors import TextColors
 from service_configuration_lib.utils import EPHEMERAL_PORT_END
 from service_configuration_lib.utils import EPHEMERAL_PORT_START
 
-# Only works inside yelpy environments
-try:
-    import clog
-except ImportError:
-    clog = None
-
 AWS_CREDENTIALS_DIR = '/etc/boto_cfg/'
 AWS_ENV_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.EnvironmentVariableCredentialsProvider'
 AWS_DEFAULT_CREDENTIALS_PROVIDER = 'com.amazonaws.auth.DefaultAWSCredentialsProviderChain'
