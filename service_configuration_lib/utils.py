@@ -2,6 +2,7 @@ import base64
 import contextlib
 import errno
 import hashlib
+import json
 import logging
 import os
 import random
@@ -19,6 +20,12 @@ from typing import Tuple
 import yaml
 from typing_extensions import Literal
 
+# Only works inside yelpy environments
+try:
+    import clog
+except ImportError:
+    clog = None
+
 DEFAULT_SPARK_RUN_CONFIG = '/nail/srv/configs/spark.yaml'
 POD_TEMPLATE_PATH = '/nail/tmp/spark-pt-{file_uuid}.yaml'
 SPARK_EXECUTOR_POD_TEMPLATE = '/nail/srv/configs/spark_executor_pod_template.yaml'
@@ -33,16 +40,16 @@ SPARK_DRIVER_MEM_DEFAULT_MB = 2048
 SPARK_DRIVER_MEM_OVERHEAD_FACTOR_DEFAULT = 0.1
 
 
-log = logging.Logger(__name__)
+log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
 def load_spark_srv_conf(preset_values=None) -> Tuple[
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Any],
-    Dict[str, Dict[str, float]],
+    Dict[str, Any],  # spark_srv_conf
+    Dict[str, Any],  # spark_constants
+    Dict[str, Any],  # default_spark_srv_conf
+    Dict[str, Any],  # mandatory_default_spark_srv_conf
+    Dict[str, Dict[str, float]],  # spark_costs
 ]:
     if preset_values is None:
         preset_values = dict()
@@ -220,3 +227,34 @@ def get_spark_driver_memory_overhead_mb(spark_conf: Dict[str, str]) -> float:
         )
         driver_mem_overhead_mb = driver_mem_mb * driver_mem_overhead_factor
     return round(driver_mem_overhead_mb, 5)
+
+
+def log_to_clog(log_stream: str, log_payload: dict, warning_message: str, log_instance=None):
+    """
+    Log a message to clog if available, otherwise log a warning.
+
+    Args:
+        log_stream: The clog stream name to log to
+        log_payload: Dictionary containing the log payload data
+        warning_message: Warning message to log if clog fails or is unavailable
+        log_instance: Logger instance to use for warnings (optional)
+    """
+    if clog:
+        try:
+            clog.config.configure(
+                scribe_host='169.254.255.254',
+                scribe_port='1463',
+                monk_disable=False,
+                scribe_disable=False,
+            )
+            clog.log_line(log_stream, json.dumps(log_payload))
+        except Exception as e:
+            if log_instance:
+                log_instance.warning(f'{warning_message} Clog operation failed with: {e}')
+            else:
+                log.warning(f'{warning_message} Clog operation failed with: {e}')
+    else:
+        if log_instance:
+            log_instance.warning(warning_message)
+        else:
+            log.warning(warning_message)

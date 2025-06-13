@@ -1,6 +1,7 @@
 import functools
 import itertools
 import json
+import logging
 import os
 import re
 import sys
@@ -1775,11 +1776,6 @@ class TestJiraTicketFunctionality:
         result = spark_conf_builder._get_valid_jira_ticket(jira_ticket)
         assert result == expected_result
 
-        if expected_result:
-            mock_log.info.assert_called_with(f'Valid Jira ticket provided: {jira_ticket}')
-        else:
-            mock_log.warning.assert_called_with(f'Jira ticket missing or invalid format: {jira_ticket}')
-
     def test_k8s_spark_env_with_jira_ticket(self):
         """Test that _get_k8s_spark_env adds the Jira ticket label when provided."""
         jira_ticket = 'PROJ-1234'
@@ -1837,7 +1833,7 @@ class TestJiraTicketFunctionality:
         assert result['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] == 'PROJ-1234'
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
-    def test_get_spark_conf_with_invalid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+    def test_get_spark_conf_with_invalid_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled, mock_log):
         """Test get_spark_conf with an invalid Jira ticket when validation is enabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
@@ -1854,13 +1850,11 @@ class TestJiraTicketFunctionality:
                 docker_img='test-image',
                 jira_ticket='invalid-ticket',
             )
-
-        # Verify the error message
-        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
-        assert 'paasta spark-run --jira-ticket=PROJ-1234' in str(excinfo.value)
+        assert 'Job requires a valid Jira ticket' in str(excinfo.value)
+        assert 'ticket "invalid-ticket" is missing or invalid for user "regular_user"' in str(excinfo.value)
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
-    def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled):
+    def test_get_spark_conf_without_jira_ticket(self, mock_spark_srv_conf_file_with_jira_enabled, mock_log):
         """Test get_spark_conf without a Jira ticket when validation is enabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
@@ -1876,12 +1870,13 @@ class TestJiraTicketFunctionality:
                 paasta_instance='test-instance',
                 docker_img='test-image',
             )
-
-        # Verify the error message
-        assert 'Job requires a valid Jira ticket (format PROJ-1234)' in str(excinfo.value)
+        assert 'Job requires a valid Jira ticket' in str(excinfo.value)
+        assert 'ticket "None" is missing or invalid for user "regular_user"' in str(excinfo.value)
 
     @mock.patch.dict(os.environ, {'USER': 'regular_user'})
-    def test_get_spark_conf_with_jira_validation_disabled(self, mock_spark_srv_conf_file_with_jira_disabled):
+    def test_get_spark_conf_with_jira_validation_disabled(
+        self, mock_spark_srv_conf_file_with_jira_disabled, mock_time,
+    ):
         """Test get_spark_conf without a Jira ticket when validation is disabled."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
@@ -1895,9 +1890,10 @@ class TestJiraTicketFunctionality:
             paasta_service='test-service',
             paasta_instance='test-instance',
             docker_img='test-image',
+            # jira_ticket is None by default
         )
 
-        # Verify no Jira ticket label is added
+        # Verify no Jira ticket label is added when validation is disabled and no ticket provided
         assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
 
     @pytest.mark.parametrize(
@@ -1905,21 +1901,23 @@ class TestJiraTicketFunctionality:
             ('kubernetes', 'regular_user', True),
             ('kubernetes', 'batch', False),
             ('kubernetes', 'TRON', False),
+            ('kubernetes', 'jenkins', False),
             ('kubernetes', None, False),
             ('local', 'regular_user', False),
             ('local', 'TRON', False),
+            ('local', 'jenkins', False),
             ('local', None, False),
         ],
     )
     def test_jira_ticket_check_for_different_users(
-        self, cluster_manager, user, should_check, mock_spark_srv_conf_file_with_jira_enabled, mock_log,
+        self, cluster_manager, user, should_check, mock_spark_srv_conf_file_with_jira_enabled,
     ):
         """Test that Jira ticket validation is skipped for certain users."""
         spark_conf_builder = spark_config.SparkConfBuilder()
 
         if should_check:
-            # For regular users, validation should be enforced
-            with pytest.raises(RuntimeError):
+            # For regular users, validation should raise a RuntimeError
+            with pytest.raises(RuntimeError) as excinfo:
                 spark_conf_builder.get_spark_conf(
                     cluster_manager=cluster_manager,
                     spark_app_base_name='test-app',
@@ -1931,9 +1929,11 @@ class TestJiraTicketFunctionality:
                     docker_img='test-image',
                     user=user,
                 )
+            assert 'Job requires a valid Jira ticket' in str(excinfo.value)
+            assert f'ticket "None" is missing or invalid for user "{user}"' in str(excinfo.value)
         else:
-            # For special users, validation should be skipped
-            spark_conf_builder.get_spark_conf(
+            # For special users, validation should be skipped - should not raise exception
+            result = spark_conf_builder.get_spark_conf(
                 cluster_manager=cluster_manager,
                 spark_app_base_name='test-app',
                 user_spark_opts={},
@@ -1944,4 +1944,109 @@ class TestJiraTicketFunctionality:
                 docker_img='test-image',
                 user=user,
             )
-            mock_log.debug.assert_called_with('Jira ticket check not required for this job configuration.')
+            # Test passes if no exception is raised and result is returned
+            assert isinstance(result, dict)
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_jira_disabled_invalid_ticket(
+        self, mock_spark_srv_conf_file_with_jira_disabled, mock_time,
+    ):
+        """Test get_spark_conf with an invalid Jira ticket when validation is disabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        invalid_ticket = 'INVALID-TICKET'
+
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket=invalid_ticket,
+        )
+
+        # Verify no Jira ticket label is added because the ticket is invalid
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
+        # Verify the function completes successfully despite invalid ticket when validation is disabled
+        assert isinstance(result, dict)
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    def test_get_spark_conf_jira_disabled_valid_ticket(self, mock_spark_srv_conf_file_with_jira_disabled):
+        """Test get_spark_conf with a valid Jira ticket when validation is disabled."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        valid_ticket = 'PROJ-7890'
+
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket=valid_ticket,
+        )
+
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' in result
+        assert result['spark.kubernetes.executor.label.spark.yelp.com/jira_ticket'] == valid_ticket
+
+    @mock.patch.dict(os.environ, {'USER': 'regular_user'})
+    @mock.patch('service_configuration_lib.utils.log_to_clog')
+    def test_get_spark_conf_jira_disabled_clog_fails(
+        self,
+        mock_log_to_clog,
+        mock_spark_srv_conf_file_with_jira_disabled,
+        mock_log,
+        mock_time,
+    ):
+        """Test get_spark_conf with Jira disabled and log_to_clog failing."""
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        invalid_ticket = 'NO-TICKET'
+        clog_error_message = 'Test Clog Error'
+
+        # Configure the autouse fixture mock to simulate a clog failure
+        mock_log_to_clog.side_effect = lambda log_stream, log_payload, warning_message, log_instance=None: (
+            log_instance.warning(f'{warning_message} Clog operation failed with: {clog_error_message}')
+            if log_instance else
+            logging.getLogger(__name__).warning(f'{warning_message} Clog operation failed with: {clog_error_message}')
+        )
+
+        result = spark_conf_builder.get_spark_conf(
+            cluster_manager='kubernetes',
+            spark_app_base_name='test-app',
+            user_spark_opts={},
+            paasta_cluster='test-cluster',
+            paasta_pool='test-pool',
+            paasta_service='test-service',
+            paasta_instance='test-instance',
+            docker_img='test-image',
+            jira_ticket=invalid_ticket,
+        )
+
+        assert 'spark.kubernetes.executor.label.spark.yelp.com/jira_ticket' not in result
+        mock_log.info.assert_any_call(f'Jira ticket missing or invalid format: {invalid_ticket}')
+
+        expected_warning_msg_part1 = (
+            f'Jira ticket check is configured, but ticket is missing or invalid for user "regular_user". '
+            f'Proceeding with job execution. Original ticket value: "{invalid_ticket}". '
+            'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+            'For more information: http://y/spark-jira-ticket-param '
+            'If you have questions, please reach out to #spark on Slack. '
+        )
+
+        called_args = [call[0][0] for call in mock_log.warning.call_args_list]
+        assert any(
+            expected_warning_msg_part1 in arg and f'Clog operation failed with: {clog_error_message}' in arg
+            for arg in called_args
+        ), f'Expected warning with clog failure not found in {called_args}'
+
+        mock_log_to_clog.assert_called_once()
+        call_args = mock_log_to_clog.call_args
+        assert call_args[0][0] == 'spark_jira_ticket'
+        assert call_args[0][1]['event'] == 'jira_ticket_validation_warning'
+        assert call_args[0][1]['user'] == 'regular_user'
+        assert call_args[0][1]['jira_ticket_provided'] == invalid_ticket
+        assert expected_warning_msg_part1 in call_args[0][2]

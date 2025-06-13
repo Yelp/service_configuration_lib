@@ -164,3 +164,20 @@ def test_get_runtime_env(mock_runtimeenv):
     result = utils.get_runtime_env()
     assert result == MOCK_ENV_NAME
     mock_runtimeenv.assert_called_once_with('/nail/etc/runtimeenv', mode='r')
+
+
+class TestLogToClog:
+    """Tests for the log_to_clog function behavior during tests."""
+
+    def test_log_to_clog_mocked_behavior(self):
+        """Test that log_to_clog is properly mocked during tests to prevent actual clog operations."""
+        log_stream = 'test_stream'
+        log_payload = {'key': 'value', 'timestamp': 123456}
+        warning_message = 'Test warning message'
+        mock_logger = mock.Mock()
+
+        # Call the function - it should be mocked by the autouse fixture
+        utils.log_to_clog(log_stream, log_payload, warning_message, mock_logger)
+
+        # Verify the mock behavior - it should just log the warning message
+        mock_logger.warning.assert_called_once_with(warning_message)

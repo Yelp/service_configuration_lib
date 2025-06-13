@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -80,3 +81,20 @@ def yaml_configs_file_watcher(
         configs_suffixes=['.yaml'],
         configs_folder=mock_soa_dir,
     )
+
+
+@pytest.fixture(autouse=True)
+def mock_clog_logging(monkeypatch):
+    """
+    Autouse fixture to prevent clog logging during tests.
+    This mocks the log_to_clog function to avoid actual clog operations.
+    """
+    def mock_log_to_clog(log_stream, log_payload, warning_message, log_instance=None):
+        # During tests, just log the warning message without trying to use clog
+        if log_instance:
+            log_instance.warning(warning_message)
+        else:
+            logger = logging.getLogger(__name__)
+            logger.warning(warning_message)
+
+    monkeypatch.setattr('service_configuration_lib.utils.log_to_clog', mock_log_to_clog)

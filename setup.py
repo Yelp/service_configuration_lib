@@ -43,4 +43,7 @@ setup(
         'scripts/services_needing_puppet_help',
         'scripts/services_that_run_here',
     ],
+    extras_require={
+        'yelp': ['yelp-clog>=7'],
+    },
 )
