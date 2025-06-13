@@ -1030,28 +1030,6 @@ class SparkConfBuilder:
             return valid_ticket
 
         if valid_ticket is None:
-            if flag_enabled == 'true':
-                error_msg = (
-                    f'Job requires a valid Jira ticket (format PROJ-1234).\n'
-                    f'Jira ticket check is enabled, but ticket "{jira_ticket}" is '
-                    f'missing or invalid for user "{user}".\n'
-                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
-                    'For more information: http://y/spark-jira-ticket-param \n'
-                    'If you have questions, please reach out to #spark on Slack.\n'
-                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
-                    f'paasta_instance={paasta_instance}'
-                )
-                raise RuntimeError(error_msg)
-            else:
-                warning_message = (
-                    f'Jira ticket check is configured, but ticket is missing or invalid for user "{user}". '
-                    f'Proceeding with job execution. Original ticket value: "{jira_ticket}". '
-                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
-                    'For more information: http://y/spark-jira-ticket-param '
-                    'If you have questions, please reach out to #spark on Slack. '
-                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
-                    f'paasta_instance={paasta_instance}'
-                )
             log_payload = {
                 'timestamp': int(time.time()),
                 'event': 'jira_ticket_validation_warning',
@@ -1063,7 +1041,30 @@ class SparkConfBuilder:
                 'paasta_service': paasta_service,
                 'paasta_instance': paasta_instance,
             }
-            utils.log_to_clog('spark_jira_ticket', log_payload, warning_message, log)
+            if flag_enabled == 'true':
+                error_msg = (
+                    f'Job requires a valid Jira ticket (format PROJ-1234).\n'
+                    f'Jira ticket check is enabled, but ticket "{jira_ticket}" is '
+                    f'missing or invalid for user "{user}".\n'
+                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 \n'
+                    'For more information: http://y/spark-jira-ticket-param \n'
+                    'If you have questions, please reach out to #spark on Slack.\n'
+                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
+                    f'paasta_instance={paasta_instance}'
+                )
+                utils.log_to_clog('spark_jira_ticket', log_payload, error_msg, log)
+                raise RuntimeError(error_msg)
+            else:
+                warning_message = (
+                    f'Jira ticket check is configured, but ticket is missing or invalid for user "{user}". '
+                    f'Proceeding with job execution. Original ticket value: "{jira_ticket}". '
+                    'Please pass the parameter as: paasta spark-run --jira-ticket=PROJ-1234 '
+                    'For more information: http://y/spark-jira-ticket-param '
+                    'If you have questions, please reach out to #spark on Slack. '
+                    f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
+                    f'paasta_instance={paasta_instance}'
+                )
+                utils.log_to_clog('spark_jira_ticket', log_payload, warning_message, log)
         return valid_ticket
 
     def get_spark_conf(
