@@ -1052,18 +1052,18 @@ class SparkConfBuilder:
                     f'paasta_cluster={paasta_cluster}, paasta_service={paasta_service}\n'
                     f'paasta_instance={paasta_instance}'
                 )
-                log_payload = {
-                    'timestamp': int(time.time()),
-                    'event': 'jira_ticket_validation_warning',
-                    'level': 'WARNING',
-                    'reason': 'Ticket missing or invalid',
-                    'user': user,
-                    'jira_ticket_provided': jira_ticket,
-                    'paasta_cluster': paasta_cluster,
-                    'paasta_service': paasta_service,
-                    'paasta_instance': paasta_instance,
-                }
-                utils.log_to_clog('spark_jira_ticket', log_payload, warning_message, log)
+            log_payload = {
+                'timestamp': int(time.time()),
+                'event': 'jira_ticket_validation_warning',
+                'level': 'WARNING',
+                'reason': 'Ticket missing or invalid',
+                'user': user,
+                'jira_ticket_provided': jira_ticket,
+                'paasta_cluster': paasta_cluster,
+                'paasta_service': paasta_service,
+                'paasta_instance': paasta_instance,
+            }
+            utils.log_to_clog('spark_jira_ticket', log_payload, warning_message, log)
         return valid_ticket
 
     def get_spark_conf(
