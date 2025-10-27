@@ -725,6 +725,8 @@ class SparkConfBuilder:
         return user_spark_opts
 
     def _append_sql_partitions_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
+        executors_cores_product = int(spark_opts.get('spark.executor.instances')) * int(spark_opts.get('spark.executor.cores'))
+
         if 'spark.sql.shuffle.partitions' not in spark_opts:
             num_partitions = 3 * (
                 int(spark_opts.get('spark.cores.max', 0)) or
@@ -744,14 +746,35 @@ class SparkConfBuilder:
                 )
                 num_partitions = max(num_partitions, num_partitions_dra)
 
-            num_partitions = num_partitions or self.default_spark_srv_conf['spark.sql.shuffle.partitions']
+            num_partitions = self._calculate_sql_partitions_per_executor_instances(spark_opts, executors_cores_product, num_partitions) or self.default_spark_srv_conf['spark.sql.shuffle.partitions']
             _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
         else:
             num_partitions = int(spark_opts['spark.sql.shuffle.partitions'])
+            # Sophie: reset num_partitions if not a multiple of the calculation
         _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
         _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
         return spark_opts
+
+    def _calculate_sql_partitions_per_executor_instances(spark_opts: Dict[str, str], executors_cores_product: int, current_num_partitions: int) -> int:
+        
+        adjusted_num_partitions = 0
+
+        # Check if current partitions value is a multiple of executors*cores
+        if current_num_partitions % executors_cores_product == 0:
+            adjusted_num_partitions = current_num_partitions
+        else:
+            # Set partitions value to the next multiple of executors*cores
+            quotient = current_num_partitions / executors_cores_product
+            adjusted_num_partitions = math.ceil(quotient) * executors_cores_product
+
+        return adjusted_num_partitions
+
+        # Add or update spark.sql.shuffle.partitions config
+        #if 'spark.sql.shuffle.partitions' not in spark_opts:
+        #    spark_opts['spark.sql.shuffle.partitions'] = str(adjusted_num_partitions)
+        #elif spark_opts['spark.sql.shuffle.partitions'] != str(adjusted_num_partitions):
+        #    spark_opts['spark.sql.shuffle.partitions'] = str(adjusted_num_partitions)
 
     def _adjust_spark_requested_resources(
             self,
