@@ -749,8 +749,8 @@ class SparkConfBuilder:
             num_partitions = self._calculate_sql_partitions_per_executor_instances(spark_opts, executors_cores_product, num_partitions) or self.default_spark_srv_conf['spark.sql.shuffle.partitions']
             _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
         else:
-            num_partitions = int(spark_opts['spark.sql.shuffle.partitions'])
-            # Sophie: reset num_partitions if not a multiple of the calculation
+            num_partitions = str(self._calculate_sql_partitions_per_executor_instances(spark_opts, executors_cores_product, int(spark_opts['spark.sql.shuffle.partitions']))) 
+            spark_opts['spark.sql.shuffle.partitions'] = num_partitions
         _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
         _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
@@ -769,12 +769,6 @@ class SparkConfBuilder:
             adjusted_num_partitions = math.ceil(quotient) * executors_cores_product
 
         return adjusted_num_partitions
-
-        # Add or update spark.sql.shuffle.partitions config
-        #if 'spark.sql.shuffle.partitions' not in spark_opts:
-        #    spark_opts['spark.sql.shuffle.partitions'] = str(adjusted_num_partitions)
-        #elif spark_opts['spark.sql.shuffle.partitions'] != str(adjusted_num_partitions):
-        #    spark_opts['spark.sql.shuffle.partitions'] = str(adjusted_num_partitions)
 
     def _adjust_spark_requested_resources(
             self,
