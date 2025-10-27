@@ -746,29 +746,37 @@ class SparkConfBuilder:
                 )
                 num_partitions = max(num_partitions, num_partitions_dra)
 
-            num_partitions = self._calculate_sql_partitions_per_executor_instances(spark_opts, executors_cores_product, num_partitions) or self.default_spark_srv_conf['spark.sql.shuffle.partitions']
+            num_partitions = self._calculate_sql_partitions_per_executor_instances(executors_cores_product, num_partitions)
             _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
         else:
-            num_partitions = str(self._calculate_sql_partitions_per_executor_instances(spark_opts, executors_cores_product, int(spark_opts['spark.sql.shuffle.partitions']))) 
-            spark_opts['spark.sql.shuffle.partitions'] = num_partitions
+            num_partitions = self._calculate_sql_partitions_per_executor_instances(executors_cores_product, int(spark_opts['spark.sql.shuffle.partitions']))
+            spark_opts['spark.sql.shuffle.partitions'] = str(num_partitions)
         _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
         _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
         return spark_opts
 
-    def _calculate_sql_partitions_per_executor_instances(spark_opts: Dict[str, str], executors_cores_product: int, current_num_partitions: int) -> int:
-        
-        adjusted_num_partitions = 0
+    def _calculate_sql_partitions_per_executor_instances(self, executors_cores_product: int, current_num_partitions: int) -> int:
+
+        # Handle edge case where current_num_partitions is 0 or lower by using default value
+        if current_num_partitions < 1:
+            log.info('spark.sql.shuffle.partitions is set to 0 or lower, using default value instead')
+            current_num_partitions = self.default_spark_srv_conf['spark.sql.shuffle.partitions']
+
+        # Handle edge case where executors*cores is 0 or lower by returning current_num_partitions
+        if executors_cores_product < 1:
+            log.info(
+                'Executors * Cores product is less than 1, using current spark.sql.shuffle.partitions value instead',
+            )
+            return current_num_partitions
 
         # Check if current partitions value is a multiple of executors*cores
         if current_num_partitions % executors_cores_product == 0:
-            adjusted_num_partitions = current_num_partitions
+            return current_num_partitions
         else:
             # Set partitions value to the next multiple of executors*cores
             quotient = current_num_partitions / executors_cores_product
-            adjusted_num_partitions = math.ceil(quotient) * executors_cores_product
-
-        return adjusted_num_partitions
+            return math.ceil(quotient) * executors_cores_product
 
     def _adjust_spark_requested_resources(
             self,
