@@ -725,7 +725,10 @@ class SparkConfBuilder:
         return user_spark_opts
 
     def _append_sql_partitions_conf(self, spark_opts: Dict[str, str]) -> Dict[str, str]:
-        executors_cores_product = int(spark_opts.get('spark.executor.instances')) * int(spark_opts.get('spark.executor.cores'))
+        executors_cores_product = (
+            int(spark_opts.get('spark.executor.instances', 0)) *
+            int(spark_opts.get('spark.executor.cores', self.default_spark_srv_conf['spark.executor.cores']))
+        )
 
         if 'spark.sql.shuffle.partitions' not in spark_opts:
             num_partitions = 3 * (
@@ -742,21 +745,30 @@ class SparkConfBuilder:
             ):
                 num_partitions_dra = 3 * (
                     int(spark_opts.get('spark.dynamicAllocation.maxExecutors', 0)) *
-                    int(spark_opts.get('spark.executor.cores', self.default_spark_srv_conf['spark.executor.cores']))
+                    int(spark_opts.get(
+                        'spark.executor.cores',
+                        self.default_spark_srv_conf['spark.executor.cores'],
+                    ))
                 )
                 num_partitions = max(num_partitions, num_partitions_dra)
 
-            num_partitions = self._calculate_sql_partitions_per_executor_instances(executors_cores_product, num_partitions)
+            num_partitions = self._calculate_sql_partitions_per_executor_instances(
+                executors_cores_product, num_partitions,
+            )
             _append_spark_config(spark_opts, 'spark.sql.shuffle.partitions', str(num_partitions))
         else:
-            num_partitions = self._calculate_sql_partitions_per_executor_instances(executors_cores_product, int(spark_opts['spark.sql.shuffle.partitions']))
+            num_partitions = self._calculate_sql_partitions_per_executor_instances(
+                executors_cores_product, int(spark_opts['spark.sql.shuffle.partitions']),
+            )
             spark_opts['spark.sql.shuffle.partitions'] = str(num_partitions)
         _append_spark_config(spark_opts, 'spark.sql.files.minPartitionNum', str(num_partitions))
         _append_spark_config(spark_opts, 'spark.default.parallelism', str(num_partitions))
 
         return spark_opts
 
-    def _calculate_sql_partitions_per_executor_instances(self, executors_cores_product: int, current_num_partitions: int) -> int:
+    def _calculate_sql_partitions_per_executor_instances(
+        self, executors_cores_product: int, current_num_partitions: int,
+    ) -> int:
 
         # Handle edge case where current_num_partitions is 0 or lower by using default value
         if current_num_partitions < 1:
