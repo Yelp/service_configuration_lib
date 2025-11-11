@@ -979,7 +979,7 @@ class TestGetSparkConf:
         ],
     )
     def test_append_sql_partitions_conf__uses_executor_default_values(
-            self, user_spark_opts, expected_output,
+            self, user_spark_opts, expected_output, mock_spark_srv_conf_file,
     ):
 
         spark_conf_builder = spark_config.SparkConfBuilder()
@@ -1569,6 +1569,139 @@ class TestGetSparkConf:
         assert int(result_dict['spark.executor.instances']) == 1
         assert int(result_dict['spark.task.cpus']) == 1
 
+    def test_calculate_sql_partitions_per_executor_instances__valid_partitions_are_returned(
+        self, mock_spark_srv_conf_file,
+    ):
+        executor_instances = 3
+        executor_cores = 10
+        product = executor_instances * executor_cores  # 30
+
+        # Current number of partitions is a valid multiple of executor core product
+        current_num_partitions = 4 * product  # 120
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
+        assert result == current_num_partitions
+
+        # Current number of partitions is 1
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 1)
+        assert result == product
+
+    def test_calculate_sql_partitions_per_executor_instances__invalid_partitions_are_iterated_to_next_multiple(
+            self, mock_spark_srv_conf_file,
+    ):
+        executor_instances = 4
+        executor_cores = 3
+        product = executor_instances * executor_cores  # 12
+
+        # Current number of partitions is not a valid multiple of executor core product
+        current_num_partitions = 50
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
+
+        # Expected partition is the next multiple of 12 greater than 50, which is 60
+        expected_partitions = ((current_num_partitions // product) + 1) * product
+        assert result == expected_partitions
+        assert result == 60
+
+    def test_calculate_sql_partitions_per_executor_instances__partitions_less_than_one_use_default(
+            self, mock_spark_srv_conf_file,
+    ):
+        executor_instances = 4
+        executor_cores = 2
+        product = executor_instances * executor_cores  # 8
+
+        # Default is 128, which is already a multiple of 8 (128 % 8 == 0)
+        default_partitions = BASE_SPARK_RUN_CONF['spark_constants']['defaults']['spark.sql.shuffle.partitions']
+        expected_partitions = (
+            default_partitions if default_partitions % product == 0
+            else math.ceil(default_partitions / product) * product
+        )
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # Number of partitions is 0
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 0)
+        assert result == expected_partitions
+
+        # Number of partitions is negative
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, -5)
+        assert result == expected_partitions
+
+    def test_calculate_sql_partitions_per_executor_instances__partitions_less_than_1_iterated_to_multiple_from_default(
+        self, mock_spark_srv_conf_file,
+    ):
+        executor_instances = 5
+        executor_cores = 3
+        product = executor_instances * executor_cores  # 15
+
+        # Default is 128, but 128 % 15 != 0
+        default_partitions = BASE_SPARK_RUN_CONF['spark_constants']['defaults']['spark.sql.shuffle.partitions']
+        expected_partitions = math.ceil(default_partitions / product) * product  # ceil(128/15) * 15 = 135
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # Number of partitions is 0
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 0)
+        assert result == expected_partitions
+        assert result % product == 0  # Verify it's a multiple of the product
+
+        # Number of partitions is negative
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, -10)
+        assert result == expected_partitions
+        assert result % product == 0  # Verify it's a multiple of the product
+
+    def test_calculate_sql_partitions_per_executor_instances__product_less_than_two_return_current_partitions(
+            self, mock_spark_srv_conf_file,
+    ):
+        current_num_partitions = 10
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # Product is 1
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(1, current_num_partitions)
+        assert result == current_num_partitions
+
+        # Product is 0
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(0, current_num_partitions)
+        assert result == current_num_partitions
+
+        # Product is negative
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(-3, current_num_partitions)
+        assert result == current_num_partitions
+
+    def test_calculate_sql_partitions_per_executor_instances__handles_large_numbers(self, mock_spark_srv_conf_file):
+        product = 1000
+        current_num_partitions = 999999
+
+        expected_partitions = ((current_num_partitions // product) + 1) * product
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
+        assert result == expected_partitions
+        assert result >= current_num_partitions
+        assert result % product == 0
+
+    def test_calculate_sql_partitions_per_executor_instances__boundary_conditions(self, mock_spark_srv_conf_file):
+        spark_conf_builder = spark_config.SparkConfBuilder()
+
+        # Product is 2 (minimum valid product) and current_num_partitions is 1
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(2, 1)
+        assert result == 2  # Should round up to next multiple
+
+        # Product > current_num_partitions
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(100, 50)
+        assert result == 100  # Should round up to the product itself
+
+        # Product is very small and current_num_partitions are exact multiples
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(2, 4)
+        assert result == 4  # Should remain unchanged since 4 % 2 == 0
+
+        # Test floating point precision doesn't cause issues
+        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(3, 10)
+        assert result == 12  # ceil(10/3) * 3 = 4 * 3 = 12
+
 
 @pytest.mark.parametrize(
     'memory_string,expected_output', [
@@ -2088,128 +2221,3 @@ class TestJiraTicketFunctionality:
         assert call_args[0][1]['user'] == 'regular_user'
         assert call_args[0][1]['jira_ticket_provided'] == invalid_ticket
         assert expected_warning_msg_part1 in call_args[0][2]
-
-    def test_calculate_sql_partitions_per_executor_instances__valid_partitions_are_returned(self):
-        executor_instances = 3
-        executor_cores = 10
-        product = executor_instances * executor_cores  # 30
-
-        # Current number of partitions is a valid multiple of executor core product
-        current_num_partitions = 4 * product  # 120
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
-        assert result == current_num_partitions
-
-        # Current number of partitions is 1
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 1)
-        assert result == product
-
-    def test_calculate_sql_partitions_per_executor_instances__invalid_partitions_are_iterated_to_next_multiple(self):
-        executor_instances = 4
-        executor_cores = 3
-        product = executor_instances * executor_cores  # 12
-
-        # Current number of partitions is not a valid multiple of executor core product
-        current_num_partitions = 50
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
-
-        # Expected partition is the next multiple of 12 greater than 50, which is 60
-        expected_partitions = ((current_num_partitions // product) + 1) * product
-        assert result == expected_partitions
-        assert result == 60
-
-    def test_calculate_sql_partitions_per_executor_instances__partitions_less_than_one_use_default(self):
-        executor_instances = 4
-        executor_cores = 2
-        product = executor_instances * executor_cores  # 8
-
-        # Default is 128, which is already a multiple of 8 (128 % 8 == 0)
-        default_partitions = BASE_SPARK_RUN_CONF['spark_constants']['defaults']['spark.sql.shuffle.partitions']
-        expected_partitions = (
-            default_partitions if default_partitions % product == 0
-            else math.ceil(default_partitions / product) * product
-        )
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-
-        # Number of partitions is 0
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 0)
-        assert result == expected_partitions
-
-        # Number of partitions is negative
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, -5)
-        assert result == expected_partitions
-
-    def test_calculate_sql_partitions_per_executor_instances__partitions_less_than_1_iterated_to_multiple_from_default(
-        self,
-    ):
-        executor_instances = 5
-        executor_cores = 3
-        product = executor_instances * executor_cores  # 15
-
-        # Default is 128, but 128 % 15 != 0
-        default_partitions = BASE_SPARK_RUN_CONF['spark_constants']['defaults']['spark.sql.shuffle.partitions']
-        expected_partitions = math.ceil(default_partitions / product) * product  # ceil(128/15) * 15 = 135
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-
-        # Number of partitions is 0
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, 0)
-        assert result == expected_partitions
-        assert result % product == 0  # Verify it's a multiple of the product
-
-        # Number of partitions is negative
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, -10)
-        assert result == expected_partitions
-        assert result % product == 0  # Verify it's a multiple of the product
-
-    def test_calculate_sql_partitions_per_executor_instances__product_less_than_two_return_current_partitions(self):
-        current_num_partitions = 10
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-
-        # Product is 1
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(1, current_num_partitions)
-        assert result == current_num_partitions
-
-        # Product is 0
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(0, current_num_partitions)
-        assert result == current_num_partitions
-
-        # Product is negative
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(-3, current_num_partitions)
-        assert result == current_num_partitions
-
-    def test_calculate_sql_partitions_per_executor_instances__handles_large_numbers(self):
-        product = 1000
-        current_num_partitions = 999999
-
-        expected_partitions = ((current_num_partitions // product) + 1) * product
-
-        spark_conf_builder = spark_config.SparkConfBuilder()
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(product, current_num_partitions)
-        assert result == expected_partitions
-        assert result >= current_num_partitions
-        assert result % product == 0
-
-    def test_calculate_sql_partitions_per_executor_instances__boundary_conditions(self):
-        spark_conf_builder = spark_config.SparkConfBuilder()
-
-        # Product is 2 (minimum valid product) and current_num_partitions is 1
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(2, 1)
-        assert result == 2  # Should round up to next multiple
-
-        # Product > current_num_partitions
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(100, 50)
-        assert result == 100  # Should round up to the product itself
-
-        # Product is very small and current_num_partitions are exact multiples
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(2, 4)
-        assert result == 4  # Should remain unchanged since 4 % 2 == 0
-
-        # Test floating point precision doesn't cause issues
-        result = spark_conf_builder._calculate_sql_partitions_per_executor_instances(3, 10)
-        assert result == 12  # ceil(10/3) * 3 = 4 * 3 = 12
