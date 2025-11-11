@@ -961,6 +961,43 @@ class TestGetSparkConf:
 
     @pytest.mark.parametrize(
         'user_spark_opts,expected_output', [
+            # Test case 1: No executor configs provided
+            # executors_cores_product = 0 * 4 = 0
+            # Since executors_cores_product < 1, uses default partitions 128
+            ({}, '128'),
+
+            # Test case 2: Only executor.cores provided
+            # executors_cores_product = 0 * 3 = 0
+            # Since executors_cores_product < 1, uses default 128
+            ({'spark.executor.cores': '3'}, '128'),
+
+            # Test case 3: Only executor.instances provided
+            # executors_cores_product = 3 * 4 = 12
+            # num_partitions = 3 * 12 = 36
+            # 36 % 12 = 0, so returns 36 unchanged
+            ({'spark.executor.instances': '3'}, '36'),
+        ],
+    )
+    def test_append_sql_partitions_conf__uses_executor_default_values(
+            self, user_spark_opts, expected_output,
+    ):
+
+        spark_conf_builder = spark_config.SparkConfBuilder()
+        output = spark_conf_builder._append_sql_partitions_conf(user_spark_opts)
+
+        keys = [
+            'spark.sql.shuffle.partitions',
+            'spark.sql.files.minPartitionNum',
+            'spark.default.parallelism',
+        ]
+
+        if isinstance(expected_output, str):
+            expected_output = [expected_output] * 3
+        for key, expected in zip(keys, expected_output):
+            assert output[key] == expected
+
+    @pytest.mark.parametrize(
+        'user_spark_opts,expected_output', [
             # not configured by user
             ({}, 'true'),
             # configured by user
