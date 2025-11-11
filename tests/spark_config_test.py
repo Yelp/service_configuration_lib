@@ -1333,7 +1333,8 @@ class TestGetSparkConf:
             list(mock_append_spark_prometheus_conf.return_value.keys()) +
             list(mock_append_event_log_conf.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_partitions_conf.return_value.keys()),
+            list(mock_append_sql_partitions_conf.return_value.keys()) +
+            ['scs_conf'],  # services config key
         )
         assert set(output.keys()) == verified_keys
         mock_adjust_spark_requested_resources_kubernetes.mocker.assert_called_once_with(
@@ -1464,7 +1465,8 @@ class TestGetSparkConf:
             list(mock_adjust_spark_requested_resources_kubernetes.return_value.keys()) +
             list(mock_get_dra_configs.return_value.keys()) +
             list(mock_append_aws_credentials_conf.return_value.keys()) +
-            list(mock_append_sql_partitions_conf.return_value.keys()),
+            list(mock_append_sql_partitions_conf.return_value.keys()) +
+            ['scs_conf'],  # services config key
         )
         assert set(output.keys()) == verified_keys
         mock_append_event_log_conf.mocker.assert_called_once_with(
