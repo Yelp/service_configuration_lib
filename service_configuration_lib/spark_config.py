@@ -920,6 +920,7 @@ class SparkConfBuilder:
                 spark_opts['spark.eventLog.enabled'] = 'false'
                 return spark_opts
 
+            spark_opts['aws_account_id'] = account_id
             for conf in self.spark_srv_conf.get('environments', {}).values():
                 if account_id == conf['account_id']:
                     spark_opts['spark.eventLog.enabled'] = 'true'
@@ -1261,6 +1262,27 @@ class SparkConfBuilder:
 
         if aws_creds:
             spark_conf = _append_aws_credentials_conf(spark_conf, *aws_creds, aws_region)
+
+        # gather all data needed by our internal Spark configuration service
+        scs_args = {
+            'cluster_manager': cluster_manager,
+            'spark_app_base_name': spark_app_base_name,
+            'docker_image': docker_img,
+            'user_spark_opts': user_spark_opts,
+            'paasta_cluster': paasta_cluster,
+            'paasta_pool': paasta_pool,
+            'paasta_service': paasta_service,
+            'paasta_instance': paasta_instance,
+            'extra_volumes': extra_volumes,
+            'force_spark_resource_configs': force_spark_resource_configs,
+            'k8s_server_address': k8s_server_address,
+            'jira_ticket': jira_ticket,
+            'service_account_name': service_account_name,
+            'ui_port': int(ui_port),
+            'user': os.environ.get('USER'),
+            'aws_account_id': spark_conf.pop('aws_account_id', None),
+        }
+        spark_conf['scs_conf'] = json.dumps(scs_args, indent=4)
 
         return spark_conf
 
