@@ -20,7 +20,7 @@ From source:
 
 From pypi:
 
-    pip install service-configuration-lib
+    pip install service_configuration_lib
 
 
 ## License
