@@ -1279,7 +1279,7 @@ class SparkConfBuilder:
             'jira_ticket': jira_ticket,
             'service_account_name': service_account_name,
             'ui_port': int(ui_port),
-            'user': os.environ.get('USER'),
+            'user': user or os.environ.get('USER'),
             'aws_account_id': spark_conf.pop('aws_account_id', None),
         }
         spark_conf['scs_conf'] = json.dumps(scs_args, indent=4)
